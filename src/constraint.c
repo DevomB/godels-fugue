@@ -169,8 +169,8 @@ static bool revise_second(SolverState *s) {
     int span = canon_span(length, delay);
     for (int t = 0; t < span; t++) {
         if (t % 4 != 0) continue;
-        int i0 = canon_melody_index(0, t, delay, length);
-        int i1 = canon_melody_index(1, t, delay, length);
+        int i0 = canon_source_index(0, t, delay, length, s->config.retrograde);
+        int i1 = canon_source_index(1, t, delay, length, s->config.retrograde);
         if (i0 < 0 || i1 < 0) continue;
         if (!revise_second_pair(s, i0, i1)) return false;
     }
@@ -266,10 +266,10 @@ static bool revise_parallel(SolverState *s, bool fifth, int constraint_id,
     int span = canon_span(length, delay);
     for (int t = 0; t + 1 < span; t++) {
         int idx[4];
-        idx[0] = canon_melody_index(0, t, delay, length);
-        idx[1] = canon_melody_index(0, t + 1, delay, length);
-        idx[2] = canon_melody_index(1, t, delay, length);
-        idx[3] = canon_melody_index(1, t + 1, delay, length);
+        idx[0] = canon_source_index(0, t, delay, length, s->config.retrograde);
+        idx[1] = canon_source_index(0, t + 1, delay, length, s->config.retrograde);
+        idx[2] = canon_source_index(1, t, delay, length, s->config.retrograde);
+        idx[3] = canon_source_index(1, t + 1, delay, length, s->config.retrograde);
         if (idx[0] < 0 || idx[1] < 0 || idx[2] < 0 || idx[3] < 0) continue;
         if (!indexes_distinct(idx[0], idx[1], idx[2], idx[3])) continue;
         if (!revise_parallel_tuple(s, idx, fifth, constraint_id, message))

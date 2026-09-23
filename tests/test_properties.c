@@ -27,6 +27,7 @@ static PieceConfig test_config(void) {
     c.max_leap = 7;
     c.invert = 0;
     c.axis = 67;
+    c.retrograde = 0;
     return c;
 }
 
@@ -254,6 +255,93 @@ int main(void) {
                 int v1_prev = invert_pitch(67, melody[follow]);
                 int v0_now = melody[lead_next];
                 int v1_now = invert_pitch(67, melody[follow_next]);
+                CHECK(!is_parallel_fifth(v0_prev, v1_prev, v0_now, v1_now));
+                CHECK(!is_parallel_octave(v0_prev, v1_prev, v0_now, v1_now));
+            }
+        }
+
+        solver_free(&s);
+    }
+
+    /* 5. Retrograde canon solve */
+    {
+        PieceConfig ret = test_config();
+        ret.retrograde = 1;
+        ret.invert = 0;
+        SolverState s = {0};
+        int melody[12];
+        int backtracks = -1;
+        int span;
+
+        solver_init(&s, &ret);
+        if (!solve(&s, melody, &backtracks)) {
+            fprintf(stderr, "unsat failed_variable=%d\n", s.failed_variable);
+            solver_free(&s);
+            exit(1);
+        }
+
+        {
+            SolverState s2 = {0};
+            int melody2[12];
+            int backtracks2 = -1;
+
+            solver_init(&s2, &ret);
+            if (!solve(&s2, melody2, &backtracks2)) {
+                fprintf(stderr, "unsat failed_variable=%d\n", s2.failed_variable);
+                solver_free(&s2);
+                solver_free(&s);
+                exit(1);
+            }
+
+            CHECK(backtracks == backtracks2);
+            for (int i = 0; i < length; i++) {
+                CHECK(melody[i] == melody2[i]);
+            }
+            CHECK(entropy_bits(s2.domains, length) == 0.0);
+            solver_free(&s2);
+        }
+
+        CHECK(entropy_bits(s.domains, length) == 0.0);
+
+        for (int i = 0; i < length; i++) {
+            CHECK(pitch_in_c_major(melody[i]));
+            CHECK(melody[i] >= 60 && melody[i] <= 72);
+        }
+        for (int i = 0; i < length - 1; i++) {
+            CHECK(!leap_exceeds(melody[i], melody[i + 1]));
+        }
+
+        span = canon_span(length, delay);
+        for (int t = 0; t < span; t++) {
+            int v1 = canon_melody_index(1, t, delay, length);
+            if (t < delay) {
+                CHECK(v1 == -1);
+            } else {
+                int follower = melody[length - 1 - (t - delay)];
+                CHECK(pitch_in_c_major(follower));
+                CHECK(follower >= 60 && follower <= 72);
+            }
+
+            if (t % 4 == 0) {
+                int v0 = canon_melody_index(0, t, delay, length);
+                if (v0 >= 0 && v1 >= 0) {
+                    CHECK(!is_second(melody[t],
+                                     melody[length - 1 - (t - delay)]));
+                }
+            }
+        }
+
+        for (int t = 0; t + 1 < span; t++) {
+            int lead = canon_melody_index(0, t, delay, length);
+            int follow = canon_melody_index(1, t, delay, length);
+            int lead_next = canon_melody_index(0, t + 1, delay, length);
+            int follow_next = canon_melody_index(1, t + 1, delay, length);
+
+            if (lead >= 0 && follow >= 0 && lead_next >= 0 && follow_next >= 0) {
+                int v0_prev = melody[lead];
+                int v1_prev = melody[11 - (t - delay)];
+                int v0_now = melody[lead_next];
+                int v1_now = melody[11 - (t + 1 - delay)];
                 CHECK(!is_parallel_fifth(v0_prev, v1_prev, v0_now, v1_now));
                 CHECK(!is_parallel_octave(v0_prev, v1_prev, v0_now, v1_now));
             }

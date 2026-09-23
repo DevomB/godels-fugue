@@ -17,6 +17,7 @@ typedef struct PieceConfig {
     int max_leap;
     int invert; /* 0 = identity canon, 1 = chromatic inversion */
     int axis;
+    int retrograde; /* 0 = forward follower, 1 = reversed follower */
 } PieceConfig;
 
 typedef struct SolverState {

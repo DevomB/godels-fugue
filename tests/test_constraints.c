@@ -204,5 +204,41 @@ int main(void) {
     CHECK(!s.failed);
     proof_free(&s.proof);
 
+    /* C. retrograde strong beat */
+    setup_state(&s);
+    s.config.retrograde = 1;
+    s.config.invert = 0;
+    domain_clear(&s.domains[11]);
+    domain_add(&s.domains[11], 62);
+    domain_clear(&s.domains[4]);
+    domain_add(&s.domains[4], 60);
+    domain_add(&s.domains[4], 65);
+    CHECK(constraints_revise(&s) == true);
+    CHECK(!domain_contains(&s.domains[4], 60));
+    CHECK(domain_contains(&s.domains[4], 65));
+    CHECK(proof_has(&s.proof, "second", 60));
+    CHECK(!s.failed);
+    proof_free(&s.proof);
+
+    /* D. retrograde parallel fifth */
+    setup_state(&s);
+    s.config.retrograde = 1;
+    s.config.invert = 0;
+    domain_clear(&s.domains[4]);
+    domain_add(&s.domains[4], 60);
+    domain_clear(&s.domains[11]);
+    domain_add(&s.domains[11], 67);
+    domain_clear(&s.domains[10]);
+    domain_add(&s.domains[10], 71);
+    domain_clear(&s.domains[5]);
+    domain_add(&s.domains[5], 64);
+    domain_add(&s.domains[5], 60);
+    CHECK(constraints_revise(&s) == true);
+    CHECK(!domain_contains(&s.domains[5], 64));
+    CHECK(domain_contains(&s.domains[5], 60));
+    CHECK(proof_has(&s.proof, "parallel fifth", 64));
+    CHECK(!s.failed);
+    proof_free(&s.proof);
+
     return 0;
 }

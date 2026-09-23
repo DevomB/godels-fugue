@@ -73,6 +73,8 @@ static int load_config(const char *path, PieceConfig *config)
             config->invert = value;
         } else if (strcmp(key, "axis") == 0) {
             config->axis = value;
+        } else if (strcmp(key, "retrograde") == 0) {
+            config->retrograde = value;
         }
     }
 
@@ -110,6 +112,10 @@ static int validate_config(const PieceConfig *config)
     }
     if (config->invert == 1 && (config->axis < 0 || config->axis > 127)) {
         fprintf(stderr, "invalid axis\n");
+        return 0;
+    }
+    if (config->retrograde != 0 && config->retrograde != 1) {
+        fprintf(stderr, "invalid retrograde\n");
         return 0;
     }
     return 1;
@@ -179,6 +185,7 @@ int main(int argc, char **argv)
         .max_leap = 7,
         .invert = 0,
         .axis = 67,
+        .retrograde = 0,
     };
 
     const char *config_path = NULL;
@@ -246,10 +253,10 @@ int main(int argc, char **argv)
     if (ok) {
         int follow[MELODY_MAX];
         for (int i = 0; i < config.length; i++) {
+            int source = config.retrograde ? config.length - 1 - i : i;
+            follow[i] = melody[source];
             if (config.invert) {
-                follow[i] = invert_pitch(config.axis, melody[i]);
-            } else {
-                follow[i] = melody[i];
+                follow[i] = invert_pitch(config.axis, follow[i]);
             }
         }
         if (!midi_write_canon(out_path, melody, follow, config.length, config.delay)) {
