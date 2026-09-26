@@ -119,3 +119,42 @@ int melody_energy(const int *melody, int length, int w_gravity, int w_leap,
     }
     return total;
 }
+
+int vertical_cost(int a, int b, int a_prev, int b_prev, int has_prev,
+                  int w_dissonance, int w_parallel) {
+    int cost = 0;
+    int ic = interval_class(a, b);
+    if (is_second(a, b) || ic == 6) {
+        cost += w_dissonance;
+    }
+    if (has_prev && w_parallel > 0) {
+        if (is_parallel_fifth(a_prev, b_prev, a, b) ||
+            is_parallel_octave(a_prev, b_prev, a, b)) {
+            cost += w_parallel;
+        }
+    }
+    return cost;
+}
+
+int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
+                       int w_leap, int w_curve, int w_dissonance, int w_parallel) {
+    int total = melody_energy(melody, length, w_gravity, w_leap, w_curve);
+    if (w_dissonance == 0 && w_parallel == 0) {
+        return total;
+    }
+    for (int t = 0; t < length; t++) {
+        int follow = t - delay;
+        if (follow < 0) continue;
+        int has_prev = 0;
+        int a_prev = 0;
+        int b_prev = 0;
+        if (t > 0 && follow > 0) {
+            has_prev = 1;
+            a_prev = melody[t - 1];
+            b_prev = melody[follow - 1];
+        }
+        total += vertical_cost(melody[t], melody[follow], a_prev, b_prev, has_prev,
+                               w_dissonance, w_parallel);
+    }
+    return total;
+}

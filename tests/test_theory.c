@@ -83,6 +83,10 @@ int main(void) {
     CHECK(pitch_choice_cost(2, 12, 67, 60, 1, 0, 0, 1, 1, 3) <
           pitch_choice_cost(2, 12, 60, 60, 1, 0, 0, 1, 1, 3));
 
+    /* vertical dissonance / parallel softness */
+    CHECK(vertical_cost(60, 62, 0, 0, 0, 1, 0) > vertical_cost(60, 67, 0, 0, 0, 1, 0));
+    CHECK(vertical_cost(64, 71, 60, 67, 1, 0, 2) == 2);
+
     printf("ok\n");
     return 0;
 }

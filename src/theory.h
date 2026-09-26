@@ -18,5 +18,9 @@ int pitch_choice_cost(int index, int length, int pitch, int left, int has_left,
                       int w_curve);
 int melody_energy(const int *melody, int length, int w_gravity, int w_leap,
                   int w_curve);
+int vertical_cost(int a, int b, int a_prev, int b_prev, int has_prev,
+                  int w_dissonance, int w_parallel);
+int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
+                       int w_leap, int w_curve, int w_dissonance, int w_parallel);
 
 #endif

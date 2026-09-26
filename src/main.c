@@ -113,6 +113,10 @@ static int load_config(const char *path, PieceConfig *config)
             config->anneal_end = value;
         } else if (strcmp(key, "anneal_steps") == 0) {
             config->anneal_steps = value;
+        } else if (strcmp(key, "w_dissonance") == 0) {
+            config->w_dissonance = value;
+        } else if (strcmp(key, "w_parallel") == 0) {
+            config->w_parallel = value;
         }
     }
 
@@ -164,7 +168,8 @@ static int validate_config(const PieceConfig *config)
         fprintf(stderr, "invalid temperature\n");
         return 0;
     }
-    if (config->w_gravity < 0 || config->w_leap < 0 || config->w_curve < 0) {
+    if (config->w_gravity < 0 || config->w_leap < 0 || config->w_curve < 0 ||
+        config->w_dissonance < 0 || config->w_parallel < 0) {
         fprintf(stderr, "invalid weight\n");
         return 0;
     }
@@ -302,6 +307,8 @@ int main(int argc, char **argv)
         .anneal_start = 0,
         .anneal_end = 0,
         .anneal_steps = 0,
+        .w_dissonance = 0,
+        .w_parallel = 0,
     };
 
     const char *config_path = NULL;
@@ -407,8 +414,10 @@ int main(int argc, char **argv)
         print_success(melody, &config, backtracks, &state);
         if (config.energy == 1) {
             printf("energy: %d\n",
-                   melody_energy(melody, config.length, config.w_gravity,
-                                 config.w_leap, config.w_curve));
+                   melody_energy_full(melody, config.length, config.delay,
+                                      config.w_gravity, config.w_leap,
+                                      config.w_curve, config.w_dissonance,
+                                      config.w_parallel));
         }
         if (config.lock == 1) {
             SolverState alt = {0};

@@ -143,10 +143,42 @@ static void fill_choice_costs(const SolverState *s, int index, const int *pitche
     int right;
     int has_right;
     neighbor_bounds(s, index, &left, &has_left, &right, &has_right);
+    int delay = s->config.delay;
+    int follow = -1;
+    int has_follow = 0;
+    int lead = -1;
+    int has_lead = 0;
+    if (delay > 0 && index >= delay && domain_singleton(&s->domains[index - delay])) {
+        follow = domain_value(&s->domains[index - delay]);
+        has_follow = 1;
+    }
+    if (delay > 0 && index + delay < s->config.length &&
+        domain_singleton(&s->domains[index + delay])) {
+        lead = domain_value(&s->domains[index + delay]);
+        has_lead = 1;
+    }
     for (int i = 0; i < n; i++) {
         costs[i] = pitch_choice_cost(index, s->config.length, pitches[i], left, has_left,
                                      right, has_right, s->config.w_gravity, s->config.w_leap,
                                      s->config.w_curve);
+        if (has_follow) {
+            int has_prev = 0;
+            int a_prev = 0;
+            int b_prev = 0;
+            if (index > 0 && index - delay > 0 &&
+                domain_singleton(&s->domains[index - 1]) &&
+                domain_singleton(&s->domains[index - delay - 1])) {
+                has_prev = 1;
+                a_prev = domain_value(&s->domains[index - 1]);
+                b_prev = domain_value(&s->domains[index - delay - 1]);
+            }
+            costs[i] += vertical_cost(pitches[i], follow, a_prev, b_prev, has_prev,
+                                      s->config.w_dissonance, s->config.w_parallel);
+        }
+        if (has_lead) {
+            costs[i] += vertical_cost(lead, pitches[i], 0, 0, 0,
+                                      s->config.w_dissonance, s->config.w_parallel);
+        }
     }
 }
 

@@ -16,4 +16,5 @@ cmake --build build
 ./build/canon-collapse --lock 0 61
 ./build/canon-collapse --config examples/lock.txt
 ./build/canon-collapse --config examples/anneal.txt
+./build/canon-collapse --config examples/dissonance.txt
 ```
