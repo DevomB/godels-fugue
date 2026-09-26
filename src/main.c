@@ -170,6 +170,8 @@ static int load_config(const char *path, PieceConfig *config)
             config->key_second = value;
         } else if (strcmp(key, "w_modulate") == 0) {
             config->w_modulate = value;
+        } else if (strcmp(key, "poly_meter") == 0) {
+            config->poly_meter = value;
         }
     }
 
@@ -302,6 +304,10 @@ static int validate_config(const PieceConfig *config)
     }
     if (config->w_modulate < 0) {
         fprintf(stderr, "invalid w_modulate\n");
+        return 0;
+    }
+    if (config->poly_meter != 0 && config->poly_meter != 1) {
+        fprintf(stderr, "invalid poly_meter\n");
         return 0;
     }
     if (config->anneal_steps < 0 || config->anneal_start < 0 ||
@@ -446,6 +452,7 @@ int main(int argc, char **argv)
         .modulate_at = -1,
         .key_second = 0,
         .w_modulate = 0,
+        .poly_meter = 0,
     };
 
     const char *config_path = NULL;

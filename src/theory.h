@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 bool pitch_in_c_major(int pitch);
+int is_strong_time(int t, int poly_meter);
 bool pitch_in_g_major(int pitch);
 bool pitch_in_scale(int pitch, int index, int modulate_at);
 int interval_class(int a, int b);

@@ -175,7 +175,7 @@ static bool revise_second(SolverState *s) {
     if (voices > VOICE_MAX) voices = VOICE_MAX;
     int span = canon_span_config(&s->config);
     for (int t = 0; t < span; t++) {
-        if (t % 4 != 0) continue;
+        if (!is_strong_time(t, s->config.poly_meter)) continue;
         for (int va = 0; va < voices; va++) {
             for (int vb = va + 1; vb < voices; vb++) {
                 int i0 = canon_map_source(&s->config, va, t);
@@ -340,7 +340,7 @@ static bool revise_second_touching(SolverState *s, int variable) {
     if (voices < 2) return true;
     for (int k = 0; k < n; k++) {
         int t = ts[k];
-        if (t % 4 != 0) continue;
+        if (!is_strong_time(t, s->config.poly_meter)) continue;
         int va = vs[k];
         for (int vb = 0; vb < voices; vb++) {
             if (vb == va) continue;

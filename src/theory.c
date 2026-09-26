@@ -1,5 +1,11 @@
 #include "theory.h"
 
+int is_strong_time(int t, int poly_meter) {
+    if (t % 4 == 0) return 1;
+    if (poly_meter && t % 3 == 0) return 1;
+    return 0;
+}
+
 bool pitch_in_c_major(int pitch) {
     if (pitch < 0 || pitch > 127) return false;
     switch (pitch % 12) {

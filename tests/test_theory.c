@@ -12,6 +12,13 @@
     } while (0)
 
 int main(void) {
+    CHECK(is_strong_time(4, 0));
+    CHECK(is_strong_time(4, 1));
+    CHECK(!is_strong_time(3, 0));
+    CHECK(is_strong_time(3, 1));
+    CHECK(is_strong_time(0, 0));
+    CHECK(is_strong_time(0, 1));
+
     /* C major */
     CHECK(pitch_in_c_major(60));
     CHECK(pitch_in_c_major(62));
