@@ -122,6 +122,10 @@ int main(void) {
         CHECK(strstr((char *)buf, "melody:") != NULL);
         CHECK(strstr((char *)buf, "backtracks:") != NULL);
         CHECK(strstr((char *)buf, "entropy:") != NULL);
+        CHECK(strstr((char *)buf, "id=\"varfilter\"") != NULL);
+        CHECK(strstr((char *)buf, "id=\"events\"") != NULL);
+        CHECK(strstr((char *)buf, "data-var=") != NULL ||
+              strstr((char *)buf, "querySelectorAll") != NULL);
         free(buf);
         solver_free(&s);
         CHECK(export_report("output/report.txt", &cfg, bt, 0.0, 0, NULL, 0));

@@ -377,7 +377,29 @@ bool export_score_page(const char *path, const int *melody,
         fclose(f);
         return false;
     }
-    if (fprintf(f, "</pre>\n</body></html>\n") < 0) {
+    if (fprintf(f,
+                "</pre>\n<label>variable id <input id=\"varfilter\" "
+                "type=\"text\"></label>\n<ul id=\"events\">\n") < 0) {
+        fclose(f);
+        return false;
+    }
+    for (int i = 0; i < state->proof.event_count; i++) {
+        const ProofEvent *e = &state->proof.events[i];
+        if (fprintf(f, "<li data-var=\"%d\">variable %d pitch %d %s</li>\n",
+                    e->variable_id, e->variable_id, e->removed_pitch,
+                    e->message[0] ? e->message : "") < 0) {
+            fclose(f);
+            return false;
+        }
+    }
+    if (fprintf(f,
+                "</ul>\n<script>"
+                "document.getElementById('varfilter').oninput=function(){"
+                "var q=this.value.trim();"
+                "document.querySelectorAll('#events li').forEach(function(li){"
+                "li.style.display=(!q||li.getAttribute('data-var')===q)?'':'none';"
+                "});};"
+                "</script>\n</body></html>\n") < 0) {
         fclose(f);
         return false;
     }

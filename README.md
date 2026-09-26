@@ -22,6 +22,15 @@ cmake --build build
 ./build/canon-collapse --config examples/cyclic.txt
 ./build/canon-collapse --config examples/motif.txt
 ./build/canon-collapse --config examples/unsat.txt
+./build/canon-collapse --config examples/anneal_geo.txt
+./build/canon-collapse --config examples/invert_mod12.txt
+./build/canon-collapse --config examples/modulate.txt
+./build/canon-collapse --config examples/poly.txt
+./build/canon-collapse --corpus corpus
+./build/canon-collapse --corpus corpus --apply-weights
+./build/canon-collapse --sat
 ```
+
+New config keys: `anneal_ratio`, `invert_mod12`, `modulate_at`, `key_second`, `w_modulate`, `poly_meter`, `motif_c`, `motif_d`, `sample`. CLI: `--corpus DIR`, `--apply-weights`, `--sat`. `output/score.html` filters proof events by variable id.
 
 A successful run also writes `output/score.musicxml`, `output/contour.svg`, `output/voices.wav`, `output/proof.json`, `output/score.html`, and `output/report.txt` beside the MIDI and proof files. Open `output/score.html` as a file. An unsatisfiable rule set prints `core:` on stderr.
