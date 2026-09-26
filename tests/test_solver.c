@@ -408,6 +408,15 @@ int main(void) {
             if (core[i] == CID_LEAP) has_leap = 1;
         }
         CHECK(!has_leap);
+        for (int i = 0; i < n; i++) {
+            SolverState drop = {0};
+            int melody[MELODY_MAX];
+            int bt = -1;
+            solver_init(&drop, &cfg);
+            drop.skip_cid[core[i]] = 1;
+            CHECK(solve(&drop, melody, &bt));
+            solver_free(&drop);
+        }
         cfg.cadence = 0;
         SolverState s = {0};
         int melody[MELODY_MAX];

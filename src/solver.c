@@ -449,18 +449,25 @@ bool solver_unsat_core(const PieceConfig *config, int *cids, int max_cids,
     }
     solver_free(&failed);
 
-    /* Greedy deletion: drop a rule if the instance stays unsat without it. */
+    /* Delete until every remaining rule is necessary: drop it and the
+     * instance becomes satisfiable. Greedy order is enough here. */
     unsigned char drop[16];
     memset(drop, 0, sizeof(drop));
-    for (int i = 0; i < nc; i++) {
-        SolverState trial = {0};
-        solver_init(&trial, config);
-        memcpy(trial.skip_cid, drop, sizeof(trial.skip_cid));
-        trial.skip_cid[cand[i]] = 1;
-        if (!solve(&trial, NULL, NULL)) {
-            drop[cand[i]] = 1;
+    int changed = 1;
+    while (changed) {
+        changed = 0;
+        for (int i = 0; i < nc; i++) {
+            if (drop[cand[i]]) continue;
+            SolverState trial = {0};
+            solver_init(&trial, config);
+            memcpy(trial.skip_cid, drop, sizeof(trial.skip_cid));
+            trial.skip_cid[cand[i]] = 1;
+            if (!solve(&trial, NULL, NULL)) {
+                drop[cand[i]] = 1;
+                changed = 1;
+            }
+            solver_free(&trial);
         }
-        solver_free(&trial);
     }
 
     for (int i = 0; i < nc && *n < max_cids; i++) {

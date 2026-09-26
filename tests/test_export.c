@@ -121,7 +121,7 @@ int main(void) {
             int core[] = {8};
             CHECK(export_report("output/report.txt", &cfg, bt, 0.0, 0, core, 1));
             slurp("output/report.txt", &buf, &sz);
-            CHECK(strstr((char *)buf, "core (approximate):") != NULL);
+            CHECK(strstr((char *)buf, "core:") != NULL);
             free(buf);
         }
     }

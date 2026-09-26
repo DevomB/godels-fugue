@@ -361,7 +361,7 @@ bool export_report(const char *path, const PieceConfig *config, int backtracks,
         return false;
     }
     if (core_n > 0 && core != NULL) {
-        if (fprintf(f, "core (approximate):") < 0) {
+        if (fprintf(f, "core:") < 0) {
             fclose(f);
             return false;
         }
