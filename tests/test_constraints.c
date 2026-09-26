@@ -76,6 +76,20 @@ int main(void) {
     CHECK(domain_contains(&s.domains[1], 60));
     CHECK(proof_has(&s.proof, "melodic leap", 72));
     CHECK(!s.failed);
+    {
+        int found_parent = 0;
+        for (int i = 0; i < s.proof.event_count; i++) {
+            const ProofEvent *ev = &s.proof.events[i];
+            if (ev->variable_id == 1 && ev->removed_pitch == 72 &&
+                strcmp(ev->message, "melodic leap") == 0) {
+                CHECK(ev->parent_count >= 1);
+                CHECK(ev->parent_vars[0] == 0);
+                CHECK(ev->parent_pitches[0] == 60);
+                found_parent = 1;
+            }
+        }
+        CHECK(found_parent);
+    }
     proof_free(&s.proof);
 
     /* 3. strong-beat second */

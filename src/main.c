@@ -329,6 +329,23 @@ int main(int argc, char **argv)
     if (!proof_write(&state.proof, proof_path)) {
         writes_ok = 0;
     }
+    {
+        char dag_path[512];
+        size_t n = strlen(proof_path);
+        if (n + 5 < sizeof(dag_path)) {
+            memcpy(dag_path, proof_path, n + 1);
+            char *dot = strrchr(dag_path, '.');
+            if (dot != NULL && strcmp(dot, ".txt") == 0) {
+                strcpy(dot, ".dag");
+            } else {
+                memcpy(dag_path + n, ".dag", 5);
+            }
+            ensure_parent_dir(dag_path);
+            if (!proof_write_dag(&state.proof, dag_path)) {
+                writes_ok = 0;
+            }
+        }
+    }
     if (!write_entropy(&state.proof, entropy_path)) {
         writes_ok = 0;
     }

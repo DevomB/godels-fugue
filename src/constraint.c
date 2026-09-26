@@ -28,9 +28,11 @@ static bool mark_failed(SolverState *s, int variable) {
 }
 
 static bool remove_unsupported(SolverState *s, int variable, int pitch,
-                               int constraint_id, const char *message) {
+                               int constraint_id, const char *message,
+                               const int *related, int related_count) {
     domain_remove(&s->domains[variable], pitch);
-    proof_append_removal(&s->proof, variable, pitch, constraint_id, message);
+    proof_append_removal_deps(&s->proof, variable, pitch, constraint_id, message,
+                              related, related_count, s->domains);
     if (domain_count(&s->domains[variable]) == 0)
         return mark_failed(s, variable);
     return true;
@@ -46,7 +48,7 @@ static bool revise_scale(SolverState *s) {
             if (pitch_in_c_major(pitch) &&
                 pitch_in_c_major(canon_sounding(&s->config, 1, pitch)))
                 continue;
-            if (!remove_unsupported(s, i, pitch, CID_SCALE, "scale"))
+            if (!remove_unsupported(s, i, pitch, CID_SCALE, "scale", NULL, 0))
                 return false;
         }
     }
@@ -65,7 +67,7 @@ static bool revise_range(SolverState *s) {
             int sound = canon_sounding(&s->config, 1, pitch);
             if (pitch >= low && pitch <= high && sound >= low && sound <= high)
                 continue;
-            if (!remove_unsupported(s, i, pitch, CID_RANGE, "range"))
+            if (!remove_unsupported(s, i, pitch, CID_RANGE, "range", NULL, 0))
                 return false;
         }
     }
@@ -86,14 +88,14 @@ static bool revise_leap_edge(SolverState *s, int a, int b) {
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
         if (leap_supported(&s->domains[b], pitch, max_leap)) continue;
-        if (!remove_unsupported(s, a, pitch, CID_LEAP, "melodic leap"))
+        if (!remove_unsupported(s, a, pitch, CID_LEAP, "melodic leap", &b, 1))
             return false;
     }
     n = collect_pitches(&s->domains[b], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
         if (leap_supported(&s->domains[a], pitch, max_leap)) continue;
-        if (!remove_unsupported(s, b, pitch, CID_LEAP, "melodic leap"))
+        if (!remove_unsupported(s, b, pitch, CID_LEAP, "melodic leap", &a, 1))
             return false;
     }
     return true;
@@ -123,7 +125,7 @@ static bool revise_second_pair(SolverState *s, int a, int b, int voice_a, int vo
         int pitch = pitches[k];
         if (second_supported_pair(&s->domains[b], pitch, voice_a, voice_b, &s->config))
             continue;
-        if (!remove_unsupported(s, a, pitch, CID_SECOND, "second"))
+        if (!remove_unsupported(s, a, pitch, CID_SECOND, "second", &b, 1))
             return false;
     }
     n = collect_pitches(&s->domains[b], pitches);
@@ -131,7 +133,7 @@ static bool revise_second_pair(SolverState *s, int a, int b, int voice_a, int vo
         int pitch = pitches[k];
         if (second_supported_pair(&s->domains[a], pitch, voice_b, voice_a, &s->config))
             continue;
-        if (!remove_unsupported(s, b, pitch, CID_SECOND, "second"))
+        if (!remove_unsupported(s, b, pitch, CID_SECOND, "second", &a, 1))
             return false;
     }
     return true;
@@ -228,7 +230,13 @@ static bool revise_parallel_tuple(SolverState *s, int idx[4], bool fifth,
             if (parallel_supported(domains, slot, pitch, fifth, voice_lead,
                                   voice_follow, &s->config))
                 continue;
-            if (!remove_unsupported(s, variable, pitch, constraint_id, message))
+            int related[3];
+            int nrel = 0;
+            for (int r = 0; r < 4; r++) {
+                if (idx[r] != variable) related[nrel++] = idx[r];
+            }
+            if (!remove_unsupported(s, variable, pitch, constraint_id, message,
+                                    related, nrel))
                 return false;
         }
     }

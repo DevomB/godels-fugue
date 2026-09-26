@@ -72,10 +72,32 @@ int main(void) {
     CHECK(log.event_count == 2);
 
     _mkdir("output");
+    {
+        ProofLog fresh;
+        MidiDomain domains[2];
+        int related = 0;
+        proof_init(&fresh);
+        domain_clear(&domains[0]);
+        domain_add(&domains[0], 60);
+        domain_clear(&domains[1]);
+        domain_add(&domains[1], 67);
+        domain_add(&domains[1], 72);
+        CHECK(proof_append_removal_deps(&fresh, 1, 72, 3, "melodic leap", &related, 1,
+                                        domains));
+        CHECK(fresh.events[0].parent_count == 1);
+        CHECK(fresh.events[0].parent_events[0] == -1);
+        CHECK(fresh.events[0].parent_vars[0] == 0);
+        CHECK(fresh.events[0].parent_pitches[0] == 60);
+        CHECK(proof_write_dag(&fresh, "output/proof_parent.dag"));
+        CHECK(file_contains("output/proof_parent.dag", "parent assign 0=60"));
+        proof_free(&fresh);
+    }
+
     CHECK(proof_write(&log, "output/proof_test.txt"));
     CHECK(file_contains("output/proof_test.txt", "keep_me"));
     CHECK(file_contains("output/proof_test.txt", "36.000000"));
     CHECK(!file_contains("output/proof_test.txt", "drop_me"));
+    CHECK(proof_write_dag(&log, "output/proof_test.dag"));
 
     proof_free(&log);
     printf("ok\n");

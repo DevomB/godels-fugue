@@ -59,16 +59,55 @@ static void copy_message(char dest[160], const char *message) {
     dest[i] = '\0';
 }
 
-bool proof_append_removal(ProofLog *log, int variable_id, int removed_pitch,
-                          int constraint_id, const char *message) {
+static int last_event_for(const ProofLog *log, int variable_id) {
+    for (int i = log->event_count - 1; i >= 0; i--) {
+        if (log->events[i].variable_id == variable_id) return i;
+    }
+    return -1;
+}
+
+bool proof_append_removal_deps(ProofLog *log, int variable_id, int removed_pitch,
+                               int constraint_id, const char *message,
+                               const int *related_vars, int related_count,
+                               const MidiDomain *domains) {
     if (!grow_events(log)) return false;
     ProofEvent *ev = &log->events[log->event_count];
     ev->variable_id = variable_id;
     ev->removed_pitch = removed_pitch;
     ev->constraint_id = constraint_id;
+    ev->parent_count = 0;
     copy_message(ev->message, message);
+
+    for (int i = 0; i < related_count && ev->parent_count < PROOF_PARENT_MAX; i++) {
+        int other = related_vars[i];
+        if (other < 0 || other == variable_id) continue;
+        int prior = last_event_for(log, other);
+        if (prior >= 0) {
+            ev->parent_events[ev->parent_count] = prior;
+            ev->parent_vars[ev->parent_count] = other;
+            ev->parent_pitches[ev->parent_count] =
+                (domains != NULL && domain_singleton(&domains[other]))
+                    ? domain_value(&domains[other])
+                    : -1;
+            ev->parent_count++;
+            continue;
+        }
+        if (domains != NULL && domain_singleton(&domains[other])) {
+            ev->parent_events[ev->parent_count] = -1;
+            ev->parent_vars[ev->parent_count] = other;
+            ev->parent_pitches[ev->parent_count] = domain_value(&domains[other]);
+            ev->parent_count++;
+        }
+    }
+
     log->event_count++;
     return true;
+}
+
+bool proof_append_removal(ProofLog *log, int variable_id, int removed_pitch,
+                          int constraint_id, const char *message) {
+    return proof_append_removal_deps(log, variable_id, removed_pitch, constraint_id,
+                                     message, NULL, 0, NULL);
 }
 
 bool proof_append_entropy(ProofLog *log, double bits) {
@@ -118,6 +157,28 @@ bool proof_write(const ProofLog *log, const char *path) {
             /* Remaining samples whose after_event is past written events. */
             fprintf(fp, "entropy %.6f\n", log->samples[si].bits);
             si++;
+        }
+    }
+
+    fclose(fp);
+    return true;
+}
+
+bool proof_write_dag(const ProofLog *log, const char *path) {
+    FILE *fp = fopen(path, "w");
+    if (!fp) return false;
+
+    for (int i = 0; i < log->event_count; i++) {
+        const ProofEvent *ev = &log->events[i];
+        fprintf(fp, "event %d variable %d pitch %d %s\n", i, ev->variable_id,
+                ev->removed_pitch, ev->message);
+        for (int p = 0; p < ev->parent_count; p++) {
+            if (ev->parent_events[p] >= 0) {
+                fprintf(fp, "  parent event %d\n", ev->parent_events[p]);
+            } else {
+                fprintf(fp, "  parent assign %d=%d\n", ev->parent_vars[p],
+                        ev->parent_pitches[p]);
+            }
         }
     }
 
