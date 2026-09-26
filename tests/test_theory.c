@@ -100,6 +100,18 @@ int main(void) {
     CHECK(motif_step_cost(1, 60, 1, 64, 2, -1, 4) == 4);
     CHECK(motif_step_cost(2, 62, 1, 61, 2, -1, 4) == 0);
 
+    {
+        int unison[8] = {60, 60, 60, 60, 60, 60, 60, 60};
+        int ident = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                                       67, 0);
+        int shifted = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
+                                         0, 67, 2);
+        int mirrored = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
+                                          1, 67, 0);
+        CHECK(shifted > ident);
+        CHECK(mirrored != ident);
+    }
+
     printf("ok\n");
     return 0;
 }

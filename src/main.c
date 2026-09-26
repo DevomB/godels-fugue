@@ -566,7 +566,8 @@ int main(int argc, char **argv)
                         melody, config.length, config.delay, config.w_gravity,
                         config.w_leap, config.w_curve, config.w_dissonance,
                         config.w_parallel, config.w_motif, config.motif_a,
-                        config.motif_b);
+                        config.motif_b, config.invert, config.axis,
+                        config.transpose);
                 }
                 ensure_parent_dir(html_path);
                 if (!export_score_page(html_path, melody, &config, &state,
@@ -582,7 +583,9 @@ int main(int argc, char **argv)
                                       config.w_gravity, config.w_leap,
                                       config.w_curve, config.w_dissonance,
                                       config.w_parallel, config.w_motif,
-                                      config.motif_a, config.motif_b));
+                                      config.motif_a, config.motif_b,
+                                      config.invert, config.axis,
+                                      config.transpose));
         }
         if (config.lock == 1) {
             SolverState alt = {0};
@@ -614,7 +617,8 @@ int main(int argc, char **argv)
                     melody, config.length, config.delay, config.w_gravity,
                     config.w_leap, config.w_curve, config.w_dissonance,
                     config.w_parallel, config.w_motif, config.motif_a,
-                    config.motif_b);
+                    config.motif_b, config.invert, config.axis,
+                    config.transpose);
             }
             if (sibling_path(report_path, sizeof(report_path), out_path,
                              "report.txt")) {

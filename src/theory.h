@@ -26,6 +26,7 @@ int vertical_cost(int a, int b, int a_prev, int b_prev, int has_prev,
                   int w_dissonance, int w_parallel);
 int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
                        int w_leap, int w_curve, int w_dissonance, int w_parallel,
-                       int w_motif, int motif_a, int motif_b);
+                       int w_motif, int motif_a, int motif_b, int invert,
+                       int axis, int transpose);
 
 #endif

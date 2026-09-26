@@ -1,5 +1,6 @@
 #include "solver.h"
 
+#include "canon.h"
 #include "constraint.h"
 #include "domain.h"
 #include "theory.h"
@@ -190,12 +191,15 @@ static void fill_choice_costs(const SolverState *s, int index, const int *pitche
                 a_prev = domain_value(&s->domains[index - 1]);
                 b_prev = domain_value(&s->domains[index - delay - 1]);
             }
-            costs[i] += vertical_cost(pitches[i], follow, a_prev, b_prev, has_prev,
-                                      s->config.w_dissonance, s->config.w_parallel);
+            costs[i] += vertical_cost(
+                pitches[i], canon_sounding(&s->config, 1, follow), a_prev,
+                has_prev ? canon_sounding(&s->config, 1, b_prev) : b_prev,
+                has_prev, s->config.w_dissonance, s->config.w_parallel);
         }
         if (has_lead) {
-            costs[i] += vertical_cost(lead, pitches[i], 0, 0, 0,
-                                      s->config.w_dissonance, s->config.w_parallel);
+            costs[i] += vertical_cost(lead, canon_sounding(&s->config, 1, pitches[i]),
+                                      0, 0, 0, s->config.w_dissonance,
+                                      s->config.w_parallel);
         }
     }
 }

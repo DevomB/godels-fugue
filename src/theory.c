@@ -155,9 +155,15 @@ int vertical_cost(int a, int b, int a_prev, int b_prev, int has_prev,
     return cost;
 }
 
+static int follower_sounding(int pitch, int invert, int axis, int transpose) {
+    if (invert) pitch = invert_pitch(axis, pitch);
+    return pitch + transpose;
+}
+
 int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
                        int w_leap, int w_curve, int w_dissonance, int w_parallel,
-                       int w_motif, int motif_a, int motif_b) {
+                       int w_motif, int motif_a, int motif_b, int invert,
+                       int axis, int transpose) {
     int total = melody_energy(melody, length, w_gravity, w_leap, w_curve);
     if (w_motif > 0) {
         for (int i = 1; i < length; i++) {
@@ -177,10 +183,13 @@ int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
         if (t > 0 && follow > 0) {
             has_prev = 1;
             a_prev = melody[t - 1];
-            b_prev = melody[follow - 1];
+            b_prev = follower_sounding(melody[follow - 1], invert, axis, transpose);
         }
-        total += vertical_cost(melody[t], melody[follow], a_prev, b_prev, has_prev,
-                               w_dissonance, w_parallel);
+        total += vertical_cost(melody[t],
+                               follower_sounding(melody[follow], invert, axis,
+                                                 transpose),
+                               a_prev, b_prev, has_prev, w_dissonance,
+                               w_parallel);
     }
     return total;
 }
