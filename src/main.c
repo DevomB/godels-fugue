@@ -518,6 +518,22 @@ int main(int argc, char **argv)
                     writes_ok = 0;
                 }
             }
+            char html_path[512];
+            if (sibling_path(html_path, sizeof(html_path), out_path,
+                             "score.html")) {
+                int energy = 0;
+                if (config.energy == 1) {
+                    energy = melody_energy_full(
+                        melody, config.length, config.delay, config.w_gravity,
+                        config.w_leap, config.w_curve, config.w_dissonance,
+                        config.w_parallel);
+                }
+                ensure_parent_dir(html_path);
+                if (!export_score_page(html_path, melody, &config, &state,
+                                       backtracks, energy)) {
+                    writes_ok = 0;
+                }
+            }
         }
         print_success(melody, &config, backtracks, &state);
         if (config.energy == 1) {

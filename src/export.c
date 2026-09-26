@@ -1,5 +1,7 @@
 #include "export.h"
 
+#include "canon.h"
+
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -263,6 +265,78 @@ bool export_trace(const char *path, const ProofLog *log) {
         }
     }
     if (fprintf(f, "]}\n") < 0) {
+        fclose(f);
+        return false;
+    }
+    return fclose(f) == 0;
+}
+
+bool export_score_page(const char *path, const int *melody,
+                       const PieceConfig *config, const SolverState *state,
+                       int backtracks, int energy) {
+    if (path == NULL || melody == NULL || config == NULL || state == NULL) {
+        return false;
+    }
+
+    FILE *f = fopen(path, "w");
+    if (f == NULL) return false;
+
+    int length = config->length;
+    if (fprintf(f,
+                "<!DOCTYPE html>\n<html lang=\"en\"><head>"
+                "<meta charset=\"utf-8\"><title>Score</title>"
+                "<style>body{font:16px/1.4 sans-serif;margin:2rem;}"
+                "pre{background:#f6f6f6;padding:1rem;}</style>"
+                "</head><body>\n<h1>Score</h1>\n<pre>\nmelody:") < 0) {
+        fclose(f);
+        return false;
+    }
+    for (int i = 0; i < length; i++) {
+        if (fprintf(f, " %d", melody[i]) < 0) {
+            fclose(f);
+            return false;
+        }
+    }
+    if (fprintf(f, "\n") < 0) {
+        fclose(f);
+        return false;
+    }
+
+    int span = canon_span_config(config);
+    for (int v = 1; v < config->voices; v++) {
+        if (fprintf(f, "voice %d:", v + 1) < 0) {
+            fclose(f);
+            return false;
+        }
+        for (int t = 0; t < span; t++) {
+            int idx = canon_map_source(config, v, t);
+            if (idx < 0) {
+                if (fprintf(f, " rest") < 0) {
+                    fclose(f);
+                    return false;
+                }
+            } else if (fprintf(f, " %d",
+                               canon_sounding(config, v, melody[idx])) < 0) {
+                fclose(f);
+                return false;
+            }
+        }
+        if (fprintf(f, "\n") < 0) {
+            fclose(f);
+            return false;
+        }
+    }
+
+    if (fprintf(f, "backtracks: %d\nentropy: %.6f\n", backtracks,
+                entropy_bits(state->domains, length)) < 0) {
+        fclose(f);
+        return false;
+    }
+    if (config->energy == 1 && fprintf(f, "energy: %d\n", energy) < 0) {
+        fclose(f);
+        return false;
+    }
+    if (fprintf(f, "</pre>\n</body></html>\n") < 0) {
         fclose(f);
         return false;
     }

@@ -1,5 +1,6 @@
 #include "export.h"
 #include "proof.h"
+#include "solver.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -84,6 +85,30 @@ int main(void) {
     CHECK(strstr((char *)buf, "\"events\"") != NULL);
     CHECK(strstr((char *)buf, "\"scale\"") != NULL);
     free(buf);
+
+    {
+        PieceConfig cfg = {0};
+        cfg.length = 4;
+        cfg.voices = 2;
+        cfg.delay = 2;
+        cfg.range_low = 60;
+        cfg.range_high = 72;
+        cfg.max_leap = 7;
+        cfg.axis = 67;
+        SolverState s = {0};
+        int melody[MELODY_MAX];
+        int bt = 0;
+        solver_init(&s, &cfg);
+        CHECK(solve(&s, melody, &bt));
+        CHECK(export_score_page("output/score.html", melody, &cfg, &s, bt, 0));
+        slurp("output/score.html", &buf, &sz);
+        CHECK(memcmp(buf, "<!DOCTYPE html>", 15) == 0);
+        CHECK(strstr((char *)buf, "melody:") != NULL);
+        CHECK(strstr((char *)buf, "backtracks:") != NULL);
+        CHECK(strstr((char *)buf, "entropy:") != NULL);
+        free(buf);
+        solver_free(&s);
+    }
 
     proof_free(&log);
     printf("ok\n");
