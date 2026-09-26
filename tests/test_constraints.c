@@ -275,6 +275,20 @@ int main(void) {
     CHECK(!s.failed);
     proof_free(&s.proof);
 
+    /* H2. delay 2: source 2 sounds on a strong beat in the follower */
+    setup_state(&s);
+    s.config.strong_chord = 1;
+    s.config.delay = 2;
+    domain_clear(&s.domains[2]);
+    domain_add(&s.domains[2], 62);
+    domain_add(&s.domains[2], 64);
+    CHECK(constraints_revise(&s) == true);
+    CHECK(!domain_contains(&s.domains[2], 62));
+    CHECK(domain_contains(&s.domains[2], 64));
+    CHECK(proof_has(&s.proof, "chord", 62));
+    CHECK(!s.failed);
+    proof_free(&s.proof);
+
     /* F. transposed follower makes a strong-beat second */
     setup_state(&s);
     s.config.transpose = 2;

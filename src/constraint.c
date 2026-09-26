@@ -356,46 +356,88 @@ static bool revise_parallel_touching(SolverState *s, int variable, bool fifth,
     return true;
 }
 
-static int last_strong(int length) {
-    int t = ((length - 1) / 4) * 4;
+static int last_strong_time(const PieceConfig *config) {
+    int span = canon_span_config(config);
+    int t = ((span - 1) / 4) * 4;
     return t < 0 ? 0 : t;
 }
 
-static bool revise_chord_one(SolverState *s, int i) {
-    if (skipped(s, CID_CHORD)) return true;
-    if (s->config.strong_chord == 0 || i % 4 != 0) return true;
+static int voice_count(const PieceConfig *config) {
+    int voices = config->voices;
+    if (voices < 1) voices = 1;
+    if (voices > VOICE_MAX) voices = VOICE_MAX;
+    return voices;
+}
+
+static bool revise_harmony_slot(SolverState *s, int idx, int voice, int cid,
+                                const char *message, int (*ok)(int)) {
     int pitches[128];
-    int n = collect_pitches(&s->domains[i], pitches);
+    int n = collect_pitches(&s->domains[idx], pitches);
     for (int k = 0; k < n; k++) {
-        if (in_c_triad(pitches[k])) continue;
-        if (!remove_unsupported(s, i, pitches[k], CID_CHORD, "chord", NULL, 0))
+        if (ok(canon_sounding(&s->config, voice, pitches[k]))) continue;
+        if (!remove_unsupported(s, idx, pitches[k], cid, message, NULL, 0))
             return false;
+    }
+    return true;
+}
+
+static bool revise_chord_at(SolverState *s, int idx, int voice) {
+    return revise_harmony_slot(s, idx, voice, CID_CHORD, "chord", in_c_triad);
+}
+
+static bool revise_cadence_at(SolverState *s, int idx, int voice) {
+    return revise_harmony_slot(s, idx, voice, CID_CADENCE, "cadence",
+                               in_c_dominant);
+}
+
+static bool revise_chord_one(SolverState *s, int i) {
+    if (skipped(s, CID_CHORD) || s->config.strong_chord == 0) return true;
+    int span = canon_span_config(&s->config);
+    int voices = voice_count(&s->config);
+    for (int t = 0; t < span; t += 4) {
+        for (int v = 0; v < voices; v++) {
+            if (canon_map_source(&s->config, v, t) != i) continue;
+            if (!revise_chord_at(s, i, v)) return false;
+        }
     }
     return true;
 }
 
 static bool revise_cadence_one(SolverState *s, int i) {
-    if (skipped(s, CID_CADENCE)) return true;
-    if (s->config.cadence == 0 || i != last_strong(s->config.length)) return true;
-    int pitches[128];
-    int n = collect_pitches(&s->domains[i], pitches);
-    for (int k = 0; k < n; k++) {
-        if (in_c_dominant(pitches[k])) continue;
-        if (!remove_unsupported(s, i, pitches[k], CID_CADENCE, "cadence", NULL, 0))
-            return false;
+    if (skipped(s, CID_CADENCE) || s->config.cadence == 0) return true;
+    int t = last_strong_time(&s->config);
+    int voices = voice_count(&s->config);
+    for (int v = 0; v < voices; v++) {
+        if (canon_map_source(&s->config, v, t) != i) continue;
+        if (!revise_cadence_at(s, i, v)) return false;
     }
     return true;
 }
 
 static bool revise_chord(SolverState *s) {
-    for (int i = 0; i < s->config.length; i++) {
-        if (!revise_chord_one(s, i)) return false;
+    if (skipped(s, CID_CHORD) || s->config.strong_chord == 0) return true;
+    int span = canon_span_config(&s->config);
+    int voices = voice_count(&s->config);
+    for (int t = 0; t < span; t += 4) {
+        for (int v = 0; v < voices; v++) {
+            int idx = canon_map_source(&s->config, v, t);
+            if (idx < 0) continue;
+            if (!revise_chord_at(s, idx, v)) return false;
+        }
     }
     return true;
 }
 
 static bool revise_cadence(SolverState *s) {
-    return revise_cadence_one(s, last_strong(s->config.length));
+    if (skipped(s, CID_CADENCE) || s->config.cadence == 0) return true;
+    int t = last_strong_time(&s->config);
+    int voices = voice_count(&s->config);
+    for (int v = 0; v < voices; v++) {
+        int idx = canon_map_source(&s->config, v, t);
+        if (idx < 0) continue;
+        if (!revise_cadence_at(s, idx, v)) return false;
+    }
+    return true;
 }
 
 bool constraints_revise_var(SolverState *s, int variable) {
