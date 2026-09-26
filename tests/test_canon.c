@@ -38,8 +38,14 @@ int main(void) {
     CHECK(canon_melody_index(1, 15, delay, length) == 11);
     CHECK(canon_melody_index(0, 11, delay, length) == 11);
 
-    /* voice 2 returns -1 */
+    /* voice 2 (third part) silent at t < 8, then x0 */
     CHECK(canon_melody_index(2, 4, delay, length) == -1);
+    CHECK(canon_melody_index(2, 7, delay, length) == -1);
+    CHECK(canon_melody_index(2, 8, delay, length) == 0);
+    CHECK(canon_melody_index(2, 19, delay, length) == 11);
+    CHECK(canon_span_voices(length, delay, 3) == 20);
+    CHECK(canon_melody_index(3, 12, delay, length) == 0);
+    CHECK(canon_melody_index(4, 4, delay, length) == -1);
 
     /* canon_source_index: delay 4, length 12, retrograde 1 */
     CHECK(canon_source_index(1, 0, delay, length, 1) == -1);
@@ -52,6 +58,10 @@ int main(void) {
     CHECK(canon_source_index(1, 4, delay, length, 0) == 0);
     CHECK(canon_source_index(0, 4, delay, length, 1) == 4);
     CHECK(canon_source_index(2, 4, delay, length, 1) == -1);
+    CHECK(canon_source_index(2, 8, delay, length, 0) == 0);
+    CHECK(canon_source_index(2, 8, delay, length, 1) == 11);
+    CHECK(canon_source_index(3, 12, delay, length, 0) == 0);
+    CHECK(canon_source_index(4, 16, delay, length, 0) == -1);
 
     printf("ok\n");
     return 0;

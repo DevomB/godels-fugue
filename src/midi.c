@@ -111,21 +111,23 @@ static int write_track(FILE *f, const int *melody, int length, int channel,
 	return 0;
 }
 
-bool midi_write_canon(const char *path, const int *lead, const int *follow,
-		      int length, int delay)
+bool midi_write_voices(const char *path, const int *const *lines,
+		       const int *start_ticks, int n_voices, int length)
 {
-	if (path == NULL)
+	if (path == NULL || lines == NULL || start_ticks == NULL)
 		return false;
-	if (length < 0 || delay < 0)
-		return false;
-	if (length > 0 && (lead == NULL || follow == NULL))
+	if (length < 0 || n_voices < 1 || n_voices > 16)
 		return false;
 
-	for (int i = 0; i < length; i++) {
-		if (lead[i] < 0 || lead[i] > 127)
+	for (int v = 0; v < n_voices; v++) {
+		if (start_ticks[v] < 0)
 			return false;
-		if (follow[i] < 0 || follow[i] > 127)
+		if (length > 0 && lines[v] == NULL)
 			return false;
+		for (int i = 0; i < length; i++) {
+			if (lines[v][i] < 0 || lines[v][i] > 127)
+				return false;
+		}
 	}
 
 	FILE *f = fopen(path, "wb");
@@ -138,15 +140,15 @@ bool midi_write_canon(const char *path, const int *lead, const int *follow,
 		goto fail;
 	if (write_u16be(f, 1) != 0)
 		goto fail;
-	if (write_u16be(f, 2) != 0)
+	if (write_u16be(f, (unsigned int)n_voices) != 0)
 		goto fail;
 	if (write_u16be(f, 480) != 0)
 		goto fail;
 
-	if (write_track(f, lead, length, 0, 0) != 0)
-		goto fail;
-	if (write_track(f, follow, length, 1, delay * 480) != 0)
-		goto fail;
+	for (int v = 0; v < n_voices; v++) {
+		if (write_track(f, lines[v], length, v, start_ticks[v]) != 0)
+			goto fail;
+	}
 
 	if (fclose(f) != 0)
 		return false;
@@ -155,4 +157,19 @@ bool midi_write_canon(const char *path, const int *lead, const int *follow,
 fail:
 	fclose(f);
 	return false;
+}
+
+bool midi_write_canon(const char *path, const int *lead, const int *follow,
+		      int length, int delay)
+{
+	const int *lines[2];
+	int starts[2];
+
+	if (delay < 0)
+		return false;
+	lines[0] = lead;
+	lines[1] = follow;
+	starts[0] = 0;
+	starts[1] = delay * 480;
+	return midi_write_voices(path, lines, starts, 2, length);
 }

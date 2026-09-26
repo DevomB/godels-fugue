@@ -1,3 +1,4 @@
+#include "canon.h"
 #include "domain.h"
 #include "proof.h"
 #include "solver.h"
@@ -155,6 +156,31 @@ int main(void) {
         CHECK(removed_sixty);
 
         solver_free(&s);
+    }
+
+    /* 6. Three-voice identity canon */
+    {
+        PieceConfig three = test_config();
+        three.voices = 3;
+        SolverState a = {0};
+        SolverState b = {0};
+        int melody_a[MELODY_MAX];
+        int melody_b[MELODY_MAX];
+        int bt_a = -1;
+        int bt_b = -1;
+
+        solver_init(&a, &three);
+        solver_init(&b, &three);
+        CHECK(solve(&a, melody_a, &bt_a));
+        CHECK(solve(&b, melody_b, &bt_b));
+        CHECK(bt_a == bt_b);
+        CHECK(memcmp(melody_a, melody_b, (size_t)three.length * sizeof(int)) == 0);
+        CHECK(canon_span_voices(three.length, three.delay, 3) == 20);
+        CHECK(canon_melody_index(2, 8, three.delay, three.length) == 0);
+        CHECK(entropy_bits(a.domains, three.length) == 0.0);
+
+        solver_free(&a);
+        solver_free(&b);
     }
 
     printf("ok\n");

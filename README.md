@@ -7,4 +7,5 @@ cmake --build build
 ./build/canon-collapse --config examples/inversion.txt
 ./build/canon-collapse --config examples/retrograde.txt
 ./build/canon-collapse --config examples/energy.txt
+./build/canon-collapse --config examples/three_voice.txt
 ```

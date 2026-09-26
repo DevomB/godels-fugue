@@ -201,6 +201,66 @@ int main(void)
 	}
 
 	free(buf);
+
+	{
+		const int *lines[3];
+		int starts[3];
+		const char *path3 = "output/test_three.mid";
+		int line0[] = {60, 64, 67, 72};
+		int line1[] = {60, 64, 67, 72};
+		int line2[] = {60, 64, 67, 72};
+		lines[0] = line0;
+		lines[1] = line1;
+		lines[2] = line2;
+		starts[0] = 0;
+		starts[1] = 960;
+		starts[2] = 1920;
+		CHECK(midi_write_voices(path3, lines, starts, 3, length),
+		      "write 3 voices");
+
+		f = fopen(path3, "rb");
+		CHECK(f != NULL, "open 3-voice");
+		CHECK(fseek(f, 0, SEEK_END) == 0, "seek end 3");
+		sz = ftell(f);
+		CHECK(sz > 0, "empty 3-voice");
+		CHECK(fseek(f, 0, SEEK_SET) == 0, "seek start 3");
+		buf = malloc((size_t)sz);
+		CHECK(buf != NULL, "malloc 3");
+		CHECK(fread(buf, 1, (size_t)sz, f) == (size_t)sz, "fread 3");
+		fclose(f);
+
+		CHECK(memcmp(buf, "MThd", 4) == 0, "MThd 3");
+		CHECK(read_u16be(buf + 8) == 1, "format 3");
+		CHECK(read_u16be(buf + 10) == 3, "ntrks 3");
+		CHECK(read_u16be(buf + 12) == 480, "division 3");
+
+		pos = 14;
+		tracks_found = 0;
+		while (pos + 8 <= (size_t)sz) {
+			CHECK(memcmp(buf + pos, "MTrk", 4) == 0, "MTrk 3");
+			pos += 4;
+			unsigned int chunk_len = read_u32be(buf + pos);
+			pos += 4;
+			CHECK(pos + chunk_len <= (size_t)sz, "chunk 3");
+			NoteOn ons[8];
+			int n_ons = 0;
+			CHECK(parse_track_note_ons(buf + pos, chunk_len, ons, 8,
+						  &n_ons) == 0,
+			      "parse 3");
+			CHECK(n_ons == 4, "note count 3");
+			CHECK(ons[0].channel == tracks_found, "channel 3");
+			CHECK(ons[0].velocity == 80, "velocity 3");
+			if (tracks_found == 2) {
+				CHECK(ons[0].tick == 1920, "voice3 start");
+				CHECK(ons[0].pitch == 60, "voice3 pitch");
+			}
+			tracks_found++;
+			pos += chunk_len;
+		}
+		CHECK(tracks_found == 3, "three MTrk");
+		free(buf);
+	}
+
 	printf("ok\n");
 	return 0;
 }

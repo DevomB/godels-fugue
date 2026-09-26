@@ -96,7 +96,7 @@ static int load_config(const char *path, PieceConfig *config)
 
 static int validate_config(const PieceConfig *config)
 {
-    if (config->voices != 2) {
+    if (config->voices < 2 || config->voices > VOICE_MAX) {
         fprintf(stderr, "invalid voices\n");
         return 0;
     }
@@ -163,26 +163,41 @@ static int write_entropy(const ProofLog *log, const char *path)
     return 1;
 }
 
-static void print_success(const int *melody, const int *follow, int length, int delay,
+static void fill_voice_line(int *line, const int *melody, int length, int voice,
+                            const PieceConfig *config)
+{
+    for (int i = 0; i < length; i++) {
+        int source = (voice > 0 && config->retrograde) ? length - 1 - i : i;
+        int pitch = melody[source];
+        if (voice > 0 && config->invert) {
+            pitch = invert_pitch(config->axis, pitch);
+        }
+        line[i] = pitch;
+    }
+}
+
+static void print_success(int lines[][MELODY_MAX], int voices, int length, int delay,
                           int backtracks, const SolverState *state)
 {
     printf("melody:");
     for (int i = 0; i < length; i++) {
-        printf(" %d", melody[i]);
+        printf(" %d", lines[0][i]);
     }
     printf("\n");
 
-    int span = canon_span(length, delay);
-    printf("voice 2:");
-    for (int t = 0; t < span; t++) {
-        int idx = canon_melody_index(1, t, delay, length);
-        if (idx < 0) {
-            printf(" rest");
-        } else {
-            printf(" %d", follow[idx]);
+    int span = canon_span_voices(length, delay, voices);
+    for (int v = 1; v < voices; v++) {
+        printf("voice %d:", v + 1);
+        for (int t = 0; t < span; t++) {
+            int idx = canon_melody_index(v, t, delay, length);
+            if (idx < 0) {
+                printf(" rest");
+            } else {
+                printf(" %d", lines[v][idx]);
+            }
         }
+        printf("\n");
     }
-    printf("\n");
 
     printf("backtracks: %d\n", backtracks);
     printf("entropy: %.6f\n", entropy_bits(state->domains, length));
@@ -281,18 +296,20 @@ int main(int argc, char **argv)
     }
 
     if (ok) {
-        int follow[MELODY_MAX];
-        for (int i = 0; i < config.length; i++) {
-            int source = config.retrograde ? config.length - 1 - i : i;
-            follow[i] = melody[source];
-            if (config.invert) {
-                follow[i] = invert_pitch(config.axis, follow[i]);
-            }
+        int lines[VOICE_MAX][MELODY_MAX];
+        const int *line_ptrs[VOICE_MAX];
+        int starts[VOICE_MAX];
+        for (int v = 0; v < config.voices; v++) {
+            fill_voice_line(lines[v], melody, config.length, v, &config);
+            line_ptrs[v] = lines[v];
+            starts[v] = v * config.delay * 480;
         }
-        if (!midi_write_canon(out_path, melody, follow, config.length, config.delay)) {
+        if (!midi_write_voices(out_path, line_ptrs, starts, config.voices,
+                               config.length)) {
             writes_ok = 0;
         }
-        print_success(melody, follow, config.length, config.delay, backtracks, &state);
+        print_success(lines, config.voices, config.length, config.delay, backtracks,
+                      &state);
         if (config.energy == 1) {
             printf("energy: %d\n",
                    melody_energy(melody, config.length, config.w_gravity,
