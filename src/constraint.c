@@ -305,29 +305,69 @@ static bool revise_parallel(SolverState *s, bool fifth, int constraint_id,
     return true;
 }
 
-static bool index_in_tuple(const int *idx, int n, int variable) {
-    for (int i = 0; i < n; i++) {
-        if (idx[i] == variable) return true;
+static int voice_count(const PieceConfig *config) {
+    int voices = config->voices;
+    if (voices < 1) voices = 1;
+    if (voices > VOICE_MAX) voices = VOICE_MAX;
+    return voices;
+}
+
+/* Invert the canon map when delay is a plain offset. Augment, diminish,
+ * and cyclic still walk the span because one source can occupy many times. */
+static int source_hits(const PieceConfig *c, int source, int *ts, int *vs,
+                       int cap) {
+    int n = 0;
+    int voices = voice_count(c);
+    if (c->augment >= 2 || c->diminish >= 2 || c->cyclic) {
+        int span = canon_span_config(c);
+        for (int t = 0; t < span && n < cap; t++) {
+            for (int v = 0; v < voices && n < cap; v++) {
+                if (canon_map_source(c, v, t) == source) {
+                    ts[n] = t;
+                    vs[n] = v;
+                    n++;
+                }
+            }
+        }
+        return n;
     }
-    return false;
+    for (int v = 0; v < voices && n < cap; v++) {
+        int raw = (v > 0 && c->retrograde) ? c->length - 1 - source : source;
+        int t = raw + canon_voice_delay(c, v);
+        if (canon_map_source(c, v, t) != source) continue;
+        ts[n] = t;
+        vs[n] = v;
+        n++;
+    }
+    return n;
 }
 
 static bool revise_second_touching(SolverState *s, int variable) {
-    int voices = s->config.voices;
-    if (voices < 2) voices = 2;
-    if (voices > VOICE_MAX) voices = VOICE_MAX;
-    int span = canon_span_config(&s->config);
-    for (int t = 0; t < span; t++) {
+    int ts[SPAN_MAX];
+    int vs[SPAN_MAX];
+    int n = source_hits(&s->config, variable, ts, vs, SPAN_MAX);
+    int voices = voice_count(&s->config);
+    if (voices < 2) return true;
+    for (int k = 0; k < n; k++) {
+        int t = ts[k];
         if (t % 4 != 0) continue;
-        for (int va = 0; va < voices; va++) {
-            for (int vb = va + 1; vb < voices; vb++) {
-                int i0 = canon_map_source(&s->config, va, t);
-                int i1 = canon_map_source(&s->config, vb, t);
-                if (i0 < 0 || i1 < 0) continue;
-                if (i0 != variable && i1 != variable) continue;
-                if (!revise_second_pair(s, i0, i1, va, vb))
-                    return false;
+        int va = vs[k];
+        for (int vb = 0; vb < voices; vb++) {
+            if (vb == va) continue;
+            int other = canon_map_source(&s->config, vb, t);
+            if (other < 0) continue;
+            int a = variable;
+            int b = other;
+            int voice_a = va;
+            int voice_b = vb;
+            if (va > vb) {
+                a = other;
+                b = variable;
+                voice_a = vb;
+                voice_b = va;
             }
+            if (!revise_second_pair(s, a, b, voice_a, voice_b))
+                return false;
         }
     }
     return true;
@@ -336,25 +376,33 @@ static bool revise_second_touching(SolverState *s, int variable) {
 static bool revise_parallel_touching(SolverState *s, int variable, bool fifth,
                                      int constraint_id, const char *message) {
     if (skipped(s, constraint_id)) return true;
-    int voices = s->config.voices;
-    if (voices < 2) voices = 2;
-    if (voices > VOICE_MAX) voices = VOICE_MAX;
+    int ts[SPAN_MAX];
+    int vs[SPAN_MAX];
+    int n = source_hits(&s->config, variable, ts, vs, SPAN_MAX);
+    int voices = voice_count(&s->config);
     int span = canon_span_config(&s->config);
-    for (int t = 0; t + 1 < span; t++) {
-        for (int va = 0; va < voices; va++) {
-            for (int vb = va + 1; vb < voices; vb++) {
+    if (voices < 2) return true;
+    for (int k = 0; k < n; k++) {
+        int hit = ts[k];
+        int va = vs[k];
+        for (int step = 0; step < 2; step++) {
+            int t = hit - (1 - step);
+            if (t < 0 || t + 1 >= span) continue;
+            for (int vb = 0; vb < voices; vb++) {
+                if (vb == va) continue;
+                int lead = va < vb ? va : vb;
+                int follow = va < vb ? vb : va;
                 int idx[4];
-                idx[0] = canon_map_source(&s->config, va, t);
-                idx[1] = canon_map_source(&s->config, va, t + 1);
-                idx[2] = canon_map_source(&s->config, vb, t);
-                idx[3] = canon_map_source(&s->config, vb, t + 1);
+                idx[0] = canon_map_source(&s->config, lead, t);
+                idx[1] = canon_map_source(&s->config, lead, t + 1);
+                idx[2] = canon_map_source(&s->config, follow, t);
+                idx[3] = canon_map_source(&s->config, follow, t + 1);
                 if (idx[0] < 0 || idx[1] < 0 || idx[2] < 0 || idx[3] < 0)
                     continue;
                 if (!indexes_distinct(idx[0], idx[1], idx[2], idx[3]))
                     continue;
-                if (!index_in_tuple(idx, 4, variable)) continue;
-                if (!revise_parallel_tuple(s, idx, fifth, va, vb, constraint_id,
-                                          message))
+                if (!revise_parallel_tuple(s, idx, fifth, lead, follow,
+                                          constraint_id, message))
                     return false;
             }
         }
@@ -366,13 +414,6 @@ static int last_strong_time(const PieceConfig *config) {
     int span = canon_span_config(config);
     int t = ((span - 1) / 4) * 4;
     return t < 0 ? 0 : t;
-}
-
-static int voice_count(const PieceConfig *config) {
-    int voices = config->voices;
-    if (voices < 1) voices = 1;
-    if (voices > VOICE_MAX) voices = VOICE_MAX;
-    return voices;
 }
 
 static bool revise_harmony_slot(SolverState *s, int idx, int voice, int cid,
@@ -398,13 +439,12 @@ static bool revise_cadence_at(SolverState *s, int idx, int voice) {
 
 static bool revise_chord_one(SolverState *s, int i) {
     if (skipped(s, CID_CHORD) || s->config.strong_chord == 0) return true;
-    int span = canon_span_config(&s->config);
-    int voices = voice_count(&s->config);
-    for (int t = 0; t < span; t += 4) {
-        for (int v = 0; v < voices; v++) {
-            if (canon_map_source(&s->config, v, t) != i) continue;
-            if (!revise_chord_at(s, i, v)) return false;
-        }
+    int ts[SPAN_MAX];
+    int vs[SPAN_MAX];
+    int n = source_hits(&s->config, i, ts, vs, SPAN_MAX);
+    for (int k = 0; k < n; k++) {
+        if (ts[k] % 4 != 0) continue;
+        if (!revise_chord_at(s, i, vs[k])) return false;
     }
     return true;
 }

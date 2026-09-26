@@ -70,6 +70,8 @@ bool propagate_to_fixpoint(SolverState *s) {
         }
     }
 
+    /* Pops are LIFO. These shrinks are monotone, so the fixpoint — and the
+     * four demo melodies/backtracks — does not depend on FIFO vs LIFO. */
     while (s->ac3_n > 0) {
         int v = s->ac3_q[--s->ac3_n];
         s->ac3_in[v] = 0;
