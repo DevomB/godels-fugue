@@ -249,6 +249,32 @@ int main(void) {
     CHECK(!s.failed);
     proof_free(&s.proof);
 
+    /* G. cadence on last strong beat */
+    setup_state(&s);
+    s.config.cadence = 1;
+    domain_clear(&s.domains[8]);
+    domain_add(&s.domains[8], 60);
+    domain_add(&s.domains[8], 67);
+    CHECK(constraints_revise(&s) == true);
+    CHECK(!domain_contains(&s.domains[8], 60));
+    CHECK(domain_contains(&s.domains[8], 67));
+    CHECK(proof_has(&s.proof, "cadence", 60));
+    CHECK(!s.failed);
+    proof_free(&s.proof);
+
+    /* H. strong-beat C triad */
+    setup_state(&s);
+    s.config.strong_chord = 1;
+    domain_clear(&s.domains[4]);
+    domain_add(&s.domains[4], 62);
+    domain_add(&s.domains[4], 64);
+    CHECK(constraints_revise(&s) == true);
+    CHECK(!domain_contains(&s.domains[4], 62));
+    CHECK(domain_contains(&s.domains[4], 64));
+    CHECK(proof_has(&s.proof, "chord", 62));
+    CHECK(!s.failed);
+    proof_free(&s.proof);
+
     /* F. transposed follower makes a strong-beat second */
     setup_state(&s);
     s.config.transpose = 2;

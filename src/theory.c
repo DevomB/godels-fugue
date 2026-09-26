@@ -56,6 +56,18 @@ int invert_pitch(int axis, int pitch) {
     return 2 * axis - pitch;
 }
 
+int in_c_triad(int pitch) {
+    int pc = pitch % 12;
+    if (pc < 0) pc += 12;
+    return pc == 0 || pc == 4 || pc == 7;
+}
+
+int in_c_dominant(int pitch) {
+    int pc = pitch % 12;
+    if (pc < 0) pc += 12;
+    return pc == 7 || pc == 11 || pc == 2;
+}
+
 static int iabs(int x) {
     return x < 0 ? -x : x;
 }

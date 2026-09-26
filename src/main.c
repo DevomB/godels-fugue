@@ -117,6 +117,10 @@ static int load_config(const char *path, PieceConfig *config)
             config->w_dissonance = value;
         } else if (strcmp(key, "w_parallel") == 0) {
             config->w_parallel = value;
+        } else if (strcmp(key, "strong_chord") == 0) {
+            config->strong_chord = value;
+        } else if (strcmp(key, "cadence") == 0) {
+            config->cadence = value;
         }
     }
 
@@ -203,6 +207,14 @@ static int validate_config(const PieceConfig *config)
         (config->lock_index < 0 || config->lock_index >= config->length ||
          config->lock_pitch < 0 || config->lock_pitch > 127)) {
         fprintf(stderr, "invalid lock\n");
+        return 0;
+    }
+    if (config->strong_chord != 0 && config->strong_chord != 1) {
+        fprintf(stderr, "invalid strong_chord\n");
+        return 0;
+    }
+    if (config->cadence != 0 && config->cadence != 1) {
+        fprintf(stderr, "invalid cadence\n");
         return 0;
     }
     if (config->anneal_steps < 0 || config->anneal_start < 0 ||
@@ -309,6 +321,8 @@ int main(int argc, char **argv)
         .anneal_steps = 0,
         .w_dissonance = 0,
         .w_parallel = 0,
+        .strong_chord = 0,
+        .cadence = 0,
     };
 
     const char *config_path = NULL;

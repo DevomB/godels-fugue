@@ -11,7 +11,9 @@ enum {
     CID_LEAP = 3,
     CID_SECOND = 4,
     CID_PARALLEL_FIFTH = 5,
-    CID_PARALLEL_OCTAVE = 6
+    CID_PARALLEL_OCTAVE = 6,
+    CID_CHORD = 7,
+    CID_CADENCE = 8
 };
 
 static int collect_pitches(const MidiDomain *d, int *out) {
@@ -341,10 +343,52 @@ static bool revise_parallel_touching(SolverState *s, int variable, bool fifth,
     return true;
 }
 
+static int last_strong(int length) {
+    int t = ((length - 1) / 4) * 4;
+    return t < 0 ? 0 : t;
+}
+
+static bool revise_chord_one(SolverState *s, int i) {
+    if (s->config.strong_chord == 0 || i % 4 != 0) return true;
+    int pitches[128];
+    int n = collect_pitches(&s->domains[i], pitches);
+    for (int k = 0; k < n; k++) {
+        if (in_c_triad(pitches[k])) continue;
+        if (!remove_unsupported(s, i, pitches[k], CID_CHORD, "chord", NULL, 0))
+            return false;
+    }
+    return true;
+}
+
+static bool revise_cadence_one(SolverState *s, int i) {
+    if (s->config.cadence == 0 || i != last_strong(s->config.length)) return true;
+    int pitches[128];
+    int n = collect_pitches(&s->domains[i], pitches);
+    for (int k = 0; k < n; k++) {
+        if (in_c_dominant(pitches[k])) continue;
+        if (!remove_unsupported(s, i, pitches[k], CID_CADENCE, "cadence", NULL, 0))
+            return false;
+    }
+    return true;
+}
+
+static bool revise_chord(SolverState *s) {
+    for (int i = 0; i < s->config.length; i++) {
+        if (!revise_chord_one(s, i)) return false;
+    }
+    return true;
+}
+
+static bool revise_cadence(SolverState *s) {
+    return revise_cadence_one(s, last_strong(s->config.length));
+}
+
 bool constraints_revise_var(SolverState *s, int variable) {
     if (variable < 0 || variable >= s->config.length) return true;
     if (!revise_scale_one(s, variable)) return false;
     if (!revise_range_one(s, variable)) return false;
+    if (!revise_chord_one(s, variable)) return false;
+    if (!revise_cadence_one(s, variable)) return false;
     if (variable > 0 && !revise_leap_edge(s, variable - 1, variable))
         return false;
     if (variable + 1 < s->config.length &&
@@ -369,5 +413,7 @@ bool constraints_revise(SolverState *s) {
         return false;
     if (!revise_parallel(s, false, CID_PARALLEL_OCTAVE, "parallel octave"))
         return false;
+    if (!revise_chord(s)) return false;
+    if (!revise_cadence(s)) return false;
     return true;
 }

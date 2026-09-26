@@ -48,6 +48,8 @@ static PieceConfig test_config(void) {
     c.anneal_steps = 0;
     c.w_dissonance = 0;
     c.w_parallel = 0;
+    c.strong_chord = 0;
+    c.cadence = 0;
     return c;
 }
 
