@@ -65,6 +65,9 @@ static PieceConfig test_config(void) {
     c.key_second = 0;
     c.w_modulate = 0;
     c.poly_meter = 0;
+    for (int i = 0; i < 12; i++) {
+        c.pc_weight[i] = 0;
+    }
     return c;
 }
 

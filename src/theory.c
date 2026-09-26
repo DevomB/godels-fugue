@@ -1,5 +1,9 @@
 #include "theory.h"
 
+#include <dirent.h>
+#include <stdio.h>
+#include <string.h>
+
 int is_strong_time(int t, int poly_meter) {
     if (t % 4 == 0) return 1;
     if (poly_meter && t % 3 == 0) return 1;
@@ -214,8 +218,16 @@ int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
                        int w_leap, int w_curve, int w_dissonance, int w_parallel,
                        int w_motif, int motif_a, int motif_b, int motif_c,
                        int motif_d, int invert,
-                       int axis, int transpose, int w_modulate, int modulate_at) {
+                       int axis, int transpose, int w_modulate, int modulate_at,
+                       const int *pc_weight) {
     int total = melody_energy(melody, length, w_gravity, w_leap, w_curve);
+    if (pc_weight != NULL) {
+        for (int i = 0; i < length; i++) {
+            int pc = melody[i] % 12;
+            if (pc < 0) pc += 12;
+            total += pc_weight[pc];
+        }
+    }
     if (w_modulate > 0 && modulate_at >= 0 && modulate_at < length &&
         pitch_in_g_major(melody[modulate_at])) {
         total += w_modulate;
@@ -248,4 +260,55 @@ int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
                                w_parallel);
     }
     return total;
+}
+
+int corpus_row_counts(const char *path, int counts[12]) {
+    if (path == NULL || counts == NULL) return 0;
+    FILE *f = fopen(path, "r");
+    if (f == NULL) return 0;
+    int pitch;
+    int n = 0;
+    while (fscanf(f, "%d", &pitch) == 1) {
+        if (pitch < 0 || pitch > 127) continue;
+        int pc = pitch % 12;
+        counts[pc] += 1;
+        n++;
+    }
+    fclose(f);
+    return n;
+}
+
+void corpus_weights_from_counts(const int counts[12], int weights[12]) {
+    int maxc = 0;
+    for (int i = 0; i < 12; i++) {
+        if (counts[i] > maxc) maxc = counts[i];
+    }
+    for (int i = 0; i < 12; i++) {
+        weights[i] = maxc - counts[i];
+    }
+}
+
+int corpus_dir_weights(const char *dir, int weights[12]) {
+    if (dir == NULL || weights == NULL) return 0;
+    int counts[12];
+    memset(counts, 0, sizeof(counts));
+    DIR *d = opendir(dir);
+    if (d == NULL) return 0;
+    struct dirent *ent;
+    int files = 0;
+    while ((ent = readdir(d)) != NULL) {
+        if (ent->d_name[0] == '.') continue;
+        char path[512];
+        size_t n = strlen(dir);
+        size_t m = strlen(ent->d_name);
+        if (n + 1 + m + 1 > sizeof(path)) continue;
+        memcpy(path, dir, n);
+        path[n] = '/';
+        memcpy(path + n + 1, ent->d_name, m + 1);
+        if (corpus_row_counts(path, counts) > 0) files++;
+    }
+    closedir(d);
+    if (files == 0) return 0;
+    corpus_weights_from_counts(counts, weights);
+    return 1;
 }

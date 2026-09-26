@@ -28,10 +28,14 @@ int melody_energy(const int *melody, int length, int w_gravity, int w_leap,
                   int w_curve);
 int vertical_cost(int a, int b, int a_prev, int b_prev, int has_prev,
                   int w_dissonance, int w_parallel);
+int corpus_row_counts(const char *path, int counts[12]);
+void corpus_weights_from_counts(const int counts[12], int weights[12]);
+int corpus_dir_weights(const char *dir, int weights[12]);
 int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
                        int w_leap, int w_curve, int w_dissonance, int w_parallel,
                        int w_motif, int motif_a, int motif_b, int motif_c,
                        int motif_d, int invert,
-                       int axis, int transpose, int w_modulate, int modulate_at);
+                       int axis, int transpose, int w_modulate, int modulate_at,
+                       const int *pc_weight);
 
 #endif

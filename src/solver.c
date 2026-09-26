@@ -189,6 +189,11 @@ static void fill_choice_costs(const SolverState *s, int index, const int *pitche
             index == s->config.modulate_at && pitch_in_g_major(pitches[i])) {
             costs[i] += s->config.w_modulate;
         }
+        {
+            int pc = pitches[i] % 12;
+            if (pc < 0) pc += 12;
+            costs[i] += s->config.pc_weight[pc];
+        }
         if (has_follow) {
             int has_prev = 0;
             int a_prev = 0;

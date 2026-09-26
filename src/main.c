@@ -459,12 +459,15 @@ int main(int argc, char **argv)
         .key_second = 0,
         .w_modulate = 0,
         .poly_meter = 0,
+        .pc_weight = {0},
     };
 
     const char *config_path = NULL;
     const char *out_path = "output/canon.mid";
     const char *proof_path = "output/proof.txt";
     const char *entropy_path = "output/entropy.txt";
+    const char *corpus_dir = NULL;
+    int apply_weights = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--config") == 0) {
@@ -491,6 +494,14 @@ int main(int argc, char **argv)
                 return 1;
             }
             entropy_path = argv[++i];
+        } else if (strcmp(argv[i], "--corpus") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "missing value\n");
+                return 1;
+            }
+            corpus_dir = argv[++i];
+        } else if (strcmp(argv[i], "--apply-weights") == 0) {
+            apply_weights = 1;
         } else if (strcmp(argv[i], "--lock") == 0) {
             if (i + 2 >= argc) {
                 fprintf(stderr, "missing value\n");
@@ -510,6 +521,21 @@ int main(int argc, char **argv)
     }
     if (!validate_config(&config)) {
         return 1;
+    }
+    if (corpus_dir != NULL) {
+        int suggested[12];
+        if (!corpus_dir_weights(corpus_dir, suggested)) {
+            fprintf(stderr, "cannot read corpus\n");
+            return 1;
+        }
+        printf("weights:");
+        for (int p = 0; p < 12; p++) {
+            printf(" %d", suggested[p]);
+        }
+        printf("\n");
+        if (apply_weights) {
+            memcpy(config.pc_weight, suggested, sizeof(suggested));
+        }
     }
 
     SolverState state = {0};
@@ -615,7 +641,8 @@ int main(int argc, char **argv)
                         config.w_parallel, config.w_motif, config.motif_a,
                         config.motif_b, config.motif_c, config.motif_d,
                         config.invert, config.axis,
-                        config.transpose, config.w_modulate, config.modulate_at);
+                        config.transpose, config.w_modulate, config.modulate_at,
+                        config.pc_weight);
                 }
                 ensure_parent_dir(html_path);
                 if (!export_score_page(html_path, melody, &config, &state,
@@ -635,7 +662,7 @@ int main(int argc, char **argv)
                                       config.motif_c, config.motif_d,
                                       config.invert, config.axis,
                                       config.transpose, config.w_modulate,
-                                      config.modulate_at));
+                                      config.modulate_at, config.pc_weight));
         }
         if (config.lock == 1) {
             SolverState alt = {0};
@@ -669,7 +696,8 @@ int main(int argc, char **argv)
                     config.w_parallel, config.w_motif, config.motif_a,
                     config.motif_b, config.motif_c, config.motif_d,
                     config.invert, config.axis,
-                    config.transpose, config.w_modulate, config.modulate_at);
+                    config.transpose, config.w_modulate, config.modulate_at,
+                    config.pc_weight);
             }
             if (sibling_path(report_path, sizeof(report_path), out_path,
                              "report.txt")) {

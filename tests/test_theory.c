@@ -3,6 +3,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <sys/stat.h>
+#endif
+
 #define CHECK(cond)                                                            \
     do {                                                                       \
         if (!(cond)) {                                                         \
@@ -120,11 +126,11 @@ int main(void) {
     {
         int unison[8] = {60, 60, 60, 60, 60, 60, 60, 60};
         int ident = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
-                                       -128, -128, 0, 67, 0, 0, -1);
+                                       -128, -128, 0, 67, 0, 0, -1, NULL);
         int shifted = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
-                                         -128, -128, 0, 67, 2, 0, -1);
+                                         -128, -128, 0, 67, 2, 0, -1, NULL);
         int mirrored = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
-                                          -128, -128, 1, 67, 0, 0, -1);
+                                          -128, -128, 1, 67, 0, 0, -1, NULL);
         CHECK(pitch_in_g_major(66));
         CHECK(!pitch_in_g_major(65));
         CHECK(pitch_in_scale(65, 0, 4));
@@ -134,6 +140,29 @@ int main(void) {
         CHECK(pitch_in_scale(65, 4, -1));
         CHECK(shifted > ident);
         CHECK(mirrored != ident);
+    }
+
+#ifdef _WIN32
+    _mkdir("output");
+#else
+    mkdir("output", 0755);
+#endif
+    {
+        FILE *fix = fopen("output/corpus_fix.txt", "w");
+        CHECK(fix != NULL);
+        CHECK(fprintf(fix, "60 64 67 60\n") > 0);
+        CHECK(fclose(fix) == 0);
+        int counts[12] = {0};
+        CHECK(corpus_row_counts("output/corpus_fix.txt", counts) == 4);
+        CHECK(counts[0] == 2);
+        CHECK(counts[4] == 1);
+        CHECK(counts[7] == 1);
+        int weights[12];
+        corpus_weights_from_counts(counts, weights);
+        CHECK(weights[0] == 0);
+        CHECK(weights[4] == 1);
+        CHECK(weights[7] == 1);
+        CHECK(weights[1] == 2);
     }
 
     printf("ok\n");
