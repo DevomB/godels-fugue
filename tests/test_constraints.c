@@ -156,6 +156,22 @@ int main(void) {
     CHECK(!s.failed);
     proof_free(&s.proof);
 
+    /* 6b. partner domain wider than 8 still keeps a supported pitch */
+    setup_state(&s);
+    domain_clear(&s.domains[4]);
+    domain_add(&s.domains[4], 60);
+    domain_clear(&s.domains[5]);
+    domain_add(&s.domains[5], 67);
+    domain_fill_range(&s.domains[0], 60, 72);
+    domain_clear(&s.domains[1]);
+    domain_add(&s.domains[1], 60);
+    CHECK(domain_count(&s.domains[0]) > 8);
+    CHECK(constraints_revise(&s) == true);
+    CHECK(domain_contains(&s.domains[5], 67));
+    CHECK(domain_contains(&s.domains[1], 60));
+    CHECK(!s.failed);
+    proof_free(&s.proof);
+
     /* 7. parallel octave */
     setup_state(&s);
     domain_clear(&s.domains[4]);

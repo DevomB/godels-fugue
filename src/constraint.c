@@ -191,21 +191,19 @@ static bool indexes_distinct(int a, int b, int c, int d) {
     return a != b && a != c && a != d && b != c && b != d && c != d;
 }
 
-/* Support search is cheap under 13 pitches; add an AC-3 queue when a profile
- * says revise dominates. Domains stay <= 8 so 8^3 is fine. */
+/* Ceiling: 128^3 support walk if a domain is full MIDI. Default C4–C5
+ * C major stays 8^3. Stop as soon as one legal tuple exists. */
 static bool parallel_supported(const MidiDomain *domains[4], int fixed_slot,
                                int fixed_pitch, bool fifth, int voice_lead,
                                int voice_follow, const PieceConfig *config) {
-    int pitches[4][8];
+    int pitches[4][128];
     int counts[4];
     for (int i = 0; i < 4; i++) {
         counts[i] = 0;
         for (int p = domain_next(domains[i], 0); p >= 0;
              p = domain_next(domains[i], p + 1)) {
-            if (counts[i] < 8) pitches[i][counts[i]] = p;
-            counts[i]++;
+            pitches[i][counts[i]++] = p;
         }
-        if (counts[i] > 8) counts[i] = 8;
         if (i != fixed_slot && counts[i] == 0) return false;
     }
 
