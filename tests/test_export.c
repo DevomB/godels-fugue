@@ -65,7 +65,7 @@ int main(void) {
     CHECK(sz > 20);
     CHECK(memcmp(buf, "<?xml", 5) == 0);
     CHECK(strstr((char *)buf, "score-partwise") != NULL);
-    CHECK(strstr((char *)buf, "<step>C</step>") != NULL);
+    CHECK(strstr((char *)buf, "<step>C</step><octave>5</octave>") != NULL);
     CHECK(strstr((char *)buf, "<step>E</step>") != NULL);
     CHECK(strstr((char *)buf, "<step>G</step>") != NULL);
     free(buf);
