@@ -1,6 +1,7 @@
 #include "export.h"
 
 #include "canon.h"
+#include "constraint.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -339,6 +340,41 @@ bool export_score_page(const char *path, const int *melody,
     if (fprintf(f, "</pre>\n</body></html>\n") < 0) {
         fclose(f);
         return false;
+    }
+    return fclose(f) == 0;
+}
+
+bool export_report(const char *path, const PieceConfig *config, int backtracks,
+                   double entropy, int energy, const int *core, int core_n) {
+    if (path == NULL || config == NULL) return false;
+
+    FILE *f = fopen(path, "w");
+    if (f == NULL) return false;
+
+    if (fprintf(f,
+                "rules: invert=%d retrograde=%d cadence=%d strong_chord=%d "
+                "cyclic=%d motif=%d\nbacktracks: %d\nentropy: %.6f\nenergy: %d\n",
+                config->invert, config->retrograde, config->cadence,
+                config->strong_chord, config->cyclic, config->w_motif,
+                backtracks, entropy, energy) < 0) {
+        fclose(f);
+        return false;
+    }
+    if (core_n > 0 && core != NULL) {
+        if (fprintf(f, "core:") < 0) {
+            fclose(f);
+            return false;
+        }
+        for (int i = 0; i < core_n; i++) {
+            if (fprintf(f, " %s", constraint_name(core[i])) < 0) {
+                fclose(f);
+                return false;
+            }
+        }
+        if (fprintf(f, "\n") < 0) {
+            fclose(f);
+            return false;
+        }
     }
     return fclose(f) == 0;
 }

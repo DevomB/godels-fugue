@@ -176,6 +176,9 @@ static void fill_choice_costs(const SolverState *s, int index, const int *pitche
         costs[i] = pitch_choice_cost(index, s->config.length, pitches[i], left, has_left,
                                      right, has_right, s->config.w_gravity, s->config.w_leap,
                                      s->config.w_curve);
+        costs[i] += motif_step_cost(index, left, has_left, pitches[i],
+                                    s->config.motif_a, s->config.motif_b,
+                                    s->config.w_motif);
         if (has_follow) {
             int has_prev = 0;
             int a_prev = 0;
@@ -364,4 +367,52 @@ bool solve(SolverState *s, int *melody, int *backtracks) {
         *backtracks = s->backtracks;
     }
     return ok;
+}
+
+bool solver_unsat_core(const PieceConfig *config, int *cids, int max_cids,
+                       int *n) {
+    if (config == NULL || cids == NULL || n == NULL || max_cids < 1) {
+        return false;
+    }
+    *n = 0;
+
+    SolverState failed = {0};
+    solver_init(&failed, config);
+    if (solve(&failed, NULL, NULL)) {
+        solver_free(&failed);
+        return false;
+    }
+
+    int cand[16];
+    int seen[16];
+    int nc = 0;
+    memset(seen, 0, sizeof(seen));
+    for (int i = 0; i < failed.proof.event_count && nc < 16; i++) {
+        int cid = failed.proof.events[i].constraint_id;
+        if (cid <= 0 || cid >= 16 || seen[cid]) continue;
+        seen[cid] = 1;
+        cand[nc++] = cid;
+    }
+    solver_free(&failed);
+
+    /* Greedy deletion: drop a rule if the instance stays unsat without it. */
+    unsigned char drop[16];
+    memset(drop, 0, sizeof(drop));
+    for (int i = 0; i < nc; i++) {
+        SolverState trial = {0};
+        solver_init(&trial, config);
+        memcpy(trial.skip_cid, drop, sizeof(trial.skip_cid));
+        trial.skip_cid[cand[i]] = 1;
+        if (!solve(&trial, NULL, NULL)) {
+            drop[cand[i]] = 1;
+        }
+        solver_free(&trial);
+    }
+
+    for (int i = 0; i < nc && *n < max_cids; i++) {
+        if (!drop[cand[i]]) {
+            cids[(*n)++] = cand[i];
+        }
+    }
+    return *n > 0;
 }

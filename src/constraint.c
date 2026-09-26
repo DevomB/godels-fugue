@@ -5,16 +5,23 @@
 
 #include <stdlib.h>
 
-enum {
-    CID_SCALE = 1,
-    CID_RANGE = 2,
-    CID_LEAP = 3,
-    CID_SECOND = 4,
-    CID_PARALLEL_FIFTH = 5,
-    CID_PARALLEL_OCTAVE = 6,
-    CID_CHORD = 7,
-    CID_CADENCE = 8
-};
+const char *constraint_name(int cid) {
+    static const char *names[] = {"",
+                                  "scale",
+                                  "range",
+                                  "leap",
+                                  "second",
+                                  "parallel fifth",
+                                  "parallel octave",
+                                  "chord",
+                                  "cadence"};
+    if (cid <= 0 || cid >= CID_MAX) return "unknown";
+    return names[cid];
+}
+
+static int skipped(const SolverState *s, int cid) {
+    return cid > 0 && cid < 16 && s->skip_cid[cid];
+}
 
 static int collect_pitches(const MidiDomain *d, int *out) {
     int n = 0;
@@ -46,6 +53,7 @@ static bool remove_unsupported(SolverState *s, int variable, int pitch,
 }
 
 static bool revise_scale_one(SolverState *s, int i) {
+    if (skipped(s, CID_SCALE)) return true;
     int pitches[128];
     int n = collect_pitches(&s->domains[i], pitches);
     for (int k = 0; k < n; k++) {
@@ -68,6 +76,7 @@ static bool revise_scale(SolverState *s) {
 }
 
 static bool revise_range_one(SolverState *s, int i) {
+    if (skipped(s, CID_RANGE)) return true;
     int low = s->config.range_low;
     int high = s->config.range_high;
     int pitches[128];
@@ -99,6 +108,7 @@ static bool leap_supported(const MidiDomain *partner, int pitch, int max_leap) {
 }
 
 static bool revise_leap_edge(SolverState *s, int a, int b) {
+    if (skipped(s, CID_LEAP)) return true;
     int max_leap = s->config.max_leap;
     int pitches[128];
     int n = collect_pitches(&s->domains[a], pitches);
@@ -136,6 +146,7 @@ static bool second_supported_pair(const MidiDomain *partner, int pitch, int voic
 }
 
 static bool revise_second_pair(SolverState *s, int a, int b, int voice_a, int voice_b) {
+    if (skipped(s, CID_SECOND)) return true;
     int pitches[128];
     int n = collect_pitches(&s->domains[a], pitches);
     for (int k = 0; k < n; k++) {
@@ -262,6 +273,7 @@ static bool revise_parallel_tuple(SolverState *s, int idx[4], bool fifth,
 
 static bool revise_parallel(SolverState *s, bool fifth, int constraint_id,
                             const char *message) {
+    if (skipped(s, constraint_id)) return true;
     int voices = s->config.voices;
     if (voices < 2) voices = 2;
     if (voices > VOICE_MAX) voices = VOICE_MAX;
@@ -317,6 +329,7 @@ static bool revise_second_touching(SolverState *s, int variable) {
 
 static bool revise_parallel_touching(SolverState *s, int variable, bool fifth,
                                      int constraint_id, const char *message) {
+    if (skipped(s, constraint_id)) return true;
     int voices = s->config.voices;
     if (voices < 2) voices = 2;
     if (voices > VOICE_MAX) voices = VOICE_MAX;
@@ -349,6 +362,7 @@ static int last_strong(int length) {
 }
 
 static bool revise_chord_one(SolverState *s, int i) {
+    if (skipped(s, CID_CHORD)) return true;
     if (s->config.strong_chord == 0 || i % 4 != 0) return true;
     int pitches[128];
     int n = collect_pitches(&s->domains[i], pitches);
@@ -361,6 +375,7 @@ static bool revise_chord_one(SolverState *s, int i) {
 }
 
 static bool revise_cadence_one(SolverState *s, int i) {
+    if (skipped(s, CID_CADENCE)) return true;
     if (s->config.cadence == 0 || i != last_strong(s->config.length)) return true;
     int pitches[128];
     int n = collect_pitches(&s->domains[i], pitches);

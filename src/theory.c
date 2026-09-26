@@ -99,6 +99,13 @@ int tension_target(int index, int length) {
     return arch[index * 11 / (length - 1)];
 }
 
+int motif_step_cost(int index, int left, int has_left, int pitch, int motif_a,
+                    int motif_b, int w_motif) {
+    if (w_motif == 0 || !has_left) return 0;
+    int expect = ((index - 1) % 2 == 0) ? motif_a : motif_b;
+    return (pitch - left) == expect ? 0 : w_motif;
+}
+
 int pitch_choice_cost(int index, int length, int pitch, int left, int has_left,
                       int right, int has_right, int w_gravity, int w_leap,
                       int w_curve) {
@@ -149,8 +156,15 @@ int vertical_cost(int a, int b, int a_prev, int b_prev, int has_prev,
 }
 
 int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
-                       int w_leap, int w_curve, int w_dissonance, int w_parallel) {
+                       int w_leap, int w_curve, int w_dissonance, int w_parallel,
+                       int w_motif, int motif_a, int motif_b) {
     int total = melody_energy(melody, length, w_gravity, w_leap, w_curve);
+    if (w_motif > 0) {
+        for (int i = 1; i < length; i++) {
+            total += motif_step_cost(i, melody[i - 1], 1, melody[i], motif_a,
+                                     motif_b, w_motif);
+        }
+    }
     if (w_dissonance == 0 && w_parallel == 0) {
         return total;
     }

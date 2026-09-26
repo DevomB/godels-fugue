@@ -108,6 +108,12 @@ int main(void) {
         CHECK(strstr((char *)buf, "entropy:") != NULL);
         free(buf);
         solver_free(&s);
+        CHECK(export_report("output/report.txt", &cfg, bt, 0.0, 0, NULL, 0));
+        slurp("output/report.txt", &buf, &sz);
+        CHECK(strstr((char *)buf, "backtracks:") != NULL);
+        CHECK(strstr((char *)buf, "entropy:") != NULL);
+        CHECK(strstr((char *)buf, "energy:") != NULL);
+        free(buf);
     }
 
     proof_free(&log);

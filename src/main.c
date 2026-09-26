@@ -1,4 +1,5 @@
 #include "canon.h"
+#include "constraint.h"
 #include "export.h"
 #include "midi.h"
 #include "solver.h"
@@ -151,6 +152,14 @@ static int load_config(const char *path, PieceConfig *config)
             config->rhythm = value;
         } else if (strcmp(key, "rest_at") == 0) {
             config->rest_at = value;
+        } else if (strcmp(key, "cyclic") == 0) {
+            config->cyclic = value;
+        } else if (strcmp(key, "w_motif") == 0) {
+            config->w_motif = value;
+        } else if (strcmp(key, "motif_a") == 0) {
+            config->motif_a = value;
+        } else if (strcmp(key, "motif_b") == 0) {
+            config->motif_b = value;
         }
     }
 
@@ -257,6 +266,14 @@ static int validate_config(const PieceConfig *config)
     }
     if (config->rest_at != 0 && config->rhythm == 0) {
         fprintf(stderr, "rest_at requires rhythm\n");
+        return 0;
+    }
+    if (config->cyclic != 0 && config->cyclic != 1) {
+        fprintf(stderr, "invalid cyclic\n");
+        return 0;
+    }
+    if (config->w_motif < 0) {
+        fprintf(stderr, "invalid w_motif\n");
         return 0;
     }
     if (config->anneal_steps < 0 || config->anneal_start < 0 ||
@@ -381,6 +398,10 @@ int main(int argc, char **argv)
         .cadence = 0,
         .rhythm = 0,
         .rest_at = 0,
+        .cyclic = 0,
+        .w_motif = 0,
+        .motif_a = 0,
+        .motif_b = 0,
     };
 
     const char *config_path = NULL;
@@ -526,7 +547,8 @@ int main(int argc, char **argv)
                     energy = melody_energy_full(
                         melody, config.length, config.delay, config.w_gravity,
                         config.w_leap, config.w_curve, config.w_dissonance,
-                        config.w_parallel);
+                        config.w_parallel, config.w_motif, config.motif_a,
+                        config.motif_b);
                 }
                 ensure_parent_dir(html_path);
                 if (!export_score_page(html_path, melody, &config, &state,
@@ -541,7 +563,8 @@ int main(int argc, char **argv)
                    melody_energy_full(melody, config.length, config.delay,
                                       config.w_gravity, config.w_leap,
                                       config.w_curve, config.w_dissonance,
-                                      config.w_parallel));
+                                      config.w_parallel, config.w_motif,
+                                      config.motif_a, config.motif_b));
         }
         if (config.lock == 1) {
             SolverState alt = {0};
@@ -565,6 +588,26 @@ int main(int argc, char **argv)
             }
             solver_free(&alt);
         }
+        {
+            char report_path[512];
+            int energy = 0;
+            if (config.energy == 1) {
+                energy = melody_energy_full(
+                    melody, config.length, config.delay, config.w_gravity,
+                    config.w_leap, config.w_curve, config.w_dissonance,
+                    config.w_parallel, config.w_motif, config.motif_a,
+                    config.motif_b);
+            }
+            if (sibling_path(report_path, sizeof(report_path), out_path,
+                             "report.txt")) {
+                ensure_parent_dir(report_path);
+                if (!export_report(report_path, &config, backtracks,
+                                   entropy_bits(state.domains, config.length),
+                                   energy, NULL, 0)) {
+                    writes_ok = 0;
+                }
+            }
+        }
         solver_free(&state);
         return writes_ok ? 0 : 1;
     }
@@ -580,6 +623,25 @@ int main(int argc, char **argv)
         }
     }
 
+    {
+        int core[16];
+        int core_n = 0;
+        if (solver_unsat_core(&config, core, 16, &core_n)) {
+            fprintf(stderr, "core:");
+            for (int i = 0; i < core_n; i++) {
+                fprintf(stderr, " %s", constraint_name(core[i]));
+            }
+            fprintf(stderr, "\n");
+        }
+        char report_path[512];
+        if (sibling_path(report_path, sizeof(report_path), out_path,
+                         "report.txt")) {
+            ensure_parent_dir(report_path);
+            export_report(report_path, &config, backtracks,
+                          entropy_bits(state.domains, config.length), 0, core,
+                          core_n);
+        }
+    }
     print_unsat(&state);
     if (config.lock == 1) {
         SolverState alt = {0};

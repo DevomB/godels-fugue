@@ -51,7 +51,11 @@ int canon_map_source(const PieceConfig *config, int voice, int time) {
         if (raw < 0) return -1;
         raw = raw * config->diminish;
     }
-    if (raw < 0 || raw >= length) return -1;
+    if (raw < 0 || raw >= length) {
+        if (!config->cyclic || length <= 0) return -1;
+        raw %= length;
+        if (raw < 0) raw += length;
+    }
     if (voice > 0 && config->retrograde) return length - 1 - raw;
     return raw;
 }

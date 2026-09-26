@@ -42,6 +42,10 @@ typedef struct PieceConfig {
     int cadence;      /* 0 = off; 1 = last strong beat is V (G/B/D) */
     int rhythm;       /* 0 = all quarters; 1 = rest/quarter/half domain */
     int rest_at;      /* 0 = off; else force rest at that melody index */
+    int cyclic;       /* 0 = off; 1 = follower wraps modulo length */
+    int w_motif;      /* soft interval-pattern cost; 0 = off */
+    int motif_a;
+    int motif_b;
 } PieceConfig;
 
 typedef struct SolverState {
@@ -61,6 +65,7 @@ typedef struct SolverState {
     int trail_n;
     unsigned char rhythm_mask[MELODY_MAX]; /* bit0 rest, bit1 quarter, bit2 half */
     int duration[MELODY_MAX];              /* 0 rest, 1 quarter, 2 half */
+    unsigned char skip_cid[16];            /* unsat-core search mutes */
 } SolverState;
 
 enum { RHYTHM_REST = 1, RHYTHM_QUARTER = 2, RHYTHM_HALF = 4 };

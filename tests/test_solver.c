@@ -1,4 +1,5 @@
 #include "canon.h"
+#include "constraint.h"
 #include "domain.h"
 #include "proof.h"
 #include "solver.h"
@@ -52,6 +53,10 @@ static PieceConfig test_config(void) {
     c.cadence = 0;
     c.rhythm = 0;
     c.rest_at = 0;
+    c.cyclic = 0;
+    c.w_motif = 0;
+    c.motif_a = 0;
+    c.motif_b = 0;
     return c;
 }
 
@@ -274,6 +279,29 @@ int main(void) {
         CHECK(s.duration[0] == 1);
         CHECK(solve(&s, melody, &backtracks));
         CHECK(s.duration[3] == 0);
+        solver_free(&s);
+    }
+
+    /* 11. Cadence plus a singleton C range has cadence in the unsat core */
+    {
+        PieceConfig cfg = test_config();
+        cfg.cadence = 1;
+        cfg.range_low = 60;
+        cfg.range_high = 60;
+        int core[8];
+        int n = 0;
+        CHECK(solver_unsat_core(&cfg, core, 8, &n));
+        int has_cadence = 0;
+        for (int i = 0; i < n; i++) {
+            if (core[i] == CID_CADENCE) has_cadence = 1;
+        }
+        CHECK(has_cadence);
+        cfg.cadence = 0;
+        SolverState s = {0};
+        int melody[MELODY_MAX];
+        int bt = -1;
+        solver_init(&s, &cfg);
+        CHECK(solve(&s, melody, &bt));
         solver_free(&s);
     }
 

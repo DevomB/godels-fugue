@@ -96,6 +96,10 @@ int main(void) {
     CHECK(vertical_cost(60, 62, 0, 0, 0, 1, 0) > vertical_cost(60, 67, 0, 0, 0, 1, 0));
     CHECK(vertical_cost(64, 71, 60, 67, 1, 0, 2) == 2);
 
+    CHECK(motif_step_cost(1, 60, 1, 62, 2, -1, 4) == 0);
+    CHECK(motif_step_cost(1, 60, 1, 64, 2, -1, 4) == 4);
+    CHECK(motif_step_cost(2, 62, 1, 61, 2, -1, 4) == 0);
+
     printf("ok\n");
     return 0;
 }

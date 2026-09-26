@@ -103,6 +103,13 @@ int main(void) {
         CHECK(canon_voice_delay(&c, 1) == 2);
         CHECK(canon_map_source(&c, 1, 2) == 0);
         CHECK(canon_span_config(&c) == 14);
+
+        c.voice_delay[1] = 0;
+        c.delay = 4;
+        c.cyclic = 1;
+        CHECK(canon_map_source(&c, 1, 0) == 8);
+        CHECK(canon_map_source(&c, 1, 3) == 11);
+        CHECK(canon_map_source(&c, 1, 4) == 0);
     }
 
     printf("ok\n");

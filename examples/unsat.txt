@@ -1,0 +1,9 @@
+length 12
+voices 2
+delay 4
+range_low 60
+range_high 60
+max_leap 7
+invert 0
+axis 67
+cadence 1

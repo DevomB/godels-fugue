@@ -19,6 +19,9 @@ cmake --build build
 ./build/canon-collapse --config examples/dissonance.txt
 ./build/canon-collapse --config examples/cadence.txt
 ./build/canon-collapse --config examples/rest.txt
+./build/canon-collapse --config examples/cyclic.txt
+./build/canon-collapse --config examples/motif.txt
+./build/canon-collapse --config examples/unsat.txt
 ```
 
-A successful run also writes `output/score.musicxml`, `output/contour.svg`, `output/voices.wav`, `output/proof.json`, and `output/score.html` beside the MIDI and proof files. Open `output/score.html` as a file.
+A successful run also writes `output/score.musicxml`, `output/contour.svg`, `output/voices.wav`, `output/proof.json`, `output/score.html`, and `output/report.txt` beside the MIDI and proof files. Open `output/score.html` as a file. An unsatisfiable rule set prints `core:` on stderr.
