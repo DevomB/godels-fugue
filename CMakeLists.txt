@@ -23,6 +23,7 @@ add_library(canon STATIC
   src/solver.c
   src/midi.c
   src/export.c
+  src/sat.c
 )
 target_include_directories(canon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 if(NOT MSVC)
@@ -42,7 +43,8 @@ foreach(name IN ITEMS
     test_solver
     test_midi
     test_export
-    test_properties)
+    test_properties
+    test_sat)
   add_executable(${name} tests/${name}.c)
   target_link_libraries(${name} PRIVATE canon)
   add_test(NAME ${name} COMMAND ${name})

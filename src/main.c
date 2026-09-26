@@ -2,6 +2,7 @@
 #include "constraint.h"
 #include "export.h"
 #include "midi.h"
+#include "sat.h"
 #include "solver.h"
 #include "theory.h"
 #include "types.h"
@@ -475,6 +476,7 @@ int main(int argc, char **argv)
     const char *entropy_path = "output/entropy.txt";
     const char *corpus_dir = NULL;
     int apply_weights = 0;
+    int sat_mode = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--config") == 0) {
@@ -509,6 +511,8 @@ int main(int argc, char **argv)
             corpus_dir = argv[++i];
         } else if (strcmp(argv[i], "--apply-weights") == 0) {
             apply_weights = 1;
+        } else if (strcmp(argv[i], "--sat") == 0) {
+            sat_mode = 1;
         } else if (strcmp(argv[i], "--lock") == 0) {
             if (i + 2 >= argc) {
                 fprintf(stderr, "missing value\n");
@@ -543,6 +547,25 @@ int main(int argc, char **argv)
         if (apply_weights) {
             memcpy(config.pc_weight, suggested, sizeof(suggested));
         }
+    }
+
+    if (sat_mode) {
+        int melody[MELODY_MAX];
+        int rc = sat_solve(&config, melody);
+        if (rc < 0) {
+            fprintf(stderr, "sat: too large\n");
+            return 2;
+        }
+        if (rc == 0) {
+            printf("unsat\n");
+            return 1;
+        }
+        printf("melody:");
+        for (int i = 0; i < config.length; i++) {
+            printf(" %d", melody[i]);
+        }
+        printf("\n");
+        return 0;
     }
 
     SolverState state = {0};
