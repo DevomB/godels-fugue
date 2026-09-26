@@ -33,6 +33,13 @@ static PieceConfig test_config(void) {
     c.w_gravity = 0;
     c.w_leap = 0;
     c.w_curve = 0;
+    c.transpose = 0;
+    c.augment = 0;
+    c.diminish = 0;
+    c.phase = 0;
+    for (int v = 0; v < VOICE_MAX; v++) {
+        c.voice_delay[v] = 0;
+    }
     return c;
 }
 
@@ -181,6 +188,19 @@ int main(void) {
 
         solver_free(&a);
         solver_free(&b);
+    }
+
+    /* 7. Transposed follower still solves */
+    {
+        PieceConfig tr = test_config();
+        tr.transpose = 7;
+        SolverState s = {0};
+        int melody[MELODY_MAX];
+        int backtracks = -1;
+        solver_init(&s, &tr);
+        CHECK(solve(&s, melody, &backtracks));
+        CHECK(canon_sounding(&tr, 1, melody[0]) == melody[0] + 7);
+        solver_free(&s);
     }
 
     printf("ok\n");

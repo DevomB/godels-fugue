@@ -87,6 +87,20 @@ static int load_config(const char *path, PieceConfig *config)
             config->w_leap = value;
         } else if (strcmp(key, "w_curve") == 0) {
             config->w_curve = value;
+        } else if (strcmp(key, "transpose") == 0) {
+            config->transpose = value;
+        } else if (strcmp(key, "augment") == 0) {
+            config->augment = value;
+        } else if (strcmp(key, "diminish") == 0) {
+            config->diminish = value;
+        } else if (strcmp(key, "phase") == 0) {
+            config->phase = value;
+        } else if (strcmp(key, "delay_1") == 0) {
+            config->voice_delay[1] = value;
+        } else if (strcmp(key, "delay_2") == 0) {
+            config->voice_delay[2] = value;
+        } else if (strcmp(key, "delay_3") == 0) {
+            config->voice_delay[3] = value;
         }
     }
 
@@ -142,6 +156,28 @@ static int validate_config(const PieceConfig *config)
         fprintf(stderr, "invalid weight\n");
         return 0;
     }
+    if (config->augment < 0 || (config->augment == 1)) {
+        fprintf(stderr, "invalid augment\n");
+        return 0;
+    }
+    if (config->diminish < 0 || config->diminish == 1) {
+        fprintf(stderr, "invalid diminish\n");
+        return 0;
+    }
+    if (config->augment >= 2 && config->diminish >= 2) {
+        fprintf(stderr, "invalid rhythm transform\n");
+        return 0;
+    }
+    if (config->phase < 0) {
+        fprintf(stderr, "invalid phase\n");
+        return 0;
+    }
+    for (int v = 0; v < VOICE_MAX; v++) {
+        if (config->voice_delay[v] < 0) {
+            fprintf(stderr, "invalid delay\n");
+            return 0;
+        }
+    }
     return 1;
 }
 
@@ -168,32 +204,29 @@ static void fill_voice_line(int *line, const int *melody, int length, int voice,
 {
     for (int i = 0; i < length; i++) {
         int source = (voice > 0 && config->retrograde) ? length - 1 - i : i;
-        int pitch = melody[source];
-        if (voice > 0 && config->invert) {
-            pitch = invert_pitch(config->axis, pitch);
-        }
-        line[i] = pitch;
+        line[i] = canon_sounding(config, voice, melody[source]);
     }
 }
 
-static void print_success(int lines[][MELODY_MAX], int voices, int length, int delay,
-                          int backtracks, const SolverState *state)
+static void print_success(const int *melody, const PieceConfig *config, int backtracks,
+                          const SolverState *state)
 {
+    int length = config->length;
     printf("melody:");
     for (int i = 0; i < length; i++) {
-        printf(" %d", lines[0][i]);
+        printf(" %d", melody[i]);
     }
     printf("\n");
 
-    int span = canon_span_voices(length, delay, voices);
-    for (int v = 1; v < voices; v++) {
+    int span = canon_span_config(config);
+    for (int v = 1; v < config->voices; v++) {
         printf("voice %d:", v + 1);
         for (int t = 0; t < span; t++) {
-            int idx = canon_melody_index(v, t, delay, length);
+            int idx = canon_map_source(config, v, t);
             if (idx < 0) {
                 printf(" rest");
             } else {
-                printf(" %d", lines[v][idx]);
+                printf(" %d", canon_sounding(config, v, melody[idx]));
             }
         }
         printf("\n");
@@ -231,6 +264,11 @@ int main(int argc, char **argv)
         .w_gravity = 0,
         .w_leap = 0,
         .w_curve = 0,
+        .transpose = 0,
+        .augment = 0,
+        .diminish = 0,
+        .phase = 0,
+        .voice_delay = {0},
     };
 
     const char *config_path = NULL;
@@ -302,14 +340,13 @@ int main(int argc, char **argv)
         for (int v = 0; v < config.voices; v++) {
             fill_voice_line(lines[v], melody, config.length, v, &config);
             line_ptrs[v] = lines[v];
-            starts[v] = v * config.delay * 480;
+            starts[v] = canon_voice_delay(&config, v) * 480;
         }
         if (!midi_write_voices(out_path, line_ptrs, starts, config.voices,
                                config.length)) {
             writes_ok = 0;
         }
-        print_success(lines, config.voices, config.length, config.delay, backtracks,
-                      &state);
+        print_success(melody, &config, backtracks, &state);
         if (config.energy == 1) {
             printf("energy: %d\n",
                    melody_energy(melody, config.length, config.w_gravity,

@@ -25,6 +25,11 @@ typedef struct PieceConfig {
     int w_gravity;
     int w_leap;
     int w_curve;
+    int transpose; /* add to follower sounding pitch; 0 = off */
+    int augment;   /* 0 = off; k>=2 holds each source for k steps */
+    int diminish;  /* 0 = off; k>=2 reads every kth source step */
+    int phase;     /* extra follower delay steps; 0 = off */
+    int voice_delay[VOICE_MAX]; /* 0 = use voice * delay */
 } PieceConfig;
 
 typedef struct SolverState {

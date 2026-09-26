@@ -235,6 +235,21 @@ int main(void) {
     CHECK(!s.failed);
     proof_free(&s.proof);
 
+    /* F. transposed follower makes a strong-beat second */
+    setup_state(&s);
+    s.config.transpose = 2;
+    domain_clear(&s.domains[0]);
+    domain_add(&s.domains[0], 60);
+    domain_clear(&s.domains[4]);
+    domain_add(&s.domains[4], 60);
+    domain_add(&s.domains[4], 65);
+    CHECK(constraints_revise(&s) == true);
+    CHECK(!domain_contains(&s.domains[4], 60));
+    CHECK(domain_contains(&s.domains[4], 65));
+    CHECK(proof_has(&s.proof, "second", 60));
+    CHECK(!s.failed);
+    proof_free(&s.proof);
+
     /* D. retrograde parallel fifth */
     setup_state(&s);
     s.config.retrograde = 1;

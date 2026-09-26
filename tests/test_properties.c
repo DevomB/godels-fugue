@@ -34,6 +34,13 @@ static PieceConfig test_config(void) {
     c.w_gravity = 0;
     c.w_leap = 0;
     c.w_curve = 0;
+    c.transpose = 0;
+    c.augment = 0;
+    c.diminish = 0;
+    c.phase = 0;
+    for (int v = 0; v < VOICE_MAX; v++) {
+        c.voice_delay[v] = 0;
+    }
     return c;
 }
 

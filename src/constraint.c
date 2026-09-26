@@ -38,15 +38,13 @@ static bool remove_unsupported(SolverState *s, int variable, int pitch,
 
 static bool revise_scale(SolverState *s) {
     int length = s->config.length;
-    int invert = s->config.invert;
-    int axis = s->config.axis;
     for (int i = 0; i < length; i++) {
         int pitches[128];
         int n = collect_pitches(&s->domains[i], pitches);
         for (int k = 0; k < n; k++) {
             int pitch = pitches[k];
             if (pitch_in_c_major(pitch) &&
-                (invert == 0 || pitch_in_c_major(invert_pitch(axis, pitch))))
+                pitch_in_c_major(canon_sounding(&s->config, 1, pitch)))
                 continue;
             if (!remove_unsupported(s, i, pitch, CID_SCALE, "scale"))
                 return false;
@@ -59,18 +57,14 @@ static bool revise_range(SolverState *s) {
     int length = s->config.length;
     int low = s->config.range_low;
     int high = s->config.range_high;
-    int invert = s->config.invert;
-    int axis = s->config.axis;
     for (int i = 0; i < length; i++) {
         int pitches[128];
         int n = collect_pitches(&s->domains[i], pitches);
         for (int k = 0; k < n; k++) {
             int pitch = pitches[k];
-            if (pitch >= low && pitch <= high) {
-                if (invert == 0) continue;
-                int mirror = invert_pitch(axis, pitch);
-                if (mirror >= low && mirror <= high) continue;
-            }
+            int sound = canon_sounding(&s->config, 1, pitch);
+            if (pitch >= low && pitch <= high && sound >= low && sound <= high)
+                continue;
             if (!remove_unsupported(s, i, pitch, CID_RANGE, "range"))
                 return false;
         }
@@ -113,31 +107,21 @@ static bool revise_leap(SolverState *s) {
     return true;
 }
 
-static int sounding_pitch(int pitch, int invert_voice, int axis) {
-    return invert_voice ? invert_pitch(axis, pitch) : pitch;
-}
-
-static int voice_inverts(const PieceConfig *c, int voice) {
-    return c->invert != 0 && voice > 0;
-}
-
-static bool second_supported_pair(const MidiDomain *partner, int pitch,
-                                  int invert_self, int invert_other, int axis) {
-    int self = sounding_pitch(pitch, invert_self, axis);
+static bool second_supported_pair(const MidiDomain *partner, int pitch, int voice_self,
+                                  int voice_other, const PieceConfig *config) {
+    int self = canon_sounding(config, voice_self, pitch);
     for (int q = domain_next(partner, 0); q >= 0; q = domain_next(partner, q + 1)) {
-        if (!is_second(self, sounding_pitch(q, invert_other, axis))) return true;
+        if (!is_second(self, canon_sounding(config, voice_other, q))) return true;
     }
     return false;
 }
 
-static bool revise_second_pair(SolverState *s, int a, int b, int invert_a,
-                              int invert_b) {
-    int axis = s->config.axis;
+static bool revise_second_pair(SolverState *s, int a, int b, int voice_a, int voice_b) {
     int pitches[128];
     int n = collect_pitches(&s->domains[a], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
-        if (second_supported_pair(&s->domains[b], pitch, invert_a, invert_b, axis))
+        if (second_supported_pair(&s->domains[b], pitch, voice_a, voice_b, &s->config))
             continue;
         if (!remove_unsupported(s, a, pitch, CID_SECOND, "second"))
             return false;
@@ -145,7 +129,7 @@ static bool revise_second_pair(SolverState *s, int a, int b, int invert_a,
     n = collect_pitches(&s->domains[b], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
-        if (second_supported_pair(&s->domains[a], pitch, invert_b, invert_a, axis))
+        if (second_supported_pair(&s->domains[a], pitch, voice_b, voice_a, &s->config))
             continue;
         if (!remove_unsupported(s, b, pitch, CID_SECOND, "second"))
             return false;
@@ -154,21 +138,18 @@ static bool revise_second_pair(SolverState *s, int a, int b, int invert_a,
 }
 
 static bool revise_second(SolverState *s) {
-    int length = s->config.length;
-    int delay = s->config.delay;
     int voices = s->config.voices;
     if (voices < 2) voices = 2;
     if (voices > VOICE_MAX) voices = VOICE_MAX;
-    int span = canon_span_voices(length, delay, voices);
+    int span = canon_span_config(&s->config);
     for (int t = 0; t < span; t++) {
         if (t % 4 != 0) continue;
         for (int va = 0; va < voices; va++) {
             for (int vb = va + 1; vb < voices; vb++) {
-                int i0 = canon_source_index(va, t, delay, length, s->config.retrograde);
-                int i1 = canon_source_index(vb, t, delay, length, s->config.retrograde);
+                int i0 = canon_map_source(&s->config, va, t);
+                int i1 = canon_map_source(&s->config, vb, t);
                 if (i0 < 0 || i1 < 0) continue;
-                if (!revise_second_pair(s, i0, i1, voice_inverts(&s->config, va),
-                                       voice_inverts(&s->config, vb)))
+                if (!revise_second_pair(s, i0, i1, va, vb))
                     return false;
             }
         }
@@ -183,8 +164,8 @@ static bool indexes_distinct(int a, int b, int c, int d) {
 /* Support search is cheap under 13 pitches; add an AC-3 queue when a profile
  * says revise dominates. Domains stay <= 8 so 8^3 is fine. */
 static bool parallel_supported(const MidiDomain *domains[4], int fixed_slot,
-                               int fixed_pitch, bool fifth, int invert_lead,
-                               int invert_follow, int axis) {
+                               int fixed_pitch, bool fifth, int voice_lead,
+                               int voice_follow, const PieceConfig *config) {
     int pitches[4][8];
     int counts[4];
     for (int i = 0; i < 4; i++) {
@@ -214,10 +195,10 @@ static bool parallel_supported(const MidiDomain *domains[4], int fixed_slot,
                 values[s0] = pitches[s0][a];
                 values[s1] = pitches[s1][b];
                 values[s2] = pitches[s2][c];
-                int v0_prev = sounding_pitch(values[0], invert_lead, axis);
-                int v1_prev = sounding_pitch(values[2], invert_follow, axis);
-                int v0_now = sounding_pitch(values[1], invert_lead, axis);
-                int v1_now = sounding_pitch(values[3], invert_follow, axis);
+                int v0_prev = canon_sounding(config, voice_lead, values[0]);
+                int v1_prev = canon_sounding(config, voice_follow, values[2]);
+                int v0_now = canon_sounding(config, voice_lead, values[1]);
+                int v1_now = canon_sounding(config, voice_follow, values[3]);
                 bool parallel = fifth
                     ? is_parallel_fifth(v0_prev, v1_prev, v0_now, v1_now)
                     : is_parallel_octave(v0_prev, v1_prev, v0_now, v1_now);
@@ -229,7 +210,7 @@ static bool parallel_supported(const MidiDomain *domains[4], int fixed_slot,
 }
 
 static bool revise_parallel_tuple(SolverState *s, int idx[4], bool fifth,
-                                  int invert_lead, int invert_follow,
+                                  int voice_lead, int voice_follow,
                                   int constraint_id, const char *message) {
     const MidiDomain *domains[4] = {
         &s->domains[idx[0]],
@@ -237,7 +218,6 @@ static bool revise_parallel_tuple(SolverState *s, int idx[4], bool fifth,
         &s->domains[idx[2]],
         &s->domains[idx[3]],
     };
-    int axis = s->config.axis;
 
     for (int slot = 0; slot < 4; slot++) {
         int variable = idx[slot];
@@ -245,8 +225,8 @@ static bool revise_parallel_tuple(SolverState *s, int idx[4], bool fifth,
         int n = collect_pitches(&s->domains[variable], candidates);
         for (int k = 0; k < n; k++) {
             int pitch = candidates[k];
-            if (parallel_supported(domains, slot, pitch, fifth, invert_lead,
-                                  invert_follow, axis))
+            if (parallel_supported(domains, slot, pitch, fifth, voice_lead,
+                                  voice_follow, &s->config))
                 continue;
             if (!remove_unsupported(s, variable, pitch, constraint_id, message))
                 return false;
@@ -257,32 +237,24 @@ static bool revise_parallel_tuple(SolverState *s, int idx[4], bool fifth,
 
 static bool revise_parallel(SolverState *s, bool fifth, int constraint_id,
                             const char *message) {
-    int length = s->config.length;
-    int delay = s->config.delay;
     int voices = s->config.voices;
     if (voices < 2) voices = 2;
     if (voices > VOICE_MAX) voices = VOICE_MAX;
-    int span = canon_span_voices(length, delay, voices);
+    int span = canon_span_config(&s->config);
     for (int t = 0; t + 1 < span; t++) {
         for (int va = 0; va < voices; va++) {
             for (int vb = va + 1; vb < voices; vb++) {
                 int idx[4];
-                idx[0] = canon_source_index(va, t, delay, length,
-                                           s->config.retrograde);
-                idx[1] = canon_source_index(va, t + 1, delay, length,
-                                           s->config.retrograde);
-                idx[2] = canon_source_index(vb, t, delay, length,
-                                           s->config.retrograde);
-                idx[3] = canon_source_index(vb, t + 1, delay, length,
-                                           s->config.retrograde);
+                idx[0] = canon_map_source(&s->config, va, t);
+                idx[1] = canon_map_source(&s->config, va, t + 1);
+                idx[2] = canon_map_source(&s->config, vb, t);
+                idx[3] = canon_map_source(&s->config, vb, t + 1);
                 if (idx[0] < 0 || idx[1] < 0 || idx[2] < 0 || idx[3] < 0)
                     continue;
                 if (!indexes_distinct(idx[0], idx[1], idx[2], idx[3]))
                     continue;
-                if (!revise_parallel_tuple(s, idx, fifth,
-                                          voice_inverts(&s->config, va),
-                                          voice_inverts(&s->config, vb),
-                                          constraint_id, message))
+                if (!revise_parallel_tuple(s, idx, fifth, va, vb, constraint_id,
+                                          message))
                     return false;
             }
         }

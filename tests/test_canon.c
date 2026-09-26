@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define CHECK(cond)                                                            \
     do {                                                                       \
@@ -62,6 +63,47 @@ int main(void) {
     CHECK(canon_source_index(2, 8, delay, length, 1) == 11);
     CHECK(canon_source_index(3, 12, delay, length, 0) == 0);
     CHECK(canon_source_index(4, 16, delay, length, 0) == -1);
+
+    {
+        PieceConfig c;
+        memset(&c, 0, sizeof(c));
+        c.length = 12;
+        c.voices = 2;
+        c.delay = 4;
+        CHECK(canon_map_source(&c, 1, 4) == 0);
+        CHECK(canon_map_source(&c, 1, 3) == -1);
+        CHECK(canon_span_config(&c) == 16);
+        CHECK(canon_sounding(&c, 1, 60) == 60);
+
+        c.transpose = 7;
+        CHECK(canon_sounding(&c, 1, 60) == 67);
+        CHECK(canon_sounding(&c, 0, 60) == 60);
+
+        c.transpose = 0;
+        c.augment = 2;
+        CHECK(canon_map_source(&c, 1, 4) == 0);
+        CHECK(canon_map_source(&c, 1, 5) == 0);
+        CHECK(canon_map_source(&c, 1, 6) == 1);
+        CHECK(canon_span_config(&c) == 28);
+
+        c.augment = 0;
+        c.diminish = 2;
+        CHECK(canon_map_source(&c, 1, 4) == 0);
+        CHECK(canon_map_source(&c, 1, 5) == 2);
+        CHECK(canon_span_config(&c) == 12);
+
+        c.diminish = 0;
+        c.phase = 1;
+        CHECK(canon_voice_delay(&c, 1) == 5);
+        CHECK(canon_map_source(&c, 1, 4) == -1);
+        CHECK(canon_map_source(&c, 1, 5) == 0);
+
+        c.phase = 0;
+        c.voice_delay[1] = 2;
+        CHECK(canon_voice_delay(&c, 1) == 2);
+        CHECK(canon_map_source(&c, 1, 2) == 0);
+        CHECK(canon_span_config(&c) == 14);
+    }
 
     printf("ok\n");
     return 0;
