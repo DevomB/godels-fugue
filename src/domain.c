@@ -62,6 +62,13 @@ int domain_value(const MidiDomain *d) {
     return domain_next(d, 0);
 }
 
+int domain_collect(const MidiDomain *d, int *out) {
+    int n = 0;
+    for (int p = domain_next(d, 0); p >= 0; p = domain_next(d, p + 1))
+        out[n++] = p;
+    return n;
+}
+
 bool domain_equal(const MidiDomain *a, const MidiDomain *b) {
     return a->bits[0] == b->bits[0] && a->bits[1] == b->bits[1];
 }

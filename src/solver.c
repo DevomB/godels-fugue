@@ -140,15 +140,6 @@ static uint32_t xorshift32(uint32_t *state) {
     return x;
 }
 
-static int collect_pitches(const MidiDomain *d, int *out) {
-    int n = 0;
-    for (int pitch = domain_next(d, -1); pitch >= 0;
-         pitch = domain_next(d, pitch + 1)) {
-        out[n++] = pitch;
-    }
-    return n;
-}
-
 static void neighbor_bounds(const SolverState *s, int index, int *left, int *has_left,
                             int *right, int *has_right) {
     *left = 0;
@@ -342,7 +333,7 @@ static bool search(SolverState *s) {
     int order[128];
     int costs[128];
     MidiDomain choices = s->domains[pick];
-    int n_order = collect_pitches(&choices, order);
+    int n_order = domain_collect(&choices, order);
 
     if (s->config.energy == 1) {
         fill_choice_costs(s, pick, order, n_order, costs);

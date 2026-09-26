@@ -23,13 +23,6 @@ static int skipped(const SolverState *s, int cid) {
     return cid > 0 && cid < 16 && s->skip_cid[cid];
 }
 
-static int collect_pitches(const MidiDomain *d, int *out) {
-    int n = 0;
-    for (int p = domain_next(d, 0); p >= 0; p = domain_next(d, p + 1))
-        out[n++] = p;
-    return n;
-}
-
 static bool mark_failed(SolverState *s, int variable) {
     s->failed = true;
     s->failed_variable = variable;
@@ -63,7 +56,7 @@ static bool remove_unsupported(SolverState *s, int variable, int pitch,
 static bool revise_scale_one(SolverState *s, int i) {
     if (skipped(s, CID_SCALE)) return true;
     int pitches[128];
-    int n = collect_pitches(&s->domains[i], pitches);
+    int n = domain_collect(&s->domains[i], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
         if (pitch_in_c_major(pitch) &&
@@ -88,7 +81,7 @@ static bool revise_range_one(SolverState *s, int i) {
     int low = s->config.range_low;
     int high = s->config.range_high;
     int pitches[128];
-    int n = collect_pitches(&s->domains[i], pitches);
+    int n = domain_collect(&s->domains[i], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
         int sound = canon_sounding(&s->config, 1, pitch);
@@ -119,14 +112,14 @@ static bool revise_leap_edge(SolverState *s, int a, int b) {
     if (skipped(s, CID_LEAP)) return true;
     int max_leap = s->config.max_leap;
     int pitches[128];
-    int n = collect_pitches(&s->domains[a], pitches);
+    int n = domain_collect(&s->domains[a], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
         if (leap_supported(&s->domains[b], pitch, max_leap)) continue;
         if (!remove_unsupported(s, a, pitch, CID_LEAP, "melodic leap", &b, 1))
             return false;
     }
-    n = collect_pitches(&s->domains[b], pitches);
+    n = domain_collect(&s->domains[b], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
         if (leap_supported(&s->domains[a], pitch, max_leap)) continue;
@@ -156,7 +149,7 @@ static bool second_supported_pair(const MidiDomain *partner, int pitch, int voic
 static bool revise_second_pair(SolverState *s, int a, int b, int voice_a, int voice_b) {
     if (skipped(s, CID_SECOND)) return true;
     int pitches[128];
-    int n = collect_pitches(&s->domains[a], pitches);
+    int n = domain_collect(&s->domains[a], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
         if (second_supported_pair(&s->domains[b], pitch, voice_a, voice_b, &s->config))
@@ -164,7 +157,7 @@ static bool revise_second_pair(SolverState *s, int a, int b, int voice_a, int vo
         if (!remove_unsupported(s, a, pitch, CID_SECOND, "second", &b, 1))
             return false;
     }
-    n = collect_pitches(&s->domains[b], pitches);
+    n = domain_collect(&s->domains[b], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
         if (second_supported_pair(&s->domains[a], pitch, voice_b, voice_a, &s->config))
@@ -207,11 +200,7 @@ static bool parallel_supported(const MidiDomain *domains[4], int fixed_slot,
     int pitches[4][128];
     int counts[4];
     for (int i = 0; i < 4; i++) {
-        counts[i] = 0;
-        for (int p = domain_next(domains[i], 0); p >= 0;
-             p = domain_next(domains[i], p + 1)) {
-            pitches[i][counts[i]++] = p;
-        }
+        counts[i] = domain_collect(domains[i], pitches[i]);
         if (i != fixed_slot && counts[i] == 0) return false;
     }
 
@@ -258,7 +247,7 @@ static bool revise_parallel_tuple(SolverState *s, int idx[4], bool fifth,
     for (int slot = 0; slot < 4; slot++) {
         int variable = idx[slot];
         int candidates[128];
-        int n = collect_pitches(&s->domains[variable], candidates);
+        int n = domain_collect(&s->domains[variable], candidates);
         for (int k = 0; k < n; k++) {
             int pitch = candidates[k];
             if (parallel_supported(domains, slot, pitch, fifth, voice_lead,
@@ -419,7 +408,7 @@ static int last_strong_time(const PieceConfig *config) {
 static bool revise_harmony_slot(SolverState *s, int idx, int voice, int cid,
                                 const char *message, int (*ok)(int)) {
     int pitches[128];
-    int n = collect_pitches(&s->domains[idx], pitches);
+    int n = domain_collect(&s->domains[idx], pitches);
     for (int k = 0; k < n; k++) {
         if (ok(canon_sounding(&s->config, voice, pitches[k]))) continue;
         if (!remove_unsupported(s, idx, pitches[k], cid, message, NULL, 0))

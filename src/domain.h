@@ -17,6 +17,7 @@ int domain_count(const MidiDomain *d);
 bool domain_singleton(const MidiDomain *d);
 int domain_value(const MidiDomain *d);
 int domain_next(const MidiDomain *d, int n); /* next pitch >= n, or -1 */
+int domain_collect(const MidiDomain *d, int *out);
 bool domain_equal(const MidiDomain *a, const MidiDomain *b);
 
 #endif
