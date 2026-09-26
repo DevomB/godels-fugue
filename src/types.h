@@ -48,6 +48,9 @@ typedef struct PieceConfig {
     int w_motif;      /* soft interval-pattern cost; 0 = off */
     int motif_a;
     int motif_b;
+    int modulate_at; /* -1 = off; else switch to G major at this index */
+    int key_second;  /* 0 = G major (the second key) */
+    int w_modulate;  /* 0 = off; pivot-note cost in the new key */
 } PieceConfig;
 
 typedef struct SolverState {

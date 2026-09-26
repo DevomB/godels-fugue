@@ -28,6 +28,7 @@ static void setup_state(SolverState *s) {
     s->config.range_low = 60;
     s->config.range_high = 72;
     s->config.max_leap = 7;
+    s->config.modulate_at = -1;
     s->failed_variable = -1;
     proof_init(&s->proof);
     for (int i = 0; i < s->config.length; i++)

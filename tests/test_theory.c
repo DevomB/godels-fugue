@@ -110,11 +110,18 @@ int main(void) {
     {
         int unison[8] = {60, 60, 60, 60, 60, 60, 60, 60};
         int ident = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                       67, 0);
+                                       67, 0, 0, -1);
         int shifted = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
-                                         0, 67, 2);
+                                         0, 67, 2, 0, -1);
         int mirrored = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
-                                          1, 67, 0);
+                                          1, 67, 0, 0, -1);
+        CHECK(pitch_in_g_major(66));
+        CHECK(!pitch_in_g_major(65));
+        CHECK(pitch_in_scale(65, 0, 4));
+        CHECK(!pitch_in_scale(65, 4, 4));
+        CHECK(pitch_in_scale(66, 4, 4));
+        CHECK(!pitch_in_scale(66, 0, 4));
+        CHECK(pitch_in_scale(65, 4, -1));
         CHECK(shifted > ident);
         CHECK(mirrored != ident);
     }

@@ -59,6 +59,9 @@ static PieceConfig test_config(void) {
     c.w_motif = 0;
     c.motif_a = 0;
     c.motif_b = 0;
+    c.modulate_at = -1;
+    c.key_second = 0;
+    c.w_modulate = 0;
     return c;
 }
 
@@ -424,6 +427,29 @@ int main(void) {
         int bt = -1;
         solver_init(&s, &cfg);
         CHECK(solve(&s, melody, &bt));
+        solver_free(&s);
+    }
+
+    /* 12. F (65) legal before modulate_at; illegal after. F# after. */
+    {
+        PieceConfig cfg = test_config();
+        cfg.modulate_at = 4;
+        SolverState s = {0};
+        solver_init(&s, &cfg);
+        CHECK(domain_contains(&s.domains[3], 65));
+        CHECK(!domain_contains(&s.domains[4], 65));
+        CHECK(domain_contains(&s.domains[4], 66));
+        CHECK(!domain_contains(&s.domains[3], 66));
+        solver_lock(&s, 3, 65);
+        int melody[MELODY_MAX];
+        int bt = -1;
+        CHECK(solve(&s, melody, &bt));
+        CHECK(melody[3] == 65);
+        solver_free(&s);
+
+        solver_init(&s, &cfg);
+        solver_lock(&s, 4, 65);
+        CHECK(!solve(&s, melody, &bt));
         solver_free(&s);
     }
 

@@ -4,6 +4,8 @@
 #include <stdbool.h>
 
 bool pitch_in_c_major(int pitch);
+bool pitch_in_g_major(int pitch);
+bool pitch_in_scale(int pitch, int index, int modulate_at);
 int interval_class(int a, int b);
 bool same_direction(int delta_a, int delta_b);
 bool is_parallel_fifth(int v0_prev, int v1_prev, int v0_now, int v1_now);
@@ -28,6 +30,6 @@ int vertical_cost(int a, int b, int a_prev, int b_prev, int has_prev,
 int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
                        int w_leap, int w_curve, int w_dissonance, int w_parallel,
                        int w_motif, int motif_a, int motif_b, int invert,
-                       int axis, int transpose);
+                       int axis, int transpose, int w_modulate, int modulate_at);
 
 #endif

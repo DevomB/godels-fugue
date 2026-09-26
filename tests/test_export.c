@@ -98,6 +98,8 @@ int main(void) {
         cfg.range_high = 72;
         cfg.max_leap = 7;
         cfg.axis = 67;
+        cfg.modulate_at = -1;
+        cfg.rest_at = -1;
         SolverState s = {0};
         int melody[MELODY_MAX];
         int bt = 0;

@@ -59,8 +59,9 @@ static bool revise_scale_one(SolverState *s, int i) {
     int n = domain_collect(&s->domains[i], pitches);
     for (int k = 0; k < n; k++) {
         int pitch = pitches[k];
-        if (pitch_in_c_major(pitch) &&
-            pitch_in_c_major(canon_sounding(&s->config, 1, pitch)))
+        if (pitch_in_scale(pitch, i, s->config.modulate_at) &&
+            pitch_in_scale(canon_sounding(&s->config, 1, pitch), i,
+                           s->config.modulate_at))
             continue;
         if (!remove_unsupported(s, i, pitch, CID_SCALE, "scale", NULL, 0))
             return false;

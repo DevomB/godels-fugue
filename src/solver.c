@@ -36,7 +36,7 @@ void solver_init(SolverState *s, const PieceConfig *config) {
     for (int i = 0; i < config->length; i++) {
         domain_clear(&s->domains[i]);
         for (int pitch = config->range_low; pitch <= config->range_high; pitch++) {
-            if (pitch_in_c_major(pitch)) {
+            if (pitch_in_scale(pitch, i, config->modulate_at)) {
                 domain_add(&s->domains[i], pitch);
             }
         }
@@ -184,6 +184,10 @@ static void fill_choice_costs(const SolverState *s, int index, const int *pitche
         costs[i] += motif_step_cost(index, left, has_left, pitches[i],
                                     s->config.motif_a, s->config.motif_b,
                                     s->config.w_motif);
+        if (s->config.w_modulate > 0 && s->config.modulate_at >= 0 &&
+            index == s->config.modulate_at && pitch_in_g_major(pitches[i])) {
+            costs[i] += s->config.w_modulate;
+        }
         if (has_follow) {
             int has_prev = 0;
             int a_prev = 0;

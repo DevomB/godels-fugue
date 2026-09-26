@@ -16,6 +16,27 @@ bool pitch_in_c_major(int pitch) {
     }
 }
 
+bool pitch_in_g_major(int pitch) {
+    if (pitch < 0 || pitch > 127) return false;
+    switch (pitch % 12) {
+    case 0:
+    case 2:
+    case 4:
+    case 6:
+    case 7:
+    case 9:
+    case 11:
+        return true;
+    default:
+        return false;
+    }
+}
+
+bool pitch_in_scale(int pitch, int index, int modulate_at) {
+    if (modulate_at >= 0 && index >= modulate_at) return pitch_in_g_major(pitch);
+    return pitch_in_c_major(pitch);
+}
+
 int interval_class(int a, int b) {
     int delta = a - b;
     if (delta < 0) delta = -delta;
@@ -179,8 +200,12 @@ static int follower_sounding(int pitch, int invert, int invert_mod12, int axis,
 int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
                        int w_leap, int w_curve, int w_dissonance, int w_parallel,
                        int w_motif, int motif_a, int motif_b, int invert,
-                       int axis, int transpose) {
+                       int axis, int transpose, int w_modulate, int modulate_at) {
     int total = melody_energy(melody, length, w_gravity, w_leap, w_curve);
+    if (w_modulate > 0 && modulate_at >= 0 && modulate_at < length &&
+        pitch_in_g_major(melody[modulate_at])) {
+        total += w_modulate;
+    }
     if (w_motif > 0) {
         for (int i = 1; i < length; i++) {
             total += motif_step_cost(i, melody[i - 1], 1, melody[i], motif_a,

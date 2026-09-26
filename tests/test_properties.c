@@ -59,6 +59,9 @@ static PieceConfig test_config(void) {
     c.w_motif = 0;
     c.motif_a = 0;
     c.motif_b = 0;
+    c.modulate_at = -1;
+    c.key_second = 0;
+    c.w_modulate = 0;
     return c;
 }
 

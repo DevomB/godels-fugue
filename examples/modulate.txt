@@ -1,0 +1,13 @@
+length 12
+voices 2
+delay 4
+range_low 60
+range_high 72
+max_leap 7
+invert 0
+axis 67
+modulate_at 4
+key_second 0
+lock 1
+lock_index 6
+lock_pitch 66

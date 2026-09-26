@@ -164,6 +164,12 @@ static int load_config(const char *path, PieceConfig *config)
             config->motif_a = value;
         } else if (strcmp(key, "motif_b") == 0) {
             config->motif_b = value;
+        } else if (strcmp(key, "modulate_at") == 0) {
+            config->modulate_at = value;
+        } else if (strcmp(key, "key_second") == 0) {
+            config->key_second = value;
+        } else if (strcmp(key, "w_modulate") == 0) {
+            config->w_modulate = value;
         }
     }
 
@@ -283,6 +289,19 @@ static int validate_config(const PieceConfig *config)
     }
     if (config->w_motif < 0) {
         fprintf(stderr, "invalid w_motif\n");
+        return 0;
+    }
+    if (config->modulate_at < -1 ||
+        (config->modulate_at >= 0 && config->modulate_at >= config->length)) {
+        fprintf(stderr, "invalid modulate_at\n");
+        return 0;
+    }
+    if (config->key_second < 0) {
+        fprintf(stderr, "invalid key_second\n");
+        return 0;
+    }
+    if (config->w_modulate < 0) {
+        fprintf(stderr, "invalid w_modulate\n");
         return 0;
     }
     if (config->anneal_steps < 0 || config->anneal_start < 0 ||
@@ -424,6 +443,9 @@ int main(int argc, char **argv)
         .w_motif = 0,
         .motif_a = 0,
         .motif_b = 0,
+        .modulate_at = -1,
+        .key_second = 0,
+        .w_modulate = 0,
     };
 
     const char *config_path = NULL;
@@ -579,7 +601,7 @@ int main(int argc, char **argv)
                         config.w_leap, config.w_curve, config.w_dissonance,
                         config.w_parallel, config.w_motif, config.motif_a,
                         config.motif_b, config.invert, config.axis,
-                        config.transpose);
+                        config.transpose, config.w_modulate, config.modulate_at);
                 }
                 ensure_parent_dir(html_path);
                 if (!export_score_page(html_path, melody, &config, &state,
@@ -597,7 +619,8 @@ int main(int argc, char **argv)
                                       config.w_parallel, config.w_motif,
                                       config.motif_a, config.motif_b,
                                       config.invert, config.axis,
-                                      config.transpose));
+                                      config.transpose, config.w_modulate,
+                                      config.modulate_at));
         }
         if (config.lock == 1) {
             SolverState alt = {0};
@@ -630,7 +653,7 @@ int main(int argc, char **argv)
                     config.w_leap, config.w_curve, config.w_dissonance,
                     config.w_parallel, config.w_motif, config.motif_a,
                     config.motif_b, config.invert, config.axis,
-                    config.transpose);
+                    config.transpose, config.w_modulate, config.modulate_at);
             }
             if (sibling_path(report_path, sizeof(report_path), out_path,
                              "report.txt")) {
