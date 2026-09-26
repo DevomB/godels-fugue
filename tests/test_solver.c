@@ -238,6 +238,26 @@ int main(void) {
         solver_free(&s);
     }
 
+    /* 8b. Primary lock: illegal pitch is unsat; legal pitch stays */
+    {
+        PieceConfig bad = test_config();
+        SolverState s = {0};
+        int melody[MELODY_MAX];
+        int backtracks = -1;
+        solver_init(&s, &bad);
+        solver_lock(&s, 0, 61);
+        CHECK(!solve(&s, melody, &backtracks));
+        CHECK(s.failed);
+        solver_free(&s);
+
+        PieceConfig good = test_config();
+        solver_init(&s, &good);
+        solver_lock(&s, 0, 60);
+        CHECK(solve(&s, melody, &backtracks));
+        CHECK(melody[0] == 60);
+        solver_free(&s);
+    }
+
     /* 9. Annealing schedule is deterministic for a fixed seed */
     {
         PieceConfig an = test_config();

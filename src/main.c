@@ -467,6 +467,9 @@ int main(int argc, char **argv)
 
     SolverState state = {0};
     solver_init(&state, &config);
+    if (config.lock == 1) {
+        solver_lock(&state, config.lock_index, config.lock_pitch);
+    }
 
     int melody[MELODY_MAX];
     int backtracks = 0;

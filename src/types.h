@@ -30,7 +30,7 @@ typedef struct PieceConfig {
     int diminish;  /* 0 = off; k>=2 reads every kth source step */
     int phase;     /* extra follower delay steps; 0 = off */
     int voice_delay[VOICE_MAX]; /* 0 = use voice * delay */
-    int lock; /* 0 = off; re-solve with lock_index = lock_pitch */
+    int lock; /* 0 = off; force lock_index to lock_pitch before search */
     int lock_index;
     int lock_pitch;
     int anneal_start;
