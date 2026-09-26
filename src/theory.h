@@ -20,7 +20,7 @@ int in_c_dominant(int pitch);
 int pitch_gravity(int pitch);
 int tension_target(int index, int length);
 int motif_step_cost(int index, int left, int has_left, int pitch, int motif_a,
-                    int motif_b, int w_motif);
+                    int motif_b, int motif_c, int motif_d, int w_motif);
 int pitch_choice_cost(int index, int length, int pitch, int left, int has_left,
                       int right, int has_right, int w_gravity, int w_leap,
                       int w_curve);
@@ -30,7 +30,8 @@ int vertical_cost(int a, int b, int a_prev, int b_prev, int has_prev,
                   int w_dissonance, int w_parallel);
 int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
                        int w_leap, int w_curve, int w_dissonance, int w_parallel,
-                       int w_motif, int motif_a, int motif_b, int invert,
+                       int w_motif, int motif_a, int motif_b, int motif_c,
+                       int motif_d, int invert,
                        int axis, int transpose, int w_modulate, int modulate_at);
 
 #endif

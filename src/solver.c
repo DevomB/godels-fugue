@@ -183,6 +183,7 @@ static void fill_choice_costs(const SolverState *s, int index, const int *pitche
                                      s->config.w_curve);
         costs[i] += motif_step_cost(index, left, has_left, pitches[i],
                                     s->config.motif_a, s->config.motif_b,
+                                    s->config.motif_c, s->config.motif_d,
                                     s->config.w_motif);
         if (s->config.w_modulate > 0 && s->config.modulate_at >= 0 &&
             index == s->config.modulate_at && pitch_in_g_major(pitches[i])) {

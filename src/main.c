@@ -164,6 +164,10 @@ static int load_config(const char *path, PieceConfig *config)
             config->motif_a = value;
         } else if (strcmp(key, "motif_b") == 0) {
             config->motif_b = value;
+        } else if (strcmp(key, "motif_c") == 0) {
+            config->motif_c = value;
+        } else if (strcmp(key, "motif_d") == 0) {
+            config->motif_d = value;
         } else if (strcmp(key, "modulate_at") == 0) {
             config->modulate_at = value;
         } else if (strcmp(key, "key_second") == 0) {
@@ -449,6 +453,8 @@ int main(int argc, char **argv)
         .w_motif = 0,
         .motif_a = 0,
         .motif_b = 0,
+        .motif_c = -128,
+        .motif_d = -128,
         .modulate_at = -1,
         .key_second = 0,
         .w_modulate = 0,
@@ -607,7 +613,8 @@ int main(int argc, char **argv)
                         melody, config.length, config.delay, config.w_gravity,
                         config.w_leap, config.w_curve, config.w_dissonance,
                         config.w_parallel, config.w_motif, config.motif_a,
-                        config.motif_b, config.invert, config.axis,
+                        config.motif_b, config.motif_c, config.motif_d,
+                        config.invert, config.axis,
                         config.transpose, config.w_modulate, config.modulate_at);
                 }
                 ensure_parent_dir(html_path);
@@ -625,6 +632,7 @@ int main(int argc, char **argv)
                                       config.w_curve, config.w_dissonance,
                                       config.w_parallel, config.w_motif,
                                       config.motif_a, config.motif_b,
+                                      config.motif_c, config.motif_d,
                                       config.invert, config.axis,
                                       config.transpose, config.w_modulate,
                                       config.modulate_at));
@@ -659,7 +667,8 @@ int main(int argc, char **argv)
                     melody, config.length, config.delay, config.w_gravity,
                     config.w_leap, config.w_curve, config.w_dissonance,
                     config.w_parallel, config.w_motif, config.motif_a,
-                    config.motif_b, config.invert, config.axis,
+                    config.motif_b, config.motif_c, config.motif_d,
+                    config.invert, config.axis,
                     config.transpose, config.w_modulate, config.modulate_at);
             }
             if (sibling_path(report_path, sizeof(report_path), out_path,

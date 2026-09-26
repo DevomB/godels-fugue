@@ -139,9 +139,16 @@ int tension_target(int index, int length) {
 }
 
 int motif_step_cost(int index, int left, int has_left, int pitch, int motif_a,
-                    int motif_b, int w_motif) {
+                    int motif_b, int motif_c, int motif_d, int w_motif) {
     if (w_motif == 0 || !has_left) return 0;
-    int expect = ((index - 1) % 2 == 0) ? motif_a : motif_b;
+    int pat[4];
+    int n = 0;
+    int slots[4] = {motif_a, motif_b, motif_c, motif_d};
+    for (int i = 0; i < 4 && slots[i] != -128; i++) {
+        pat[n++] = slots[i];
+    }
+    if (n == 0) return 0;
+    int expect = pat[(index - 1) % n];
     return (pitch - left) == expect ? 0 : w_motif;
 }
 
@@ -205,7 +212,8 @@ static int follower_sounding(int pitch, int invert, int invert_mod12, int axis,
 
 int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
                        int w_leap, int w_curve, int w_dissonance, int w_parallel,
-                       int w_motif, int motif_a, int motif_b, int invert,
+                       int w_motif, int motif_a, int motif_b, int motif_c,
+                       int motif_d, int invert,
                        int axis, int transpose, int w_modulate, int modulate_at) {
     int total = melody_energy(melody, length, w_gravity, w_leap, w_curve);
     if (w_modulate > 0 && modulate_at >= 0 && modulate_at < length &&
@@ -215,7 +223,7 @@ int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
     if (w_motif > 0) {
         for (int i = 1; i < length; i++) {
             total += motif_step_cost(i, melody[i - 1], 1, melody[i], motif_a,
-                                     motif_b, w_motif);
+                                     motif_b, motif_c, motif_d, w_motif);
         }
     }
     if (w_dissonance == 0 && w_parallel == 0) {

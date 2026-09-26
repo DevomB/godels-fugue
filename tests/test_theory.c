@@ -110,18 +110,21 @@ int main(void) {
     CHECK(vertical_cost(60, 62, 0, 0, 0, 1, 0) > vertical_cost(60, 67, 0, 0, 0, 1, 0));
     CHECK(vertical_cost(64, 71, 60, 67, 1, 0, 2) == 2);
 
-    CHECK(motif_step_cost(1, 60, 1, 62, 2, -1, 4) == 0);
-    CHECK(motif_step_cost(1, 60, 1, 64, 2, -1, 4) == 4);
-    CHECK(motif_step_cost(2, 62, 1, 61, 2, -1, 4) == 0);
+    CHECK(motif_step_cost(1, 60, 1, 62, 2, -1, -128, -128, 4) == 0);
+    CHECK(motif_step_cost(1, 60, 1, 64, 2, -1, -128, -128, 4) == 4);
+    CHECK(motif_step_cost(2, 62, 1, 61, 2, -1, -128, -128, 4) == 0);
+    CHECK(motif_step_cost(3, 61, 1, 63, 2, -1, 2, 2, 4) == 0);
+    CHECK(motif_step_cost(4, 63, 1, 65, 2, -1, 2, 2, 4) == 0);
+    CHECK(motif_step_cost(4, 63, 1, 64, 2, -1, 2, 2, 4) == 4);
 
     {
         int unison[8] = {60, 60, 60, 60, 60, 60, 60, 60};
-        int ident = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0, 0,
-                                       67, 0, 0, -1);
+        int ident = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
+                                       -128, -128, 0, 67, 0, 0, -1);
         int shifted = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
-                                         0, 67, 2, 0, -1);
+                                         -128, -128, 0, 67, 2, 0, -1);
         int mirrored = melody_energy_full(unison, 8, 4, 0, 0, 0, 1, 0, 0, 0, 0,
-                                          1, 67, 0, 0, -1);
+                                          -128, -128, 1, 67, 0, 0, -1);
         CHECK(pitch_in_g_major(66));
         CHECK(!pitch_in_g_major(65));
         CHECK(pitch_in_scale(65, 0, 4));

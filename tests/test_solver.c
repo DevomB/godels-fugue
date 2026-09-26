@@ -59,6 +59,8 @@ static PieceConfig test_config(void) {
     c.w_motif = 0;
     c.motif_a = 0;
     c.motif_b = 0;
+    c.motif_c = -128;
+    c.motif_d = -128;
     c.modulate_at = -1;
     c.key_second = 0;
     c.w_modulate = 0;
@@ -431,7 +433,30 @@ int main(void) {
         solver_free(&s);
     }
 
-    /* 12. F (65) legal before modulate_at; illegal after. F# after. */
+    /* 12. Motif window [2,2] stays the known energy line. */
+    {
+        PieceConfig cfg = test_config();
+        cfg.energy = 1;
+        cfg.w_gravity = 1;
+        cfg.w_leap = 1;
+        cfg.w_curve = 3;
+        cfg.w_motif = 4;
+        cfg.motif_a = 2;
+        cfg.motif_b = 2;
+        cfg.motif_c = -128;
+        cfg.motif_d = -128;
+        SolverState s = {0};
+        int melody[MELODY_MAX];
+        int bt = -1;
+        static const int expect[] = {60, 60, 62, 62, 64, 71,
+                                     69, 67, 67, 64, 64, 64};
+        solver_init(&s, &cfg);
+        CHECK(solve(&s, melody, &bt));
+        CHECK(memcmp(melody, expect, sizeof(expect)) == 0);
+        solver_free(&s);
+    }
+
+    /* 13. F (65) legal before modulate_at; illegal after. F# after. */
     {
         PieceConfig cfg = test_config();
         cfg.modulate_at = 4;
