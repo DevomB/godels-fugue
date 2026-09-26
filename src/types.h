@@ -36,6 +36,7 @@ typedef struct PieceConfig {
     int anneal_start;
     int anneal_end;
     int anneal_steps; /* 0 = off */
+    int anneal_ratio; /* 0 = linear; 1..99 = T *= ratio/100 */
     int w_dissonance; /* vertical second/tritone; order only */
     int w_parallel;   /* soft parallel fifth/octave; order only */
     int strong_chord; /* 0 = off; 1 = C-E-G on t%4==0 */

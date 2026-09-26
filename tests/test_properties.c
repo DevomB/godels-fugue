@@ -47,6 +47,7 @@ static PieceConfig test_config(void) {
     c.anneal_start = 0;
     c.anneal_end = 0;
     c.anneal_steps = 0;
+    c.anneal_ratio = 0;
     c.w_dissonance = 0;
     c.w_parallel = 0;
     c.strong_chord = 0;

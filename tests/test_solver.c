@@ -47,6 +47,7 @@ static PieceConfig test_config(void) {
     c.anneal_start = 0;
     c.anneal_end = 0;
     c.anneal_steps = 0;
+    c.anneal_ratio = 0;
     c.w_dissonance = 0;
     c.w_parallel = 0;
     c.strong_chord = 0;
@@ -293,6 +294,46 @@ int main(void) {
         CHECK(solve(&b, mb, &btb));
         CHECK(bta == btb);
         CHECK(memcmp(ma, mb, (size_t)an.length * sizeof(int)) == 0);
+        {
+            static const int linear[] = {60, 60, 67, 64, 60, 62,
+                                         62, 64, 67, 60, 64, 64};
+            CHECK(memcmp(ma, linear, sizeof(linear)) == 0);
+            PieceConfig ratio0 = an;
+            ratio0.anneal_ratio = 0;
+            SolverState z = {0};
+            int mz[MELODY_MAX];
+            int btz = -1;
+            solver_init(&z, &ratio0);
+            CHECK(solve(&z, mz, &btz));
+            CHECK(memcmp(mz, linear, sizeof(linear)) == 0);
+            solver_free(&z);
+        }
+        solver_free(&a);
+        solver_free(&b);
+    }
+
+    /* 9b. Geometric ratio cools T *= ratio/100; fixed seed matches */
+    {
+        PieceConfig geo = test_config();
+        geo.energy = 1;
+        geo.anneal_start = 8;
+        geo.anneal_ratio = 75;
+        geo.seed = 5;
+        geo.w_gravity = 1;
+        geo.w_leap = 1;
+        geo.w_curve = 3;
+        SolverState a = {0};
+        SolverState b = {0};
+        int ma[MELODY_MAX];
+        int mb[MELODY_MAX];
+        int bta = -1;
+        int btb = -1;
+        solver_init(&a, &geo);
+        solver_init(&b, &geo);
+        CHECK(solve(&a, ma, &bta));
+        CHECK(solve(&b, mb, &btb));
+        CHECK(bta == btb);
+        CHECK(memcmp(ma, mb, (size_t)geo.length * sizeof(int)) == 0);
         solver_free(&a);
         solver_free(&b);
     }

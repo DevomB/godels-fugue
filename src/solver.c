@@ -338,7 +338,13 @@ static bool search(SolverState *s) {
     if (s->config.energy == 1) {
         fill_choice_costs(s, pick, order, n_order, costs);
         int temp = s->config.temperature;
-        if (s->config.anneal_steps > 0) {
+        if (s->config.anneal_ratio >= 1 && s->config.anneal_ratio <= 99) {
+            temp = s->config.anneal_start;
+            for (int i = 0; i < s->anneal_step; i++) {
+                temp = temp * s->config.anneal_ratio / 100;
+            }
+            s->anneal_step += 1;
+        } else if (s->config.anneal_steps > 0) {
             int steps = s->config.anneal_steps;
             int k = s->anneal_step;
             if (k > steps) k = steps;
@@ -393,7 +399,8 @@ bool solve(SolverState *s, int *melody, int *backtracks) {
     int length = s->config.length;
 
     if (s->config.energy == 1 &&
-        (s->config.temperature > 0 || s->config.anneal_steps > 0)) {
+        (s->config.temperature > 0 || s->config.anneal_steps > 0 ||
+         s->config.anneal_ratio > 0)) {
         s->rng = (uint32_t)s->config.seed;
         if (s->rng == 0) {
             s->rng = 1;

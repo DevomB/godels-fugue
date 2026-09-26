@@ -140,6 +140,8 @@ static int load_config(const char *path, PieceConfig *config)
             config->anneal_end = value;
         } else if (strcmp(key, "anneal_steps") == 0) {
             config->anneal_steps = value;
+        } else if (strcmp(key, "anneal_ratio") == 0) {
+            config->anneal_ratio = value;
         } else if (strcmp(key, "w_dissonance") == 0) {
             config->w_dissonance = value;
         } else if (strcmp(key, "w_parallel") == 0) {
@@ -278,7 +280,8 @@ static int validate_config(const PieceConfig *config)
         return 0;
     }
     if (config->anneal_steps < 0 || config->anneal_start < 0 ||
-        config->anneal_end < 0) {
+        config->anneal_end < 0 || config->anneal_ratio < 0 ||
+        config->anneal_ratio > 99) {
         fprintf(stderr, "invalid anneal\n");
         return 0;
     }
@@ -403,6 +406,7 @@ int main(int argc, char **argv)
         .anneal_start = 0,
         .anneal_end = 0,
         .anneal_steps = 0,
+        .anneal_ratio = 0,
         .w_dissonance = 0,
         .w_parallel = 0,
         .strong_chord = 0,
