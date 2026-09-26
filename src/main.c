@@ -260,11 +260,12 @@ static int validate_config(const PieceConfig *config)
         fprintf(stderr, "invalid rhythm\n");
         return 0;
     }
-    if (config->rest_at < 0 || config->rest_at >= config->length) {
+    if (config->rest_at < -1 ||
+        (config->rest_at >= 0 && config->rest_at >= config->length)) {
         fprintf(stderr, "invalid rest_at\n");
         return 0;
     }
-    if (config->rest_at != 0 && config->rhythm == 0) {
+    if (config->rest_at >= 0 && config->rhythm == 0) {
         fprintf(stderr, "rest_at requires rhythm\n");
         return 0;
     }
@@ -407,7 +408,7 @@ int main(int argc, char **argv)
         .strong_chord = 0,
         .cadence = 0,
         .rhythm = 0,
-        .rest_at = 0,
+        .rest_at = -1,
         .cyclic = 0,
         .w_motif = 0,
         .motif_a = 0,

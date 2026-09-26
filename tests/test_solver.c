@@ -52,7 +52,7 @@ static PieceConfig test_config(void) {
     c.strong_chord = 0;
     c.cadence = 0;
     c.rhythm = 0;
-    c.rest_at = 0;
+    c.rest_at = -1;
     c.cyclic = 0;
     c.w_motif = 0;
     c.motif_a = 0;
@@ -285,7 +285,7 @@ int main(void) {
         solver_free(&b);
     }
 
-    /* 10. Rest occupies a rhythm domain slot */
+    /* 10. Rest occupies a rhythm domain slot; other slots are searched */
     {
         PieceConfig cfg = test_config();
         cfg.rhythm = 1;
@@ -296,10 +296,44 @@ int main(void) {
         solver_init(&s, &cfg);
         CHECK(s.rhythm_mask[3] == RHYTHM_REST);
         CHECK(s.duration[3] == 0);
-        CHECK(s.duration[0] == 1);
+        CHECK(s.duration[0] == -1);
+        CHECK((s.rhythm_mask[0] & RHYTHM_REST) != 0);
+        CHECK((s.rhythm_mask[0] & RHYTHM_QUARTER) != 0);
+        CHECK((s.rhythm_mask[0] & RHYTHM_HALF) != 0);
         CHECK(solve(&s, melody, &backtracks));
         CHECK(s.duration[3] == 0);
+        CHECK(s.duration[0] == 1);
+        CHECK(s.rhythm_mask[0] == RHYTHM_QUARTER);
         solver_free(&s);
+    }
+
+    /* 10b. rest_at 0 is a real index; open slots collapse to quarters first */
+    {
+        PieceConfig cfg = test_config();
+        cfg.rhythm = 1;
+        cfg.rest_at = 0;
+        SolverState a = {0};
+        SolverState b = {0};
+        int ma[MELODY_MAX];
+        int mb[MELODY_MAX];
+        int bta = -1;
+        int btb = -1;
+        solver_init(&a, &cfg);
+        CHECK(a.rhythm_mask[0] == RHYTHM_REST);
+        CHECK(a.duration[0] == 0);
+        CHECK(a.duration[1] == -1);
+        solver_init(&b, &cfg);
+        CHECK(solve(&a, ma, &bta));
+        CHECK(solve(&b, mb, &btb));
+        CHECK(bta == btb);
+        CHECK(memcmp(ma, mb, (size_t)cfg.length * sizeof(int)) == 0);
+        CHECK(a.duration[0] == 0);
+        for (int i = 1; i < cfg.length; i++) {
+            CHECK(a.duration[i] == 1);
+            CHECK(a.rhythm_mask[i] == RHYTHM_QUARTER);
+        }
+        solver_free(&a);
+        solver_free(&b);
     }
 
     /* 11. Cadence plus a singleton C range has cadence in the unsat core */

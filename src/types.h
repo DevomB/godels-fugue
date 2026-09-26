@@ -41,7 +41,7 @@ typedef struct PieceConfig {
     int strong_chord; /* 0 = off; 1 = C-E-G on t%4==0 */
     int cadence;      /* 0 = off; 1 = last strong beat is V (G/B/D) */
     int rhythm;       /* 0 = all quarters; 1 = rest/quarter/half domain */
-    int rest_at;      /* 0 = off; else force rest at that melody index */
+    int rest_at;      /* -1 = off; else force rest at that melody index */
     int cyclic;       /* 0 = off; 1 = follower wraps modulo length */
     int w_motif;      /* soft interval-pattern cost; 0 = off */
     int motif_a;

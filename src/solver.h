@@ -8,6 +8,8 @@
 
 typedef struct SolverSnapshot {
     MidiDomain domains[MELODY_MAX];
+    unsigned char rhythm_mask[MELODY_MAX];
+    int duration[MELODY_MAX];
     ProofMark proof_mark;
     bool failed;
     int failed_variable;

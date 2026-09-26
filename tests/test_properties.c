@@ -52,7 +52,7 @@ static PieceConfig test_config(void) {
     c.strong_chord = 0;
     c.cadence = 0;
     c.rhythm = 0;
-    c.rest_at = 0;
+    c.rest_at = -1;
     c.cyclic = 0;
     c.w_motif = 0;
     c.motif_a = 0;

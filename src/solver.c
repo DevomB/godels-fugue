@@ -9,6 +9,18 @@
 #include <stdint.h>
 #include <string.h>
 
+static int rhythm_count(unsigned char mask) {
+    return ((mask & RHYTHM_REST) != 0) + ((mask & RHYTHM_QUARTER) != 0) +
+           ((mask & RHYTHM_HALF) != 0);
+}
+
+static int rhythm_duration(unsigned char mask) {
+    if (rhythm_count(mask) != 1) return -1;
+    if (mask & RHYTHM_REST) return 0;
+    if (mask & RHYTHM_QUARTER) return 1;
+    return 2;
+}
+
 void solver_init(SolverState *s, const PieceConfig *config) {
     proof_free(&s->proof);
     memset(s, 0, sizeof(*s));
@@ -28,21 +40,16 @@ void solver_init(SolverState *s, const PieceConfig *config) {
                 domain_add(&s->domains[i], pitch);
             }
         }
-        s->rhythm_mask[i] = RHYTHM_QUARTER;
         if (config->rhythm) {
             s->rhythm_mask[i] = (unsigned char)(RHYTHM_REST | RHYTHM_QUARTER |
                                                 RHYTHM_HALF);
+        } else {
+            s->rhythm_mask[i] = RHYTHM_QUARTER;
         }
-        if (config->rhythm && config->rest_at > 0 && config->rest_at == i) {
+        if (config->rhythm && config->rest_at >= 0 && config->rest_at == i) {
             s->rhythm_mask[i] = RHYTHM_REST;
         }
-        if (s->rhythm_mask[i] & RHYTHM_QUARTER) {
-            s->duration[i] = 1;
-        } else if (s->rhythm_mask[i] & RHYTHM_HALF) {
-            s->duration[i] = 2;
-        } else {
-            s->duration[i] = 0;
-        }
+        s->duration[i] = rhythm_duration(s->rhythm_mask[i]);
     }
 }
 
@@ -77,6 +84,8 @@ bool propagate_to_fixpoint(SolverState *s) {
 
 void solver_save(const SolverState *s, SolverSnapshot *snap) {
     memcpy(snap->domains, s->domains, sizeof(snap->domains));
+    memcpy(snap->rhythm_mask, s->rhythm_mask, sizeof(snap->rhythm_mask));
+    memcpy(snap->duration, s->duration, sizeof(snap->duration));
     snap->proof_mark = proof_mark(&s->proof);
     snap->failed = s->failed;
     snap->failed_variable = s->failed_variable;
@@ -109,6 +118,8 @@ void solver_restore(SolverState *s, const SolverSnapshot *snap) {
         memcpy(s->domains, snap->domains, sizeof(s->domains));
         s->trail_n = snap->trail_n;
     }
+    memcpy(s->rhythm_mask, snap->rhythm_mask, sizeof(s->rhythm_mask));
+    memcpy(s->duration, snap->duration, sizeof(s->duration));
     proof_truncate(&s->proof, snap->proof_mark);
     s->failed = snap->failed;
     s->failed_variable = snap->failed_variable;
@@ -265,6 +276,7 @@ static bool search(SolverState *s) {
     bool all_singleton = true;
     int pick = -1;
     int pick_count = 0;
+    int pick_rhythm = 0;
 
     for (int i = 0; i < length; i++) {
         int count = domain_count(&s->domains[i]);
@@ -279,12 +291,50 @@ static bool search(SolverState *s) {
             if (pick < 0 || count < pick_count) {
                 pick = i;
                 pick_count = count;
+                pick_rhythm = 0;
+            }
+        }
+        if (s->config.rhythm) {
+            int rcount = rhythm_count(s->rhythm_mask[i]);
+            if (rcount == 0) {
+                s->failed = true;
+                s->failed_variable = i;
+                return false;
+            }
+            if (rcount != 1) {
+                all_singleton = false;
+                if (pick < 0 || rcount < pick_count) {
+                    pick = i;
+                    pick_count = rcount;
+                    pick_rhythm = 1;
+                }
             }
         }
     }
 
     if (all_singleton) {
         return true;
+    }
+
+    if (pick_rhythm) {
+        static const unsigned char try_bits[] = {RHYTHM_QUARTER, RHYTHM_REST,
+                                                 RHYTHM_HALF};
+        for (int k = 0; k < 3; k++) {
+            unsigned char bit = try_bits[k];
+            if ((s->rhythm_mask[pick] & bit) == 0) continue;
+            SolverSnapshot snap;
+            solver_save(s, &snap);
+            s->rhythm_mask[pick] = bit;
+            s->duration[pick] = rhythm_duration(bit);
+            if (search(s)) {
+                return true;
+            }
+            solver_restore(s, &snap);
+            s->backtracks += 1;
+        }
+        s->failed = true;
+        s->failed_variable = pick;
+        return false;
     }
 
     int order[128];
