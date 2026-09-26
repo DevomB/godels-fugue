@@ -40,6 +40,9 @@ static PieceConfig test_config(void) {
     for (int v = 0; v < VOICE_MAX; v++) {
         c.voice_delay[v] = 0;
     }
+    c.lock = 0;
+    c.lock_index = 0;
+    c.lock_pitch = 0;
     return c;
 }
 
@@ -200,6 +203,24 @@ int main(void) {
         solver_init(&s, &tr);
         CHECK(solve(&s, melody, &backtracks));
         CHECK(canon_sounding(&tr, 1, melody[0]) == melody[0] + 7);
+        solver_free(&s);
+    }
+
+    /* 8. Locked 60 next to singleton 72 is killed by leap */
+    {
+        PieceConfig cfg = test_config();
+        SolverState s = {0};
+        int melody[MELODY_MAX];
+        int backtracks = -1;
+        solver_init(&s, &cfg);
+        domain_clear(&s.domains[1]);
+        domain_add(&s.domains[1], 72);
+        solver_lock(&s, 0, 60);
+        CHECK(!solve(&s, melody, &backtracks));
+        CHECK(s.failed);
+        CHECK(s.proof.event_count > 0);
+        CHECK(strcmp(s.proof.events[s.proof.event_count - 1].message,
+                     "melodic leap") == 0);
         solver_free(&s);
     }
 

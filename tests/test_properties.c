@@ -41,6 +41,9 @@ static PieceConfig test_config(void) {
     for (int v = 0; v < VOICE_MAX; v++) {
         c.voice_delay[v] = 0;
     }
+    c.lock = 0;
+    c.lock_index = 0;
+    c.lock_pitch = 0;
     return c;
 }
 

@@ -13,4 +13,6 @@ cmake --build build
 ./build/canon-collapse --config examples/diminish.txt
 ./build/canon-collapse --config examples/phase.txt
 ./build/canon-collapse --config examples/stagger.txt
+./build/canon-collapse --lock 0 61
+./build/canon-collapse --config examples/lock.txt
 ```

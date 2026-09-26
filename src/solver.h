@@ -18,6 +18,7 @@ void solver_init(SolverState *s, const PieceConfig *config);
 void solver_free(SolverState *s);
 bool propagate_to_fixpoint(SolverState *s);
 bool solve(SolverState *s, int *melody, int *backtracks);
+void solver_lock(SolverState *s, int index, int pitch);
 void solver_save(const SolverState *s, SolverSnapshot *snap);
 void solver_restore(SolverState *s, const SolverSnapshot *snap);
 

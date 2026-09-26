@@ -242,6 +242,19 @@ static bool search(SolverState *s) {
     return false;
 }
 
+void solver_lock(SolverState *s, int index, int pitch) {
+    if (s->failed) {
+        return;
+    }
+    if (index < 0 || index >= s->config.length || pitch < 0 || pitch > 127) {
+        s->failed = true;
+        s->failed_variable = index;
+        return;
+    }
+    domain_clear(&s->domains[index]);
+    domain_add(&s->domains[index], pitch);
+}
+
 bool solve(SolverState *s, int *melody, int *backtracks) {
     bool ok = false;
     int length = s->config.length;

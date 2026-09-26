@@ -30,6 +30,9 @@ typedef struct PieceConfig {
     int diminish;  /* 0 = off; k>=2 reads every kth source step */
     int phase;     /* extra follower delay steps; 0 = off */
     int voice_delay[VOICE_MAX]; /* 0 = use voice * delay */
+    int lock; /* 0 = off; re-solve with lock_index = lock_pitch */
+    int lock_index;
+    int lock_pitch;
 } PieceConfig;
 
 typedef struct SolverState {

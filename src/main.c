@@ -101,6 +101,12 @@ static int load_config(const char *path, PieceConfig *config)
             config->voice_delay[2] = value;
         } else if (strcmp(key, "delay_3") == 0) {
             config->voice_delay[3] = value;
+        } else if (strcmp(key, "lock") == 0) {
+            config->lock = value;
+        } else if (strcmp(key, "lock_index") == 0) {
+            config->lock_index = value;
+        } else if (strcmp(key, "lock_pitch") == 0) {
+            config->lock_pitch = value;
         }
     }
 
@@ -177,6 +183,16 @@ static int validate_config(const PieceConfig *config)
             fprintf(stderr, "invalid delay\n");
             return 0;
         }
+    }
+    if (config->lock != 0 && config->lock != 1) {
+        fprintf(stderr, "invalid lock\n");
+        return 0;
+    }
+    if (config->lock == 1 &&
+        (config->lock_index < 0 || config->lock_index >= config->length ||
+         config->lock_pitch < 0 || config->lock_pitch > 127)) {
+        fprintf(stderr, "invalid lock\n");
+        return 0;
     }
     return 1;
 }
@@ -269,6 +285,9 @@ int main(int argc, char **argv)
         .diminish = 0,
         .phase = 0,
         .voice_delay = {0},
+        .lock = 0,
+        .lock_index = 0,
+        .lock_pitch = 0,
     };
 
     const char *config_path = NULL;
@@ -301,6 +320,14 @@ int main(int argc, char **argv)
                 return 1;
             }
             entropy_path = argv[++i];
+        } else if (strcmp(argv[i], "--lock") == 0) {
+            if (i + 2 >= argc) {
+                fprintf(stderr, "missing value\n");
+                return 1;
+            }
+            config.lock = 1;
+            config.lock_index = atoi(argv[++i]);
+            config.lock_pitch = atoi(argv[++i]);
         } else {
             fprintf(stderr, "unknown argument\n");
             return 1;
@@ -369,11 +396,53 @@ int main(int argc, char **argv)
                    melody_energy(melody, config.length, config.w_gravity,
                                  config.w_leap, config.w_curve));
         }
+        if (config.lock == 1) {
+            SolverState alt = {0};
+            int alt_melody[MELODY_MAX];
+            int alt_bt = 0;
+            solver_init(&alt, &config);
+            solver_lock(&alt, config.lock_index, config.lock_pitch);
+            bool alt_ok = solve(&alt, alt_melody, &alt_bt);
+            printf("counterfactual: index %d pitch %d\n", config.lock_index,
+                   config.lock_pitch);
+            if (!alt_ok) {
+                const char *msg = "unsat";
+                if (alt.proof.event_count > 0) {
+                    msg = alt.proof.events[alt.proof.event_count - 1].message;
+                }
+                printf("killed: %s\n", msg);
+            } else if (melody[config.lock_index] == config.lock_pitch) {
+                printf("forced\n");
+            } else {
+                printf("legal\n");
+            }
+            solver_free(&alt);
+        }
         solver_free(&state);
         return writes_ok ? 0 : 1;
     }
 
     print_unsat(&state);
+    if (config.lock == 1) {
+        SolverState alt = {0};
+        int alt_melody[MELODY_MAX];
+        int alt_bt = 0;
+        solver_init(&alt, &config);
+        solver_lock(&alt, config.lock_index, config.lock_pitch);
+        bool alt_ok = solve(&alt, alt_melody, &alt_bt);
+        printf("counterfactual: index %d pitch %d\n", config.lock_index,
+               config.lock_pitch);
+        if (!alt_ok) {
+            const char *msg = "unsat";
+            if (alt.proof.event_count > 0) {
+                msg = alt.proof.events[alt.proof.event_count - 1].message;
+            }
+            printf("killed: %s\n", msg);
+        } else {
+            printf("legal\n");
+        }
+        solver_free(&alt);
+    }
     solver_free(&state);
     return 1;
 }
