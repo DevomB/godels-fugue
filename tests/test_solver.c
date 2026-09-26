@@ -50,6 +50,8 @@ static PieceConfig test_config(void) {
     c.w_parallel = 0;
     c.strong_chord = 0;
     c.cadence = 0;
+    c.rhythm = 0;
+    c.rest_at = 0;
     return c;
 }
 
@@ -256,6 +258,23 @@ int main(void) {
         CHECK(memcmp(ma, mb, (size_t)an.length * sizeof(int)) == 0);
         solver_free(&a);
         solver_free(&b);
+    }
+
+    /* 10. Rest occupies a rhythm domain slot */
+    {
+        PieceConfig cfg = test_config();
+        cfg.rhythm = 1;
+        cfg.rest_at = 3;
+        SolverState s = {0};
+        int melody[MELODY_MAX];
+        int backtracks = -1;
+        solver_init(&s, &cfg);
+        CHECK(s.rhythm_mask[3] == RHYTHM_REST);
+        CHECK(s.duration[3] == 0);
+        CHECK(s.duration[0] == 1);
+        CHECK(solve(&s, melody, &backtracks));
+        CHECK(s.duration[3] == 0);
+        solver_free(&s);
     }
 
     printf("ok\n");

@@ -18,4 +18,5 @@ cmake --build build
 ./build/canon-collapse --config examples/anneal.txt
 ./build/canon-collapse --config examples/dissonance.txt
 ./build/canon-collapse --config examples/cadence.txt
+./build/canon-collapse --config examples/rest.txt
 ```

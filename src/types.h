@@ -40,6 +40,8 @@ typedef struct PieceConfig {
     int w_parallel;   /* soft parallel fifth/octave; order only */
     int strong_chord; /* 0 = off; 1 = C-E-G on t%4==0 */
     int cadence;      /* 0 = off; 1 = last strong beat is V (G/B/D) */
+    int rhythm;       /* 0 = all quarters; 1 = rest/quarter/half domain */
+    int rest_at;      /* 0 = off; else force rest at that melody index */
 } PieceConfig;
 
 typedef struct SolverState {
@@ -57,7 +59,11 @@ typedef struct SolverState {
     int trail_var[TRAIL_MAX];
     MidiDomain trail_dom[TRAIL_MAX];
     int trail_n;
+    unsigned char rhythm_mask[MELODY_MAX]; /* bit0 rest, bit1 quarter, bit2 half */
+    int duration[MELODY_MAX];              /* 0 rest, 1 quarter, 2 half */
 } SolverState;
+
+enum { RHYTHM_REST = 1, RHYTHM_QUARTER = 2, RHYTHM_HALF = 4 };
 
 static inline void solver_enqueue(SolverState *s, int var) {
     if (var < 0 || var >= s->config.length || s->ac3_in[var]) {

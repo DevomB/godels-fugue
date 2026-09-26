@@ -38,7 +38,7 @@ static int write_vlq(FILE *f, unsigned int value)
 }
 
 static int write_track(FILE *f, const int *melody, int length, int channel,
-		       int start_tick)
+		       int start_tick, const int *durations)
 {
 	if (fwrite("MTrk", 1, 4, f) != 4)
 		return -1;
@@ -63,8 +63,11 @@ static int write_track(FILE *f, const int *melody, int length, int channel,
 		return -1;
 
 	for (int i = 0; i < length; i++) {
+		int units = durations != NULL ? durations[i] : 1;
+		if (units <= 0)
+			continue;
 		int on_tick = start_tick + i * 480;
-		int off_tick = on_tick + 480;
+		int off_tick = on_tick + units * 480;
 
 		if (write_vlq(f, (unsigned int)(on_tick - last_tick)) != 0)
 			return -1;
@@ -112,7 +115,8 @@ static int write_track(FILE *f, const int *melody, int length, int channel,
 }
 
 bool midi_write_voices(const char *path, const int *const *lines,
-		       const int *start_ticks, int n_voices, int length)
+		       const int *start_ticks, int n_voices, int length,
+		       const int *durations)
 {
 	if (path == NULL || lines == NULL || start_ticks == NULL)
 		return false;
@@ -146,7 +150,8 @@ bool midi_write_voices(const char *path, const int *const *lines,
 		goto fail;
 
 	for (int v = 0; v < n_voices; v++) {
-		if (write_track(f, lines[v], length, v, start_ticks[v]) != 0)
+		if (write_track(f, lines[v], length, v, start_ticks[v],
+				durations) != 0)
 			goto fail;
 	}
 
@@ -171,5 +176,5 @@ bool midi_write_canon(const char *path, const int *lead, const int *follow,
 	lines[1] = follow;
 	starts[0] = 0;
 	starts[1] = delay * 480;
-	return midi_write_voices(path, lines, starts, 2, length);
+	return midi_write_voices(path, lines, starts, 2, length, NULL);
 }

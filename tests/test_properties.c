@@ -51,6 +51,8 @@ static PieceConfig test_config(void) {
     c.w_parallel = 0;
     c.strong_chord = 0;
     c.cadence = 0;
+    c.rhythm = 0;
+    c.rest_at = 0;
     return c;
 }
 

@@ -215,7 +215,7 @@ int main(void)
 		starts[0] = 0;
 		starts[1] = 960;
 		starts[2] = 1920;
-		CHECK(midi_write_voices(path3, lines, starts, 3, length),
+		CHECK(midi_write_voices(path3, lines, starts, 3, length, NULL),
 		      "write 3 voices");
 
 		f = fopen(path3, "rb");
@@ -258,6 +258,42 @@ int main(void)
 			pos += chunk_len;
 		}
 		CHECK(tracks_found == 3, "three MTrk");
+		free(buf);
+	}
+
+	{
+		const int *lines[1];
+		int starts[1];
+		int durs[] = {1, 1, 0, 1};
+		int line0[] = {60, 64, 67, 72};
+		const char *path_r = "output/test_rest.mid";
+		lines[0] = line0;
+		starts[0] = 0;
+		CHECK(midi_write_voices(path_r, lines, starts, 1, length, durs),
+		      "write rest");
+		f = fopen(path_r, "rb");
+		CHECK(f != NULL, "open rest");
+		CHECK(fseek(f, 0, SEEK_END) == 0, "seek rest");
+		sz = ftell(f);
+		CHECK(sz > 0, "empty rest");
+		CHECK(fseek(f, 0, SEEK_SET) == 0, "start rest");
+		buf = malloc((size_t)sz);
+		CHECK(buf != NULL, "malloc rest");
+		CHECK(fread(buf, 1, (size_t)sz, f) == (size_t)sz, "fread rest");
+		fclose(f);
+		pos = 14;
+		CHECK(memcmp(buf + pos, "MTrk", 4) == 0, "MTrk rest");
+		pos += 4;
+		unsigned int chunk_len = read_u32be(buf + pos);
+		pos += 4;
+		NoteOn ons[8];
+		int n_ons = 0;
+		CHECK(parse_track_note_ons(buf + pos, chunk_len, ons, 8,
+					  &n_ons) == 0,
+		      "parse rest");
+		CHECK(n_ons == 3, "rest skips a note");
+		CHECK(ons[2].pitch == 72, "note after rest");
+		CHECK(ons[2].tick == 1440, "rest keeps the grid");
 		free(buf);
 	}
 

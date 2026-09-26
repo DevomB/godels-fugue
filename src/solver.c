@@ -27,6 +27,21 @@ void solver_init(SolverState *s, const PieceConfig *config) {
                 domain_add(&s->domains[i], pitch);
             }
         }
+        s->rhythm_mask[i] = RHYTHM_QUARTER;
+        if (config->rhythm) {
+            s->rhythm_mask[i] = (unsigned char)(RHYTHM_REST | RHYTHM_QUARTER |
+                                                RHYTHM_HALF);
+        }
+        if (config->rhythm && config->rest_at > 0 && config->rest_at == i) {
+            s->rhythm_mask[i] = RHYTHM_REST;
+        }
+        if (s->rhythm_mask[i] & RHYTHM_QUARTER) {
+            s->duration[i] = 1;
+        } else if (s->rhythm_mask[i] & RHYTHM_HALF) {
+            s->duration[i] = 2;
+        } else {
+            s->duration[i] = 0;
+        }
     }
 }
 

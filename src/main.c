@@ -121,6 +121,10 @@ static int load_config(const char *path, PieceConfig *config)
             config->strong_chord = value;
         } else if (strcmp(key, "cadence") == 0) {
             config->cadence = value;
+        } else if (strcmp(key, "rhythm") == 0) {
+            config->rhythm = value;
+        } else if (strcmp(key, "rest_at") == 0) {
+            config->rest_at = value;
         }
     }
 
@@ -217,6 +221,18 @@ static int validate_config(const PieceConfig *config)
         fprintf(stderr, "invalid cadence\n");
         return 0;
     }
+    if (config->rhythm != 0 && config->rhythm != 1) {
+        fprintf(stderr, "invalid rhythm\n");
+        return 0;
+    }
+    if (config->rest_at < 0 || config->rest_at >= config->length) {
+        fprintf(stderr, "invalid rest_at\n");
+        return 0;
+    }
+    if (config->rest_at != 0 && config->rhythm == 0) {
+        fprintf(stderr, "rest_at requires rhythm\n");
+        return 0;
+    }
     if (config->anneal_steps < 0 || config->anneal_start < 0 ||
         config->anneal_end < 0) {
         fprintf(stderr, "invalid anneal\n");
@@ -276,6 +292,20 @@ static void print_success(const int *melody, const PieceConfig *config, int back
         printf("\n");
     }
 
+    if (config->rhythm) {
+        printf("rhythm:");
+        for (int i = 0; i < length; i++) {
+            if (state->duration[i] == 0) {
+                printf(" rest");
+            } else if (state->duration[i] == 2) {
+                printf(" half");
+            } else {
+                printf(" 1");
+            }
+        }
+        printf("\n");
+    }
+
     printf("backtracks: %d\n", backtracks);
     printf("entropy: %.6f\n", entropy_bits(state->domains, length));
 }
@@ -323,6 +353,8 @@ int main(int argc, char **argv)
         .w_parallel = 0,
         .strong_chord = 0,
         .cadence = 0,
+        .rhythm = 0,
+        .rest_at = 0,
     };
 
     const char *config_path = NULL;
@@ -422,7 +454,7 @@ int main(int argc, char **argv)
             starts[v] = canon_voice_delay(&config, v) * 480;
         }
         if (!midi_write_voices(out_path, line_ptrs, starts, config.voices,
-                               config.length)) {
+                               config.length, state.duration)) {
             writes_ok = 0;
         }
         print_success(melody, &config, backtracks, &state);
