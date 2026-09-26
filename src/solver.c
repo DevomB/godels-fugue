@@ -40,26 +40,23 @@ bool propagate_to_fixpoint(SolverState *s) {
         return false;
     }
 
-    for (;;) {
-        MidiDomain before[MELODY_MAX];
-        memcpy(before, s->domains, sizeof(before));
-
-        if (!constraints_revise(s)) {
-            return false;
-        }
-
-        bool unchanged = true;
+    if (s->ac3_n == 0) {
+        memset(s->ac3_in, 0, sizeof(s->ac3_in));
         for (int i = 0; i < s->config.length; i++) {
-            if (!domain_equal(&before[i], &s->domains[i])) {
-                unchanged = false;
-                break;
-            }
-        }
-        if (unchanged) {
-            proof_append_entropy(&s->proof, entropy_bits(s->domains, s->config.length));
-            return true;
+            solver_enqueue(s, i);
         }
     }
+
+    while (s->ac3_n > 0) {
+        int v = s->ac3_q[--s->ac3_n];
+        s->ac3_in[v] = 0;
+        if (!constraints_revise_var(s, v)) {
+            return false;
+        }
+    }
+
+    proof_append_entropy(&s->proof, entropy_bits(s->domains, s->config.length));
+    return true;
 }
 
 void solver_save(const SolverState *s, SolverSnapshot *snap) {
@@ -69,15 +66,40 @@ void solver_save(const SolverState *s, SolverSnapshot *snap) {
     snap->failed_variable = s->failed_variable;
     snap->rng = s->rng;
     snap->anneal_step = s->anneal_step;
+    snap->trail_n = s->trail_n;
 }
 
 void solver_restore(SolverState *s, const SolverSnapshot *snap) {
-    memcpy(s->domains, snap->domains, sizeof(s->domains));
+    int used_trail = 0;
+    int delta = s->trail_n - snap->trail_n;
+    if (delta > 0 && delta < s->config.length && snap->trail_n >= 0 &&
+        snap->trail_n <= s->trail_n && s->trail_n <= TRAIL_MAX) {
+        while (s->trail_n > snap->trail_n) {
+            s->trail_n -= 1;
+            int var = s->trail_var[s->trail_n];
+            if (var >= 0 && var < s->config.length) {
+                s->domains[var] = s->trail_dom[s->trail_n];
+            }
+        }
+        used_trail = 1;
+        for (int i = 0; i < s->config.length; i++) {
+            if (!domain_equal(&s->domains[i], &snap->domains[i])) {
+                used_trail = 0;
+                break;
+            }
+        }
+    }
+    if (!used_trail) {
+        memcpy(s->domains, snap->domains, sizeof(s->domains));
+        s->trail_n = snap->trail_n;
+    }
     proof_truncate(&s->proof, snap->proof_mark);
     s->failed = snap->failed;
     s->failed_variable = snap->failed_variable;
     s->rng = snap->rng;
     s->anneal_step = snap->anneal_step;
+    s->ac3_n = 0;
+    memset(s->ac3_in, 0, sizeof(s->ac3_in));
 }
 
 static uint32_t xorshift32(uint32_t *state) {
@@ -238,8 +260,10 @@ static bool search(SolverState *s) {
         int pitch = order[k];
         SolverSnapshot snap;
         solver_save(s, &snap);
+        solver_trail_push(s, pick);
         domain_clear(&s->domains[pick]);
         domain_add(&s->domains[pick], pitch);
+        solver_enqueue(s, pick);
         if (search(s)) {
             return true;
         }
@@ -261,8 +285,10 @@ void solver_lock(SolverState *s, int index, int pitch) {
         s->failed_variable = index;
         return;
     }
+    solver_trail_push(s, index);
     domain_clear(&s->domains[index]);
     domain_add(&s->domains[index], pitch);
+    solver_enqueue(s, index);
 }
 
 bool solve(SolverState *s, int *melody, int *backtracks) {

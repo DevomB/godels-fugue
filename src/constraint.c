@@ -30,46 +30,61 @@ static bool mark_failed(SolverState *s, int variable) {
 static bool remove_unsupported(SolverState *s, int variable, int pitch,
                                int constraint_id, const char *message,
                                const int *related, int related_count) {
+    solver_trail_push(s, variable);
     domain_remove(&s->domains[variable], pitch);
     proof_append_removal_deps(&s->proof, variable, pitch, constraint_id, message,
                               related, related_count, s->domains);
+    solver_enqueue(s, variable);
+    for (int i = 0; i < related_count; i++) {
+        solver_enqueue(s, related[i]);
+    }
     if (domain_count(&s->domains[variable]) == 0)
         return mark_failed(s, variable);
+    return true;
+}
+
+static bool revise_scale_one(SolverState *s, int i) {
+    int pitches[128];
+    int n = collect_pitches(&s->domains[i], pitches);
+    for (int k = 0; k < n; k++) {
+        int pitch = pitches[k];
+        if (pitch_in_c_major(pitch) &&
+            pitch_in_c_major(canon_sounding(&s->config, 1, pitch)))
+            continue;
+        if (!remove_unsupported(s, i, pitch, CID_SCALE, "scale", NULL, 0))
+            return false;
+    }
     return true;
 }
 
 static bool revise_scale(SolverState *s) {
     int length = s->config.length;
     for (int i = 0; i < length; i++) {
-        int pitches[128];
-        int n = collect_pitches(&s->domains[i], pitches);
-        for (int k = 0; k < n; k++) {
-            int pitch = pitches[k];
-            if (pitch_in_c_major(pitch) &&
-                pitch_in_c_major(canon_sounding(&s->config, 1, pitch)))
-                continue;
-            if (!remove_unsupported(s, i, pitch, CID_SCALE, "scale", NULL, 0))
-                return false;
-        }
+        if (!revise_scale_one(s, i)) return false;
+    }
+    return true;
+}
+
+static bool revise_range_one(SolverState *s, int i) {
+    int low = s->config.range_low;
+    int high = s->config.range_high;
+    int pitches[128];
+    int n = collect_pitches(&s->domains[i], pitches);
+    for (int k = 0; k < n; k++) {
+        int pitch = pitches[k];
+        int sound = canon_sounding(&s->config, 1, pitch);
+        if (pitch >= low && pitch <= high && sound >= low && sound <= high)
+            continue;
+        if (!remove_unsupported(s, i, pitch, CID_RANGE, "range", NULL, 0))
+            return false;
     }
     return true;
 }
 
 static bool revise_range(SolverState *s) {
     int length = s->config.length;
-    int low = s->config.range_low;
-    int high = s->config.range_high;
     for (int i = 0; i < length; i++) {
-        int pitches[128];
-        int n = collect_pitches(&s->domains[i], pitches);
-        for (int k = 0; k < n; k++) {
-            int pitch = pitches[k];
-            int sound = canon_sounding(&s->config, 1, pitch);
-            if (pitch >= low && pitch <= high && sound >= low && sound <= high)
-                continue;
-            if (!remove_unsupported(s, i, pitch, CID_RANGE, "range", NULL, 0))
-                return false;
-        }
+        if (!revise_range_one(s, i)) return false;
     }
     return true;
 }
@@ -267,6 +282,81 @@ static bool revise_parallel(SolverState *s, bool fifth, int constraint_id,
             }
         }
     }
+    return true;
+}
+
+static bool index_in_tuple(const int *idx, int n, int variable) {
+    for (int i = 0; i < n; i++) {
+        if (idx[i] == variable) return true;
+    }
+    return false;
+}
+
+static bool revise_second_touching(SolverState *s, int variable) {
+    int voices = s->config.voices;
+    if (voices < 2) voices = 2;
+    if (voices > VOICE_MAX) voices = VOICE_MAX;
+    int span = canon_span_config(&s->config);
+    for (int t = 0; t < span; t++) {
+        if (t % 4 != 0) continue;
+        for (int va = 0; va < voices; va++) {
+            for (int vb = va + 1; vb < voices; vb++) {
+                int i0 = canon_map_source(&s->config, va, t);
+                int i1 = canon_map_source(&s->config, vb, t);
+                if (i0 < 0 || i1 < 0) continue;
+                if (i0 != variable && i1 != variable) continue;
+                if (!revise_second_pair(s, i0, i1, va, vb))
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool revise_parallel_touching(SolverState *s, int variable, bool fifth,
+                                     int constraint_id, const char *message) {
+    int voices = s->config.voices;
+    if (voices < 2) voices = 2;
+    if (voices > VOICE_MAX) voices = VOICE_MAX;
+    int span = canon_span_config(&s->config);
+    for (int t = 0; t + 1 < span; t++) {
+        for (int va = 0; va < voices; va++) {
+            for (int vb = va + 1; vb < voices; vb++) {
+                int idx[4];
+                idx[0] = canon_map_source(&s->config, va, t);
+                idx[1] = canon_map_source(&s->config, va, t + 1);
+                idx[2] = canon_map_source(&s->config, vb, t);
+                idx[3] = canon_map_source(&s->config, vb, t + 1);
+                if (idx[0] < 0 || idx[1] < 0 || idx[2] < 0 || idx[3] < 0)
+                    continue;
+                if (!indexes_distinct(idx[0], idx[1], idx[2], idx[3]))
+                    continue;
+                if (!index_in_tuple(idx, 4, variable)) continue;
+                if (!revise_parallel_tuple(s, idx, fifth, va, vb, constraint_id,
+                                          message))
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+
+bool constraints_revise_var(SolverState *s, int variable) {
+    if (variable < 0 || variable >= s->config.length) return true;
+    if (!revise_scale_one(s, variable)) return false;
+    if (!revise_range_one(s, variable)) return false;
+    if (variable > 0 && !revise_leap_edge(s, variable - 1, variable))
+        return false;
+    if (variable + 1 < s->config.length &&
+        !revise_leap_edge(s, variable, variable + 1))
+        return false;
+    if (!revise_second_touching(s, variable)) return false;
+    if (!revise_parallel_touching(s, variable, true, CID_PARALLEL_FIFTH,
+                                  "parallel fifth"))
+        return false;
+    if (!revise_parallel_touching(s, variable, false, CID_PARALLEL_OCTAVE,
+                                  "parallel octave"))
+        return false;
     return true;
 }
 
