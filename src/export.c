@@ -166,8 +166,22 @@ static double midi_hz(int pitch) {
     return 440.0 * pow(2.0, ((double)pitch - 69.0) / 12.0);
 }
 
+/* 256-sample cycle stored in this file. Triangle, not the live sine path. */
+static const short *wavetable_cycle(void) {
+    static short table[256];
+    static int ready = 0;
+    if (!ready) {
+        for (int i = 0; i < 256; i++) {
+            int rise = i < 128 ? i : 255 - i;
+            table[i] = (short)((rise - 64) * 400);
+        }
+        ready = 1;
+    }
+    return table;
+}
+
 bool export_wav(const char *path, const int *const *lines, int n_voices,
-                int length, const int *durations) {
+                int length, const int *durations, int sample) {
     if (path == NULL || lines == NULL || n_voices < 1 || length < 0) {
         return false;
     }
@@ -198,26 +212,52 @@ bool export_wav(const char *path, const int *const *lines, int n_voices,
     }
 
     int cursor = 0;
+    const short *table = sample ? wavetable_cycle() : NULL;
+    unsigned phase[4] = {0, 0, 0, 0};
+    unsigned step[4] = {0, 0, 0, 0};
     for (int i = 0; i < length; i++) {
         int units = units_at(durations, i);
         if (units < 1) units = 1;
         int n = units * quarter;
         int rest = durations != NULL && durations[i] <= 0;
-        for (int s = 0; s < n; s++) {
-            double t = (double)(cursor + s) / (double)rate;
-            double mix = 0.0;
-            if (!rest) {
-                int voices = n_voices > 3 ? 3 : n_voices;
-                for (int v = 0; v < voices; v++) {
-                    if (lines[v] == NULL || lines[v][i] < 0) continue;
-                    mix += sin(2.0 * M_PI * midi_hz(lines[v][i]) * t);
+        int voices = n_voices > 3 ? 3 : n_voices;
+        if (sample && !rest) {
+            for (int v = 0; v < voices; v++) {
+                if (lines[v] == NULL || lines[v][i] < 0) {
+                    step[v] = 0;
+                    continue;
                 }
-                if (voices > 0) mix /= (double)voices;
+                double hz = midi_hz(lines[v][i]);
+                step[v] = (unsigned)(hz * 256.0 * 256.0 / (double)rate + 0.5);
             }
-            int sample = (int)(mix * 8000.0);
-            if (sample > 32767) sample = 32767;
-            if (sample < -32768) sample = -32768;
-            if (write_u16le(f, (unsigned int)(sample & 0xFFFF)) != 0) {
+        }
+        for (int s = 0; s < n; s++) {
+            int pcm = 0;
+            if (!rest) {
+                if (sample) {
+                    int acc = 0;
+                    int nlive = 0;
+                    for (int v = 0; v < voices; v++) {
+                        if (step[v] == 0) continue;
+                        acc += table[(phase[v] >> 8) & 255];
+                        phase[v] += step[v];
+                        nlive++;
+                    }
+                    if (nlive > 0) pcm = acc / nlive;
+                } else {
+                    double t = (double)(cursor + s) / (double)rate;
+                    double mix = 0.0;
+                    for (int v = 0; v < voices; v++) {
+                        if (lines[v] == NULL || lines[v][i] < 0) continue;
+                        mix += sin(2.0 * M_PI * midi_hz(lines[v][i]) * t);
+                    }
+                    if (voices > 0) mix /= (double)voices;
+                    pcm = (int)(mix * 8000.0);
+                }
+            }
+            if (pcm > 32767) pcm = 32767;
+            if (pcm < -32768) pcm = -32768;
+            if (write_u16le(f, (unsigned int)(pcm & 0xFFFF)) != 0) {
                 fclose(f);
                 return false;
             }

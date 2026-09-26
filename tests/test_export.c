@@ -51,7 +51,8 @@ int main(void) {
 
     CHECK(export_musicxml("output/score.musicxml", lines, 2, 4, durs));
     CHECK(export_contour("output/contour.svg", lead, 4));
-    CHECK(export_wav("output/voices.wav", lines, 2, 4, durs));
+    CHECK(export_wav("output/voices.wav", lines, 2, 4, durs, 0));
+    CHECK(export_wav("output/voices_table.wav", lines, 2, 4, durs, 1));
 
     ProofLog log;
     proof_init(&log);
@@ -81,6 +82,16 @@ int main(void) {
     CHECK(memcmp(buf + 8, "WAVE", 4) == 0);
     CHECK(memcmp(buf + 12, "fmt ", 4) == 0);
     CHECK(memcmp(buf + 36, "data", 4) == 0);
+    {
+        unsigned char *table = NULL;
+        long tsz = 0;
+        slurp("output/voices_table.wav", &table, &tsz);
+        CHECK(tsz > 44);
+        CHECK(memcmp(table, "RIFF", 4) == 0);
+        CHECK(tsz == sz);
+        CHECK(memcmp(buf, table, (size_t)sz) != 0);
+        free(table);
+    }
     free(buf);
 
     slurp("output/proof.json", &buf, &sz);

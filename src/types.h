@@ -55,6 +55,7 @@ typedef struct PieceConfig {
     int w_modulate;  /* 0 = off; pivot-note cost in the new key */
     int poly_meter;  /* 0 = t%4==0; 1 = also t%3==0 */
     int pc_weight[12]; /* 0 = off; extra pitch-class cost */
+    int sample;        /* 0 = sine WAV; 1 = 256-sample table */
 } PieceConfig;
 
 typedef struct SolverState {

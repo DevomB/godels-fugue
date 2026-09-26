@@ -176,6 +176,8 @@ static int load_config(const char *path, PieceConfig *config)
             config->w_modulate = value;
         } else if (strcmp(key, "poly_meter") == 0) {
             config->poly_meter = value;
+        } else if (strcmp(key, "sample") == 0) {
+            config->sample = value;
         }
     }
 
@@ -312,6 +314,10 @@ static int validate_config(const PieceConfig *config)
     }
     if (config->poly_meter != 0 && config->poly_meter != 1) {
         fprintf(stderr, "invalid poly_meter\n");
+        return 0;
+    }
+    if (config->sample != 0 && config->sample != 1) {
+        fprintf(stderr, "invalid sample\n");
         return 0;
     }
     if (config->anneal_steps < 0 || config->anneal_start < 0 ||
@@ -460,6 +466,7 @@ int main(int argc, char **argv)
         .w_modulate = 0,
         .poly_meter = 0,
         .pc_weight = {0},
+        .sample = 0,
     };
 
     const char *config_path = NULL;
@@ -619,7 +626,7 @@ int main(int argc, char **argv)
                              "voices.wav")) {
                 ensure_parent_dir(wav_path);
                 if (!export_wav(wav_path, line_ptrs, config.voices, span,
-                                NULL)) {
+                                NULL, config.sample)) {
                     writes_ok = 0;
                 }
             }

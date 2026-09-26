@@ -68,6 +68,7 @@ static PieceConfig test_config(void) {
     for (int i = 0; i < 12; i++) {
         c.pc_weight[i] = 0;
     }
+    c.sample = 0;
     return c;
 }
 
