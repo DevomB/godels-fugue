@@ -293,7 +293,44 @@ int main(void)
 		      "parse rest");
 		CHECK(n_ons == 3, "rest skips a note");
 		CHECK(ons[2].pitch == 72, "note after rest");
-		CHECK(ons[2].tick == 1440, "rest keeps the grid");
+		CHECK(ons[2].tick == 960, "zero duration does not consume a slot");
+		free(buf);
+	}
+
+	{
+		const int *lines[1];
+		int starts[1];
+		int durs[] = {2, 1};
+		int line0[] = {60, 64};
+		const char *path_h = "output/test_half.mid";
+		lines[0] = line0;
+		starts[0] = 0;
+		CHECK(midi_write_voices(path_h, lines, starts, 1, 2, durs),
+		      "write half");
+		f = fopen(path_h, "rb");
+		CHECK(f != NULL, "open half");
+		CHECK(fseek(f, 0, SEEK_END) == 0, "seek half");
+		sz = ftell(f);
+		CHECK(sz > 0, "empty half");
+		CHECK(fseek(f, 0, SEEK_SET) == 0, "start half");
+		buf = malloc((size_t)sz);
+		CHECK(buf != NULL, "malloc half");
+		CHECK(fread(buf, 1, (size_t)sz, f) == (size_t)sz, "fread half");
+		fclose(f);
+		pos = 14;
+		CHECK(memcmp(buf + pos, "MTrk", 4) == 0, "MTrk half");
+		pos += 4;
+		unsigned int chunk_len = read_u32be(buf + pos);
+		pos += 4;
+		NoteOn ons[8];
+		int n_ons = 0;
+		CHECK(parse_track_note_ons(buf + pos, chunk_len, ons, 8,
+					  &n_ons) == 0,
+		      "parse half");
+		CHECK(n_ons == 2, "half then quarter");
+		CHECK(ons[0].tick == 0, "half starts at 0");
+		CHECK(ons[1].tick == 960, "quarter follows the half");
+		CHECK(ons[1].pitch == 64, "second pitch");
 		free(buf);
 	}
 

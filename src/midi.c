@@ -54,6 +54,7 @@ static int write_track(FILE *f, const int *melody, int length, int channel,
 		return -1;
 
 	int last_tick = 0;
+	int cursor = start_tick;
 
 	if (write_vlq(f, 0) != 0)
 		return -1;
@@ -64,10 +65,14 @@ static int write_track(FILE *f, const int *melody, int length, int channel,
 
 	for (int i = 0; i < length; i++) {
 		int units = durations != NULL ? durations[i] : 1;
-		if (units <= 0 || melody[i] < 0)
+		if (units < 0)
+			units = 0;
+		if (melody[i] < 0 || units <= 0) {
+			cursor += units * 480;
 			continue;
-		int on_tick = start_tick + i * 480;
-		int off_tick = on_tick + units * 480;
+		}
+		int on_tick = cursor;
+		int off_tick = cursor + units * 480;
 
 		if (write_vlq(f, (unsigned int)(on_tick - last_tick)) != 0)
 			return -1;
@@ -88,6 +93,7 @@ static int write_track(FILE *f, const int *melody, int length, int channel,
 		if (fputc(0, f) == EOF)
 			return -1;
 		last_tick = off_tick;
+		cursor = off_tick;
 	}
 
 	if (write_vlq(f, 0) != 0)
