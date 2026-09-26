@@ -22,6 +22,7 @@ add_library(canon STATIC
   src/constraint.c
   src/solver.c
   src/midi.c
+  src/export.c
 )
 target_include_directories(canon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 if(NOT MSVC)
@@ -40,6 +41,7 @@ foreach(name IN ITEMS
     test_proof
     test_solver
     test_midi
+    test_export
     test_properties)
   add_executable(${name} tests/${name}.c)
   target_link_libraries(${name} PRIVATE canon)

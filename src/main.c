@@ -1,4 +1,5 @@
 #include "canon.h"
+#include "export.h"
 #include "midi.h"
 #include "solver.h"
 #include "theory.h"
@@ -14,6 +15,31 @@
 #else
 #include <sys/stat.h>
 #endif
+
+static int sibling_path(char *out, size_t cap, const char *base, const char *name)
+{
+    const char *slash = strrchr(base, '/');
+    const char *bslash = strrchr(base, '\\');
+    const char *sep = slash;
+    if (bslash != NULL && (sep == NULL || bslash > sep)) {
+        sep = bslash;
+    }
+    if (sep == NULL) {
+        if (strlen(name) + 1 > cap) {
+            return 0;
+        }
+        memcpy(out, name, strlen(name) + 1);
+        return 1;
+    }
+    size_t n = (size_t)(sep - base + 1);
+    size_t m = strlen(name);
+    if (n + m + 1 > cap) {
+        return 0;
+    }
+    memcpy(out, base, n);
+    memcpy(out + n, name, m + 1);
+    return 1;
+}
 
 static void ensure_parent_dir(const char *path)
 {
@@ -457,6 +483,42 @@ int main(int argc, char **argv)
                                config.length, state.duration)) {
             writes_ok = 0;
         }
+        {
+            char xml_path[512];
+            char svg_path[512];
+            char wav_path[512];
+            char json_path[512];
+            if (sibling_path(xml_path, sizeof(xml_path), out_path,
+                             "score.musicxml")) {
+                ensure_parent_dir(xml_path);
+                if (!export_musicxml(xml_path, line_ptrs, config.voices,
+                                     config.length, state.duration)) {
+                    writes_ok = 0;
+                }
+            }
+            if (sibling_path(svg_path, sizeof(svg_path), out_path,
+                             "contour.svg")) {
+                ensure_parent_dir(svg_path);
+                if (!export_contour(svg_path, melody, config.length)) {
+                    writes_ok = 0;
+                }
+            }
+            if (sibling_path(wav_path, sizeof(wav_path), out_path,
+                             "voices.wav")) {
+                ensure_parent_dir(wav_path);
+                if (!export_wav(wav_path, line_ptrs, config.voices,
+                                config.length, state.duration)) {
+                    writes_ok = 0;
+                }
+            }
+            if (sibling_path(json_path, sizeof(json_path), proof_path,
+                             "proof.json")) {
+                ensure_parent_dir(json_path);
+                if (!export_trace(json_path, &state.proof)) {
+                    writes_ok = 0;
+                }
+            }
+        }
         print_success(melody, &config, backtracks, &state);
         if (config.energy == 1) {
             printf("energy: %d\n",
@@ -489,6 +551,17 @@ int main(int argc, char **argv)
         }
         solver_free(&state);
         return writes_ok ? 0 : 1;
+    }
+
+    {
+        char json_path[512];
+        if (sibling_path(json_path, sizeof(json_path), proof_path,
+                         "proof.json")) {
+            ensure_parent_dir(json_path);
+            if (!export_trace(json_path, &state.proof)) {
+                writes_ok = 0;
+            }
+        }
     }
 
     print_unsat(&state);

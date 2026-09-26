@@ -20,3 +20,5 @@ cmake --build build
 ./build/canon-collapse --config examples/cadence.txt
 ./build/canon-collapse --config examples/rest.txt
 ```
+
+A successful run also writes `output/score.musicxml`, `output/contour.svg`, `output/voices.wav`, and `output/proof.json` beside the MIDI and proof files.
