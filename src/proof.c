@@ -80,7 +80,14 @@ bool proof_append_removal_deps(ProofLog *log, int variable_id, int removed_pitch
 
     for (int i = 0; i < related_count && ev->parent_count < PROOF_PARENT_MAX; i++) {
         int other = related_vars[i];
-        if (other < 0 || other == variable_id) continue;
+        if (other < 0) continue;
+        if (other == variable_id) {
+            ev->parent_events[ev->parent_count] = -1;
+            ev->parent_vars[ev->parent_count] = other;
+            ev->parent_pitches[ev->parent_count] = removed_pitch;
+            ev->parent_count++;
+            continue;
+        }
         int prior = last_event_for(log, other);
         if (prior >= 0) {
             ev->parent_events[ev->parent_count] = prior;

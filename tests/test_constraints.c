@@ -60,6 +60,17 @@ int main(void) {
     CHECK(domain_count(&s.domains[0]) == 8);
     CHECK(proof_has(&s.proof, "scale", 61));
     CHECK(proof_has(&s.proof, "range", 48));
+    {
+        int unary_parents = 0;
+        for (int i = 0; i < s.proof.event_count; i++) {
+            if ((s.proof.events[i].removed_pitch == 61 ||
+                 s.proof.events[i].removed_pitch == 48) &&
+                s.proof.events[i].parent_count > 0) {
+                unary_parents = 1;
+            }
+        }
+        CHECK(!unary_parents);
+    }
     CHECK(!s.failed);
     proof_free(&s.proof);
 

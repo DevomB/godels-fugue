@@ -248,6 +248,18 @@ int main(void) {
         solver_lock(&s, 0, 61);
         CHECK(!solve(&s, melody, &backtracks));
         CHECK(s.failed);
+        {
+            int linked = 0;
+            for (int i = 0; i < s.proof.event_count; i++) {
+                const ProofEvent *ev = &s.proof.events[i];
+                if (ev->variable_id == 0 && ev->removed_pitch == 61 &&
+                    ev->parent_count == 1 && ev->parent_events[0] == -1 &&
+                    ev->parent_vars[0] == 0 && ev->parent_pitches[0] == 61) {
+                    linked = 1;
+                }
+            }
+            CHECK(linked);
+        }
         solver_free(&s);
 
         PieceConfig good = test_config();

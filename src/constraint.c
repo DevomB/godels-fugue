@@ -39,10 +39,18 @@ static bool mark_failed(SolverState *s, int variable) {
 static bool remove_unsupported(SolverState *s, int variable, int pitch,
                                int constraint_id, const char *message,
                                const int *related, int related_count) {
+    int self = variable;
+    const int *deps = related;
+    int dep_n = related_count;
+    if (dep_n == 0 && domain_singleton(&s->domains[variable]) &&
+        domain_value(&s->domains[variable]) == pitch) {
+        deps = &self;
+        dep_n = 1;
+    }
     solver_trail_push(s, variable);
     domain_remove(&s->domains[variable], pitch);
     proof_append_removal_deps(&s->proof, variable, pitch, constraint_id, message,
-                              related, related_count, s->domains);
+                              deps, dep_n, s->domains);
     solver_enqueue(s, variable);
     for (int i = 0; i < related_count; i++) {
         solver_enqueue(s, related[i]);
