@@ -28,6 +28,12 @@ static PieceConfig test_config(void) {
     c.invert = 0;
     c.axis = 67;
     c.retrograde = 0;
+    c.energy = 0;
+    c.temperature = 0;
+    c.seed = 1;
+    c.w_gravity = 0;
+    c.w_leap = 0;
+    c.w_curve = 0;
     return c;
 }
 
@@ -348,6 +354,126 @@ int main(void) {
         }
 
         solver_free(&s);
+    }
+
+    /* 6. Energy-ordered search */
+    {
+        PieceConfig cold = test_config();
+        cold.energy = 1;
+        cold.temperature = 0;
+        cold.seed = 1;
+        cold.w_gravity = 1;
+        cold.w_leap = 1;
+        cold.w_curve = 3;
+        cold.invert = 0;
+        cold.retrograde = 0;
+        cold.length = 12;
+        cold.range_low = 60;
+        cold.range_high = 72;
+        cold.max_leap = 7;
+
+        SolverState s = {0};
+        int melody[12];
+        int backtracks = -1;
+        int all_equal;
+
+        solver_init(&s, &cold);
+        if (!solve(&s, melody, &backtracks)) {
+            fprintf(stderr, "unsat failed_variable=%d\n", s.failed_variable);
+            solver_free(&s);
+            exit(1);
+        }
+
+        {
+            SolverState s2 = {0};
+            int melody2[12];
+            int backtracks2 = -1;
+
+            solver_init(&s2, &cold);
+            if (!solve(&s2, melody2, &backtracks2)) {
+                fprintf(stderr, "unsat failed_variable=%d\n", s2.failed_variable);
+                solver_free(&s2);
+                solver_free(&s);
+                exit(1);
+            }
+
+            CHECK(backtracks == backtracks2);
+            for (int i = 0; i < length; i++) {
+                CHECK(melody[i] == melody2[i]);
+            }
+            CHECK(entropy_bits(s2.domains, length) == 0.0);
+            solver_free(&s2);
+        }
+
+        CHECK(entropy_bits(s.domains, length) == 0.0);
+
+        all_equal = 1;
+        for (int i = 1; i < length; i++) {
+            if (melody[i] != melody[0]) {
+                all_equal = 0;
+                break;
+            }
+        }
+        CHECK(!all_equal);
+
+        for (int i = 0; i < length; i++) {
+            CHECK(pitch_in_c_major(melody[i]));
+            CHECK(melody[i] >= 60 && melody[i] <= 72);
+        }
+        for (int i = 0; i < length - 1; i++) {
+            CHECK(!leap_exceeds(melody[i], melody[i + 1]));
+        }
+
+        solver_free(&s);
+
+        {
+            PieceConfig warm = cold;
+            warm.temperature = 1;
+            SolverState w = {0};
+            int warm_melody[12];
+            int warm_backtracks = -1;
+
+            solver_init(&w, &warm);
+            if (!solve(&w, warm_melody, &warm_backtracks)) {
+                fprintf(stderr, "unsat failed_variable=%d\n", w.failed_variable);
+                solver_free(&w);
+                exit(1);
+            }
+
+            {
+                SolverState w2 = {0};
+                int warm_melody2[12];
+                int warm_backtracks2 = -1;
+
+                solver_init(&w2, &warm);
+                if (!solve(&w2, warm_melody2, &warm_backtracks2)) {
+                    fprintf(stderr, "unsat failed_variable=%d\n",
+                            w2.failed_variable);
+                    solver_free(&w2);
+                    solver_free(&w);
+                    exit(1);
+                }
+
+                CHECK(warm_backtracks == warm_backtracks2);
+                for (int i = 0; i < length; i++) {
+                    CHECK(warm_melody[i] == warm_melody2[i]);
+                }
+                CHECK(entropy_bits(w2.domains, length) == 0.0);
+                solver_free(&w2);
+            }
+
+            CHECK(entropy_bits(w.domains, length) == 0.0);
+
+            for (int i = 0; i < length; i++) {
+                CHECK(pitch_in_c_major(warm_melody[i]));
+                CHECK(warm_melody[i] >= 60 && warm_melody[i] <= 72);
+            }
+            for (int i = 0; i < length - 1; i++) {
+                CHECK(!leap_exceeds(warm_melody[i], warm_melody[i + 1]));
+            }
+
+            solver_free(&w);
+        }
     }
 
     printf("ok\n");

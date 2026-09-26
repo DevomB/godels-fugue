@@ -75,6 +75,18 @@ static int load_config(const char *path, PieceConfig *config)
             config->axis = value;
         } else if (strcmp(key, "retrograde") == 0) {
             config->retrograde = value;
+        } else if (strcmp(key, "energy") == 0) {
+            config->energy = value;
+        } else if (strcmp(key, "temperature") == 0) {
+            config->temperature = value;
+        } else if (strcmp(key, "seed") == 0) {
+            config->seed = value;
+        } else if (strcmp(key, "w_gravity") == 0) {
+            config->w_gravity = value;
+        } else if (strcmp(key, "w_leap") == 0) {
+            config->w_leap = value;
+        } else if (strcmp(key, "w_curve") == 0) {
+            config->w_curve = value;
         }
     }
 
@@ -116,6 +128,18 @@ static int validate_config(const PieceConfig *config)
     }
     if (config->retrograde != 0 && config->retrograde != 1) {
         fprintf(stderr, "invalid retrograde\n");
+        return 0;
+    }
+    if (config->energy != 0 && config->energy != 1) {
+        fprintf(stderr, "invalid energy\n");
+        return 0;
+    }
+    if (config->temperature < 0) {
+        fprintf(stderr, "invalid temperature\n");
+        return 0;
+    }
+    if (config->w_gravity < 0 || config->w_leap < 0 || config->w_curve < 0) {
+        fprintf(stderr, "invalid weight\n");
         return 0;
     }
     return 1;
@@ -186,6 +210,12 @@ int main(int argc, char **argv)
         .invert = 0,
         .axis = 67,
         .retrograde = 0,
+        .energy = 0,
+        .temperature = 0,
+        .seed = 1,
+        .w_gravity = 0,
+        .w_leap = 0,
+        .w_curve = 0,
     };
 
     const char *config_path = NULL;
@@ -263,6 +293,11 @@ int main(int argc, char **argv)
             writes_ok = 0;
         }
         print_success(melody, follow, config.length, config.delay, backtracks, &state);
+        if (config.energy == 1) {
+            printf("energy: %d\n",
+                   melody_energy(melody, config.length, config.w_gravity,
+                                 config.w_leap, config.w_curve));
+        }
         solver_free(&state);
         return writes_ok ? 0 : 1;
     }

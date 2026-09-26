@@ -55,3 +55,67 @@ bool leap_exceeds(int a, int b) {
 int invert_pitch(int axis, int pitch) {
     return 2 * axis - pitch;
 }
+
+static int iabs(int x) {
+    return x < 0 ? -x : x;
+}
+
+int pitch_gravity(int pitch) {
+    if (pitch < 0 || pitch > 127) return 4;
+    switch (pitch % 12) {
+    case 0:
+    case 4:
+        return 0;
+    case 7:
+        return 1;
+    case 2:
+    case 5:
+    case 9:
+        return 2;
+    case 11:
+        return 3;
+    default:
+        return 4;
+    }
+}
+
+int tension_target(int index, int length) {
+    static const int arch[12] = {0, 0, 1, 2, 3, 3, 2, 1, 1, 0, 0, 0};
+    if (length <= 1) return 0;
+    if (index < 0) index = 0;
+    if (index > length - 1) index = length - 1;
+    return arch[index * 11 / (length - 1)];
+}
+
+int pitch_choice_cost(int index, int length, int pitch, int left, int has_left,
+                      int right, int has_right, int w_gravity, int w_leap,
+                      int w_curve) {
+    int gravity = pitch_gravity(pitch);
+    int cost = w_gravity * gravity +
+               w_curve * iabs(gravity - tension_target(index, length));
+    if (has_left) cost += w_leap * (iabs(pitch - left) / 4);
+    if (has_right) cost += w_leap * (iabs(pitch - right) / 4);
+    return cost;
+}
+
+int melody_energy(const int *melody, int length, int w_gravity, int w_leap,
+                  int w_curve) {
+    int total = 0;
+    for (int i = 0; i < length; i++) {
+        int left = 0;
+        int has_left = 0;
+        int right = 0;
+        int has_right = 0;
+        if (i > 0) {
+            left = melody[i - 1];
+            has_left = 1;
+        }
+        if (i + 1 < length) {
+            right = melody[i + 1];
+            has_right = 1;
+        }
+        total += pitch_choice_cost(i, length, melody[i], left, has_left, right,
+                                   has_right, w_gravity, w_leap, w_curve);
+    }
+    return total;
+}

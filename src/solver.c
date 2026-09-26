@@ -4,6 +4,8 @@
 #include "domain.h"
 #include "theory.h"
 
+#include <math.h>
+#include <stdint.h>
 #include <string.h>
 
 void solver_init(SolverState *s, const PieceConfig *config) {
@@ -65,6 +67,7 @@ void solver_save(const SolverState *s, SolverSnapshot *snap) {
     snap->proof_mark = proof_mark(&s->proof);
     snap->failed = s->failed;
     snap->failed_variable = s->failed_variable;
+    snap->rng = s->rng;
 }
 
 void solver_restore(SolverState *s, const SolverSnapshot *snap) {
@@ -72,6 +75,105 @@ void solver_restore(SolverState *s, const SolverSnapshot *snap) {
     proof_truncate(&s->proof, snap->proof_mark);
     s->failed = snap->failed;
     s->failed_variable = snap->failed_variable;
+    s->rng = snap->rng;
+}
+
+static uint32_t xorshift32(uint32_t *state) {
+    uint32_t x = *state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    *state = x;
+    return x;
+}
+
+static int collect_pitches(const MidiDomain *d, int *out) {
+    int n = 0;
+    for (int pitch = domain_next(d, -1); pitch >= 0;
+         pitch = domain_next(d, pitch + 1)) {
+        out[n++] = pitch;
+    }
+    return n;
+}
+
+static void neighbor_bounds(const SolverState *s, int index, int *left, int *has_left,
+                            int *right, int *has_right) {
+    *left = 0;
+    *has_left = 0;
+    *right = 0;
+    *has_right = 0;
+    if (index > 0 && domain_singleton(&s->domains[index - 1])) {
+        *left = domain_value(&s->domains[index - 1]);
+        *has_left = 1;
+    }
+    if (index + 1 < s->config.length && domain_singleton(&s->domains[index + 1])) {
+        *right = domain_value(&s->domains[index + 1]);
+        *has_right = 1;
+    }
+}
+
+static void fill_choice_costs(const SolverState *s, int index, const int *pitches, int n,
+                              int *costs) {
+    int left;
+    int has_left;
+    int right;
+    int has_right;
+    neighbor_bounds(s, index, &left, &has_left, &right, &has_right);
+    for (int i = 0; i < n; i++) {
+        costs[i] = pitch_choice_cost(index, s->config.length, pitches[i], left, has_left,
+                                     right, has_right, s->config.w_gravity, s->config.w_leap,
+                                     s->config.w_curve);
+    }
+}
+
+static void sort_by_cost(int *pitches, int *costs, int n) {
+    for (int i = 1; i < n; i++) {
+        int pitch = pitches[i];
+        int cost = costs[i];
+        int j = i;
+        while (j > 0 &&
+               (costs[j - 1] > cost || (costs[j - 1] == cost && pitches[j - 1] > pitch))) {
+            pitches[j] = pitches[j - 1];
+            costs[j] = costs[j - 1];
+            j--;
+        }
+        pitches[j] = pitch;
+        costs[j] = cost;
+    }
+}
+
+static void sample_without_replacement(int *pitches, const int *costs, int n,
+                                       int temperature, uint32_t *rng) {
+    int remaining[128];
+    double weights[128];
+    int left = n;
+
+    memcpy(remaining, pitches, (size_t)n * sizeof(int));
+    for (int i = 0; i < n; i++) {
+        weights[i] = exp((double)-costs[i] / (double)temperature);
+    }
+
+    for (int out = 0; out < n; out++) {
+        double total = 0.0;
+        for (int i = 0; i < left; i++) {
+            total += weights[i];
+        }
+        double u = (double)xorshift32(rng) / 4294967296.0;
+        double target = u * total;
+        double acc = 0.0;
+        int pick = left - 1;
+        for (int i = 0; i < left; i++) {
+            acc += weights[i];
+            if (target < acc) {
+                pick = i;
+                break;
+            }
+        }
+        pitches[out] = remaining[pick];
+        remaining[pick] = remaining[left - 1];
+        weights[pick] = weights[left - 1];
+        left--;
+    }
 }
 
 /* Ceiling is MELODY_MAX 32; snapshots copy the domain array plus the proof
@@ -107,9 +209,23 @@ static bool search(SolverState *s) {
         return true;
     }
 
+    int order[128];
+    int costs[128];
     MidiDomain choices = s->domains[pick];
-    for (int pitch = domain_next(&choices, -1); pitch >= 0;
-         pitch = domain_next(&choices, pitch)) {
+    int n_order = collect_pitches(&choices, order);
+
+    if (s->config.energy == 1) {
+        fill_choice_costs(s, pick, order, n_order, costs);
+        if (s->config.temperature > 0) {
+            sample_without_replacement(order, costs, n_order, s->config.temperature,
+                                       &s->rng);
+        } else {
+            sort_by_cost(order, costs, n_order);
+        }
+    }
+
+    for (int k = 0; k < n_order; k++) {
+        int pitch = order[k];
         SolverSnapshot snap;
         solver_save(s, &snap);
         domain_clear(&s->domains[pick]);
@@ -129,6 +245,13 @@ static bool search(SolverState *s) {
 bool solve(SolverState *s, int *melody, int *backtracks) {
     bool ok = false;
     int length = s->config.length;
+
+    if (s->config.energy == 1 && s->config.temperature > 0) {
+        s->rng = (uint32_t)s->config.seed;
+        if (s->rng == 0) {
+            s->rng = 1;
+        }
+    }
 
     if (!s->failed && length >= 1 && length <= MELODY_MAX) {
         ok = search(s);

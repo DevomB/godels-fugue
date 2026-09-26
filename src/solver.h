@@ -4,12 +4,14 @@
 #include "types.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 
 typedef struct SolverSnapshot {
     MidiDomain domains[MELODY_MAX];
     ProofMark proof_mark;
     bool failed;
     int failed_variable;
+    uint32_t rng;
 } SolverSnapshot;
 
 void solver_init(SolverState *s, const PieceConfig *config);

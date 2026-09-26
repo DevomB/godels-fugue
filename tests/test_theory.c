@@ -64,6 +64,25 @@ int main(void) {
     CHECK(invert_pitch(67, 67) == 67);
     CHECK(invert_pitch(67, invert_pitch(67, 62)) == 62);
 
+    /* pitch_gravity */
+    CHECK(pitch_gravity(60) == 0);
+    CHECK(pitch_gravity(64) == 0);
+    CHECK(pitch_gravity(72) == 0);
+    CHECK(pitch_gravity(67) == 1);
+    CHECK(pitch_gravity(62) == 2);
+    CHECK(pitch_gravity(71) == 3);
+    CHECK(pitch_gravity(61) == 4);
+
+    /* tension_target */
+    CHECK(tension_target(0, 12) == 0);
+    CHECK(tension_target(2, 12) == 1);
+    CHECK(tension_target(5, 12) == 3);
+    CHECK(tension_target(11, 12) == 0);
+
+    /* pitch_choice_cost: G at peak cheaper than C */
+    CHECK(pitch_choice_cost(2, 12, 67, 60, 1, 0, 0, 1, 1, 3) <
+          pitch_choice_cost(2, 12, 60, 60, 1, 0, 0, 1, 1, 3));
+
     printf("ok\n");
     return 0;
 }

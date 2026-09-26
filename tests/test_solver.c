@@ -26,6 +26,12 @@ static PieceConfig test_config(void) {
     c.invert = 0;
     c.axis = 67;
     c.retrograde = 0;
+    c.energy = 0;
+    c.temperature = 0;
+    c.seed = 1;
+    c.w_gravity = 0;
+    c.w_leap = 0;
+    c.w_curve = 0;
     return c;
 }
 
@@ -121,6 +127,34 @@ int main(void) {
 
         solver_free(&a);
         solver_free(&b);
+    }
+
+    /* 5. Leap revision drops 60 next to 72; 67 remains */
+    {
+        SolverState s = {0};
+        int melody[MELODY_MAX];
+        int backtracks = -1;
+        int removed_sixty = 0;
+
+        solver_init(&s, &config);
+        domain_clear(&s.domains[1]);
+        domain_add(&s.domains[1], 72);
+        domain_clear(&s.domains[0]);
+        domain_add(&s.domains[0], 60);
+        domain_add(&s.domains[0], 67);
+
+        CHECK(solve(&s, melody, &backtracks));
+        CHECK(melody[0] == 67);
+        CHECK(melody[1] == 72);
+        for (int i = 0; i < s.proof.event_count; i++) {
+            if (s.proof.events[i].variable_id == 0 &&
+                s.proof.events[i].removed_pitch == 60) {
+                removed_sixty = 1;
+            }
+        }
+        CHECK(removed_sixty);
+
+        solver_free(&s);
     }
 
     printf("ok\n");
