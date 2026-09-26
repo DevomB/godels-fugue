@@ -84,7 +84,11 @@ int canon_span_config(const PieceConfig *config) {
 int canon_sounding(const PieceConfig *config, int voice, int source_pitch) {
     int pitch = source_pitch;
     if (config == NULL || voice <= 0) return pitch;
-    if (config->invert) pitch = invert_pitch(config->axis, pitch);
+    if (config->invert) {
+        pitch = config->invert_mod12
+                    ? invert_pitch_mod12(config->axis, pitch)
+                    : invert_pitch(config->axis, pitch);
+    }
     pitch += config->transpose;
     return pitch;
 }

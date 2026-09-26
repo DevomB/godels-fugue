@@ -56,6 +56,18 @@ int invert_pitch(int axis, int pitch) {
     return 2 * axis - pitch;
 }
 
+int invert_pitch_mod12(int axis, int pitch) {
+    int axis_pc = axis % 12;
+    if (axis_pc < 0) axis_pc += 12;
+    int pitch_pc = pitch % 12;
+    if (pitch_pc < 0) pitch_pc += 12;
+    int pc = (2 * axis_pc - pitch_pc + 12) % 12;
+    int result = (pitch / 12) * 12 + pc;
+    while (result < 0) result += 12;
+    while (result > 127) result -= 12;
+    return result;
+}
+
 int in_c_triad(int pitch) {
     int pc = pitch % 12;
     if (pc < 0) pc += 12;
@@ -155,8 +167,12 @@ int vertical_cost(int a, int b, int a_prev, int b_prev, int has_prev,
     return cost;
 }
 
-static int follower_sounding(int pitch, int invert, int axis, int transpose) {
-    if (invert) pitch = invert_pitch(axis, pitch);
+static int follower_sounding(int pitch, int invert, int invert_mod12, int axis,
+                             int transpose) {
+    if (invert) {
+        pitch = invert_mod12 ? invert_pitch_mod12(axis, pitch)
+                             : invert_pitch(axis, pitch);
+    }
     return pitch + transpose;
 }
 
@@ -183,10 +199,11 @@ int melody_energy_full(const int *melody, int length, int delay, int w_gravity,
         if (t > 0 && follow > 0) {
             has_prev = 1;
             a_prev = melody[t - 1];
-            b_prev = follower_sounding(melody[follow - 1], invert, axis, transpose);
+            b_prev = follower_sounding(melody[follow - 1], invert, 0, axis,
+                                       transpose);
         }
         total += vertical_cost(melody[t],
-                               follower_sounding(melody[follow], invert, axis,
+                               follower_sounding(melody[follow], invert, 0, axis,
                                                  transpose),
                                a_prev, b_prev, has_prev, w_dissonance,
                                w_parallel);

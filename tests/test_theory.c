@@ -65,6 +65,12 @@ int main(void) {
     CHECK(invert_pitch(67, 67) == 67);
     CHECK(invert_pitch(67, invert_pitch(67, 62)) == 62);
 
+    /* invert_pitch_mod12: same-octave fold; 64 (E) pc is not MIDI 70 */
+    CHECK(invert_pitch(67, 64) == 70);
+    CHECK(invert_pitch_mod12(67, 64) % 12 != 70);
+    CHECK(invert_pitch_mod12(67, invert_pitch_mod12(67, 64)) % 12 == 64 % 12);
+    CHECK(invert_pitch_mod12(67, 72) != invert_pitch(67, 72));
+
     /* pitch_gravity */
     CHECK(pitch_gravity(60) == 0);
     CHECK(pitch_gravity(64) == 0);

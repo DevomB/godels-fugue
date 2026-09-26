@@ -98,6 +98,8 @@ static int load_config(const char *path, PieceConfig *config)
             config->max_leap = value;
         } else if (strcmp(key, "invert") == 0) {
             config->invert = value;
+        } else if (strcmp(key, "invert_mod12") == 0) {
+            config->invert_mod12 = value;
         } else if (strcmp(key, "axis") == 0) {
             config->axis = value;
         } else if (strcmp(key, "retrograde") == 0) {
@@ -195,6 +197,10 @@ static int validate_config(const PieceConfig *config)
     }
     if (config->invert != 0 && config->invert != 1) {
         fprintf(stderr, "invalid invert\n");
+        return 0;
+    }
+    if (config->invert_mod12 != 0 && config->invert_mod12 != 1) {
+        fprintf(stderr, "invalid invert_mod12\n");
         return 0;
     }
     if (config->invert == 1 && (config->axis < 0 || config->axis > 127)) {
@@ -387,6 +393,7 @@ int main(int argc, char **argv)
         .range_high = 72,
         .max_leap = 7,
         .invert = 0,
+        .invert_mod12 = 0,
         .axis = 67,
         .retrograde = 0,
         .energy = 0,

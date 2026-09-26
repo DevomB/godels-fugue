@@ -16,7 +16,8 @@ typedef struct PieceConfig {
     int range_low;
     int range_high;
     int max_leap;
-    int invert; /* 0 = identity canon, 1 = chromatic inversion */
+    int invert; /* 0 = identity canon, 1 = inversion */
+    int invert_mod12; /* 0 = T(p)=2a-p; 1 = pitch-class fold */
     int axis;
     int retrograde; /* 0 = forward follower, 1 = reversed follower */
     int energy;      /* 0 = ascending MIDI, 1 = cost order */

@@ -26,6 +26,7 @@ static PieceConfig test_config(void) {
     c.range_high = 72;
     c.max_leap = 7;
     c.invert = 0;
+    c.invert_mod12 = 0;
     c.axis = 67;
     c.retrograde = 0;
     c.energy = 0;
