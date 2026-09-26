@@ -43,6 +43,9 @@ static PieceConfig test_config(void) {
     c.lock = 0;
     c.lock_index = 0;
     c.lock_pitch = 0;
+    c.anneal_start = 0;
+    c.anneal_end = 0;
+    c.anneal_steps = 0;
     return c;
 }
 
@@ -222,6 +225,33 @@ int main(void) {
         CHECK(strcmp(s.proof.events[s.proof.event_count - 1].message,
                      "melodic leap") == 0);
         solver_free(&s);
+    }
+
+    /* 9. Annealing schedule is deterministic for a fixed seed */
+    {
+        PieceConfig an = test_config();
+        an.energy = 1;
+        an.anneal_start = 4;
+        an.anneal_end = 1;
+        an.anneal_steps = 8;
+        an.seed = 3;
+        an.w_gravity = 1;
+        an.w_leap = 1;
+        an.w_curve = 3;
+        SolverState a = {0};
+        SolverState b = {0};
+        int ma[MELODY_MAX];
+        int mb[MELODY_MAX];
+        int bta = -1;
+        int btb = -1;
+        solver_init(&a, &an);
+        solver_init(&b, &an);
+        CHECK(solve(&a, ma, &bta));
+        CHECK(solve(&b, mb, &btb));
+        CHECK(bta == btb);
+        CHECK(memcmp(ma, mb, (size_t)an.length * sizeof(int)) == 0);
+        solver_free(&a);
+        solver_free(&b);
     }
 
     printf("ok\n");

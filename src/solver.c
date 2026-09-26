@@ -68,6 +68,7 @@ void solver_save(const SolverState *s, SolverSnapshot *snap) {
     snap->failed = s->failed;
     snap->failed_variable = s->failed_variable;
     snap->rng = s->rng;
+    snap->anneal_step = s->anneal_step;
 }
 
 void solver_restore(SolverState *s, const SolverSnapshot *snap) {
@@ -76,6 +77,7 @@ void solver_restore(SolverState *s, const SolverSnapshot *snap) {
     s->failed = snap->failed;
     s->failed_variable = snap->failed_variable;
     s->rng = snap->rng;
+    s->anneal_step = snap->anneal_step;
 }
 
 static uint32_t xorshift32(uint32_t *state) {
@@ -216,9 +218,17 @@ static bool search(SolverState *s) {
 
     if (s->config.energy == 1) {
         fill_choice_costs(s, pick, order, n_order, costs);
-        if (s->config.temperature > 0) {
-            sample_without_replacement(order, costs, n_order, s->config.temperature,
-                                       &s->rng);
+        int temp = s->config.temperature;
+        if (s->config.anneal_steps > 0) {
+            int steps = s->config.anneal_steps;
+            int k = s->anneal_step;
+            if (k > steps) k = steps;
+            temp = s->config.anneal_start +
+                   (s->config.anneal_end - s->config.anneal_start) * k / steps;
+            s->anneal_step += 1;
+        }
+        if (temp > 0) {
+            sample_without_replacement(order, costs, n_order, temp, &s->rng);
         } else {
             sort_by_cost(order, costs, n_order);
         }
@@ -259,11 +269,13 @@ bool solve(SolverState *s, int *melody, int *backtracks) {
     bool ok = false;
     int length = s->config.length;
 
-    if (s->config.energy == 1 && s->config.temperature > 0) {
+    if (s->config.energy == 1 &&
+        (s->config.temperature > 0 || s->config.anneal_steps > 0)) {
         s->rng = (uint32_t)s->config.seed;
         if (s->rng == 0) {
             s->rng = 1;
         }
+        s->anneal_step = 0;
     }
 
     if (!s->failed && length >= 1 && length <= MELODY_MAX) {

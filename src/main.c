@@ -107,6 +107,12 @@ static int load_config(const char *path, PieceConfig *config)
             config->lock_index = value;
         } else if (strcmp(key, "lock_pitch") == 0) {
             config->lock_pitch = value;
+        } else if (strcmp(key, "anneal_start") == 0) {
+            config->anneal_start = value;
+        } else if (strcmp(key, "anneal_end") == 0) {
+            config->anneal_end = value;
+        } else if (strcmp(key, "anneal_steps") == 0) {
+            config->anneal_steps = value;
         }
     }
 
@@ -192,6 +198,11 @@ static int validate_config(const PieceConfig *config)
         (config->lock_index < 0 || config->lock_index >= config->length ||
          config->lock_pitch < 0 || config->lock_pitch > 127)) {
         fprintf(stderr, "invalid lock\n");
+        return 0;
+    }
+    if (config->anneal_steps < 0 || config->anneal_start < 0 ||
+        config->anneal_end < 0) {
+        fprintf(stderr, "invalid anneal\n");
         return 0;
     }
     return 1;
@@ -288,6 +299,9 @@ int main(int argc, char **argv)
         .lock = 0,
         .lock_index = 0,
         .lock_pitch = 0,
+        .anneal_start = 0,
+        .anneal_end = 0,
+        .anneal_steps = 0,
     };
 
     const char *config_path = NULL;

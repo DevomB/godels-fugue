@@ -33,6 +33,9 @@ typedef struct PieceConfig {
     int lock; /* 0 = off; re-solve with lock_index = lock_pitch */
     int lock_index;
     int lock_pitch;
+    int anneal_start;
+    int anneal_end;
+    int anneal_steps; /* 0 = off */
 } PieceConfig;
 
 typedef struct SolverState {
@@ -43,6 +46,7 @@ typedef struct SolverState {
     int failed_variable;
     int backtracks;
     uint32_t rng;
+    int anneal_step;
 } SolverState;
 
 #endif
