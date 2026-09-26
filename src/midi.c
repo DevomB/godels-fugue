@@ -64,7 +64,7 @@ static int write_track(FILE *f, const int *melody, int length, int channel,
 
 	for (int i = 0; i < length; i++) {
 		int units = durations != NULL ? durations[i] : 1;
-		if (units <= 0)
+		if (units <= 0 || melody[i] < 0)
 			continue;
 		int on_tick = start_tick + i * 480;
 		int off_tick = on_tick + units * 480;
@@ -129,7 +129,7 @@ bool midi_write_voices(const char *path, const int *const *lines,
 		if (length > 0 && lines[v] == NULL)
 			return false;
 		for (int i = 0; i < length; i++) {
-			if (lines[v][i] < 0 || lines[v][i] > 127)
+			if (lines[v][i] < -1 || lines[v][i] > 127)
 				return false;
 		}
 	}

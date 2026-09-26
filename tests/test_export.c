@@ -1,3 +1,4 @@
+#include "canon.h"
 #include "export.h"
 #include "proof.h"
 #include "solver.h"
@@ -113,6 +114,44 @@ int main(void) {
         CHECK(strstr((char *)buf, "backtracks:") != NULL);
         CHECK(strstr((char *)buf, "entropy:") != NULL);
         CHECK(strstr((char *)buf, "energy:") != NULL);
+        free(buf);
+    }
+
+    {
+        PieceConfig cfg = {0};
+        cfg.length = 4;
+        cfg.voices = 2;
+        cfg.delay = 2;
+        cfg.augment = 2;
+        int melody[] = {60, 64, 67, 72};
+        int span = canon_span_config(&cfg);
+        int lead[SPAN_MAX];
+        int follow[SPAN_MAX];
+        const int *aug_lines[2];
+        CHECK(span > cfg.length);
+        for (int t = 0; t < span; t++) {
+            int i0 = canon_map_source(&cfg, 0, t);
+            int i1 = canon_map_source(&cfg, 1, t);
+            lead[t] = i0 < 0 ? -1 : canon_sounding(&cfg, 0, melody[i0]);
+            follow[t] = i1 < 0 ? -1 : canon_sounding(&cfg, 1, melody[i1]);
+        }
+        CHECK(follow[0] < 0);
+        CHECK(follow[1] < 0);
+        CHECK(follow[2] == 60);
+        CHECK(follow[3] == 60);
+        CHECK(follow[4] == 64);
+        CHECK(follow[3] != 64);
+        aug_lines[0] = lead;
+        aug_lines[1] = follow;
+        CHECK(export_musicxml("output/augment.musicxml", aug_lines, 2, span,
+                              NULL));
+        slurp("output/augment.musicxml", &buf, &sz);
+        const char *p2 = strstr((char *)buf, "id=\"P2\"");
+        CHECK(p2 != NULL);
+        const char *c4 = strstr(p2, "<step>C</step><octave>4</octave>");
+        CHECK(c4 != NULL);
+        CHECK(strstr(c4 + 1, "<step>C</step><octave>4</octave>") != NULL);
+        CHECK(strstr(p2, "<step>E</step>") != NULL);
         free(buf);
     }
 

@@ -302,13 +302,23 @@ static int write_entropy(const ProofLog *log, const char *path)
     return 1;
 }
 
-static void fill_voice_line(int *line, const int *melody, int length, int voice,
-                            const PieceConfig *config)
+static int fill_voice_line(int *line, int cap, const int *melody,
+                           const int *durations, int voice,
+                           const PieceConfig *config)
 {
-    for (int i = 0; i < length; i++) {
-        int source = (voice > 0 && config->retrograde) ? length - 1 - i : i;
-        line[i] = canon_sounding(config, voice, melody[source]);
+    int span = canon_span_config(config);
+    if (span > cap) {
+        return -1;
     }
+    for (int t = 0; t < span; t++) {
+        int idx = canon_map_source(config, voice, t);
+        if (idx < 0 || (durations != NULL && durations[idx] <= 0)) {
+            line[t] = -1;
+        } else {
+            line[t] = canon_sounding(config, voice, melody[idx]);
+        }
+    }
+    return span;
 }
 
 static void print_success(const int *melody, const PieceConfig *config, int backtracks,
@@ -492,16 +502,21 @@ int main(int argc, char **argv)
     }
 
     if (ok) {
-        int lines[VOICE_MAX][MELODY_MAX];
+        int lines[VOICE_MAX][SPAN_MAX];
         const int *line_ptrs[VOICE_MAX];
         int starts[VOICE_MAX];
+        int span = canon_span_config(&config);
         for (int v = 0; v < config.voices; v++) {
-            fill_voice_line(lines[v], melody, config.length, v, &config);
+            if (fill_voice_line(lines[v], SPAN_MAX, melody, state.duration, v,
+                                &config) != span) {
+                writes_ok = 0;
+            }
             line_ptrs[v] = lines[v];
-            starts[v] = canon_voice_delay(&config, v) * 480;
+            starts[v] = 0;
         }
-        if (!midi_write_voices(out_path, line_ptrs, starts, config.voices,
-                               config.length, state.duration)) {
+        if (writes_ok &&
+            !midi_write_voices(out_path, line_ptrs, starts, config.voices, span,
+                               NULL)) {
             writes_ok = 0;
         }
         {
@@ -512,8 +527,8 @@ int main(int argc, char **argv)
             if (sibling_path(xml_path, sizeof(xml_path), out_path,
                              "score.musicxml")) {
                 ensure_parent_dir(xml_path);
-                if (!export_musicxml(xml_path, line_ptrs, config.voices,
-                                     config.length, state.duration)) {
+                if (!export_musicxml(xml_path, line_ptrs, config.voices, span,
+                                     NULL)) {
                     writes_ok = 0;
                 }
             }
@@ -527,8 +542,8 @@ int main(int argc, char **argv)
             if (sibling_path(wav_path, sizeof(wav_path), out_path,
                              "voices.wav")) {
                 ensure_parent_dir(wav_path);
-                if (!export_wav(wav_path, line_ptrs, config.voices,
-                                config.length, state.duration)) {
+                if (!export_wav(wav_path, line_ptrs, config.voices, span,
+                                NULL)) {
                     writes_ok = 0;
                 }
             }

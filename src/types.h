@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-enum { MELODY_MAX = 32, VOICE_MAX = 4, TRAIL_MAX = 512 };
+enum { MELODY_MAX = 32, VOICE_MAX = 4, TRAIL_MAX = 512, SPAN_MAX = 128 };
 
 typedef struct PieceConfig {
     int length;
