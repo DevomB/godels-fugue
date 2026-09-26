@@ -16,7 +16,7 @@ void domain_remove(MidiDomain *d, int pitch);
 int domain_count(const MidiDomain *d);
 bool domain_singleton(const MidiDomain *d);
 int domain_value(const MidiDomain *d);
-int domain_next(const MidiDomain *d, int n);
+int domain_next(const MidiDomain *d, int n); /* next pitch >= n, or -1 */
 bool domain_equal(const MidiDomain *a, const MidiDomain *b);
 
 #endif

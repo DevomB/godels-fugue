@@ -54,9 +54,10 @@ int main(void) {
     CHECK(!is_parallel_octave(60, 72, 60, 84));
 
     /* leap_exceeds */
-    CHECK(!leap_exceeds(60, 67));
-    CHECK(leap_exceeds(60, 68));
-    CHECK(leap_exceeds(72, 60));
+    CHECK(!leap_exceeds(60, 67, 7));
+    CHECK(leap_exceeds(60, 68, 7));
+    CHECK(leap_exceeds(72, 60, 7));
+    CHECK(!leap_exceeds(60, 72, 12));
 
     /* invert_pitch */
     CHECK(invert_pitch(67, 62) == 72);

@@ -46,10 +46,10 @@ bool is_second(int a, int b) {
     return interval == 1 || interval == 2 || interval == 10 || interval == 11;
 }
 
-bool leap_exceeds(int a, int b) {
+bool leap_exceeds(int a, int b, int max_leap) {
     int delta = a - b;
     if (delta < 0) delta = -delta;
-    return delta > 7;
+    return delta > max_leap;
 }
 
 int invert_pitch(int axis, int pitch) {

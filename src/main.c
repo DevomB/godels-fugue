@@ -650,7 +650,7 @@ int main(int argc, char **argv)
         int core[16];
         int core_n = 0;
         if (solver_unsat_core(&config, core, 16, &core_n)) {
-            fprintf(stderr, "core:");
+            fprintf(stderr, "core (approximate):");
             for (int i = 0; i < core_n; i++) {
                 fprintf(stderr, " %s", constraint_name(core[i]));
             }

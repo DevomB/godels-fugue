@@ -362,6 +362,11 @@ int main(void) {
             if (core[i] == CID_CADENCE) has_cadence = 1;
         }
         CHECK(has_cadence);
+        int has_leap = 0;
+        for (int i = 0; i < n; i++) {
+            if (core[i] == CID_LEAP) has_leap = 1;
+        }
+        CHECK(!has_leap);
         cfg.cadence = 0;
         SolverState s = {0};
         int melody[MELODY_MAX];

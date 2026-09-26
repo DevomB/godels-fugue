@@ -122,7 +122,7 @@ int main(void) {
         }
 
         for (int i = 0; i < length - 1; i++) {
-            CHECK(!leap_exceeds(melody[i], melody[i + 1]));
+            CHECK(!leap_exceeds(melody[i], melody[i + 1], config.max_leap));
         }
 
         span = canon_span(length, delay);
@@ -248,7 +248,7 @@ int main(void) {
             CHECK(melody[i] >= 60 && melody[i] <= 72);
         }
         for (int i = 0; i < length - 1; i++) {
-            CHECK(!leap_exceeds(melody[i], melody[i + 1]));
+            CHECK(!leap_exceeds(melody[i], melody[i + 1], config.max_leap));
         }
 
         span = canon_span(length, delay);
@@ -337,7 +337,7 @@ int main(void) {
             CHECK(melody[i] >= 60 && melody[i] <= 72);
         }
         for (int i = 0; i < length - 1; i++) {
-            CHECK(!leap_exceeds(melody[i], melody[i + 1]));
+            CHECK(!leap_exceeds(melody[i], melody[i + 1], config.max_leap));
         }
 
         span = canon_span(length, delay);
@@ -444,7 +444,7 @@ int main(void) {
             CHECK(melody[i] >= 60 && melody[i] <= 72);
         }
         for (int i = 0; i < length - 1; i++) {
-            CHECK(!leap_exceeds(melody[i], melody[i + 1]));
+            CHECK(!leap_exceeds(melody[i], melody[i + 1], config.max_leap));
         }
 
         solver_free(&s);
@@ -492,7 +492,8 @@ int main(void) {
                 CHECK(warm_melody[i] >= 60 && warm_melody[i] <= 72);
             }
             for (int i = 0; i < length - 1; i++) {
-                CHECK(!leap_exceeds(warm_melody[i], warm_melody[i + 1]));
+                CHECK(!leap_exceeds(warm_melody[i], warm_melody[i + 1],
+                                     warm.max_leap));
             }
 
             solver_free(&w);

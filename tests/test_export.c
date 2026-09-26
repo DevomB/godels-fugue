@@ -66,6 +66,8 @@ int main(void) {
     CHECK(memcmp(buf, "<?xml", 5) == 0);
     CHECK(strstr((char *)buf, "score-partwise") != NULL);
     CHECK(strstr((char *)buf, "<step>C</step>") != NULL);
+    CHECK(strstr((char *)buf, "<step>E</step>") != NULL);
+    CHECK(strstr((char *)buf, "<step>G</step>") != NULL);
     free(buf);
 
     slurp("output/contour.svg", &buf, &sz);
@@ -115,6 +117,13 @@ int main(void) {
         CHECK(strstr((char *)buf, "entropy:") != NULL);
         CHECK(strstr((char *)buf, "energy:") != NULL);
         free(buf);
+        {
+            int core[] = {8};
+            CHECK(export_report("output/report.txt", &cfg, bt, 0.0, 0, core, 1));
+            slurp("output/report.txt", &buf, &sz);
+            CHECK(strstr((char *)buf, "core (approximate):") != NULL);
+            free(buf);
+        }
     }
 
     {

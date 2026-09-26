@@ -9,7 +9,7 @@ bool same_direction(int delta_a, int delta_b);
 bool is_parallel_fifth(int v0_prev, int v1_prev, int v0_now, int v1_now);
 bool is_parallel_octave(int v0_prev, int v1_prev, int v0_now, int v1_now);
 bool is_second(int a, int b);
-bool leap_exceeds(int a, int b);
+bool leap_exceeds(int a, int b, int max_leap);
 int invert_pitch(int axis, int pitch);
 int in_c_triad(int pitch);
 int in_c_dominant(int pitch);

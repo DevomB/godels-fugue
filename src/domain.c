@@ -48,6 +48,7 @@ bool domain_singleton(const MidiDomain *d) {
     return domain_count(d) == 1;
 }
 
+/* Next legal pitch that is >= n, or -1 if none remain. */
 int domain_next(const MidiDomain *d, int n) {
     if (n < 0) n = 0;
     for (int pitch = n; pitch <= 127; pitch++) {
