@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifdef _WIN32
@@ -10,14 +11,17 @@
 #include <dirent.h>
 #endif
 
+/* Counts every whitespace-separated MIDI pitch; other words are skipped. */
 int corpus_row_counts(const char *path, int counts[12]) {
     if (path == NULL || counts == NULL) return 0;
     FILE *f = fopen(path, "r");
     if (f == NULL) return 0;
-    int pitch;
+    char word[64];
     int n = 0;
-    while (fscanf(f, "%d", &pitch) == 1) {
-        if (pitch < 0 || pitch > 127) continue;
+    while (fscanf(f, "%63s", word) == 1) {
+        char *end = NULL;
+        long pitch = strtol(word, &end, 10);
+        if (end == word || *end != '\0' || pitch < 0 || pitch > 127) continue;
         counts[pitch % 12] += 1;
         n++;
     }

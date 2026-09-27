@@ -53,7 +53,8 @@ static void search_delay(Run *run) {
             best_energy = dt->energy;
         }
     }
-    if (best >= 0) run->config.delay = best;
+    /* nothing solved: report on a searched delay, not the unsearched one */
+    run->config.delay = best >= 0 ? best : c.delay_min;
 }
 
 bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap) {

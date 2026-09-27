@@ -137,7 +137,8 @@ static void write_score(FILE *f, const Run *run) {
             }
             fprintf(f, "%s{\"start\":%d,\"length\":%d,\"pitch\":%d,\"source\":%d,\"var\":%d,"
                        "\"label\":",
-                    k ? "," : "", n->start, n->length, n->pitch, n->source,
+                    k ? "," : "", n->start, n->length,
+                    n->pitch == SOUND_REST ? -1 : n->pitch, n->source,
                     n->source >= 0 ? m->pitch[n->source] : -1);
             json_string(f, name);
             fprintf(f, "}");

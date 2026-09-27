@@ -166,6 +166,10 @@ static char *parse_string(Parser *p) {
                 }
                 cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
             }
+            if (cp == 0) {
+                fail(p, "\\u0000 in a string");
+                break;
+            }
             ok = buf_utf8(&b, cp);
             break;
         }

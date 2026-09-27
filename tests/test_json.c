@@ -51,6 +51,7 @@ static void test_errors(void) {
     CHECK(strstr(err, "trailing") != NULL);
     CHECK(!json_parse("\"\\q\"", &v, err, sizeof(err)));
     CHECK(!json_parse("\"\\ud800\\u0041\"", &v, err, sizeof(err)));
+    CHECK(!json_parse("{\"length\\u0000junk\": 16}", &v, err, sizeof(err)));
     CHECK(!json_parse("", &v, err, sizeof(err)));
     char deep[200];
     memset(deep, '[', 100);

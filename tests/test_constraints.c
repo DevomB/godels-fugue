@@ -371,6 +371,36 @@ static void test_keys(void) {
     test_close(r);
 }
 
+/* A follower transformed to pitch -1 is out of range, not a rest. */
+static void test_negative_followers(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "invert=1");
+    test_set(&c, "axis=30");
+    test_set(&c, "key=C#");
+    test_set(&c, "length=4");
+    test_set(&c, "cadence=0");
+    TestRun *r = test_open(&c);
+    CHECK(!solver_propagate(&r->state));
+    test_close(r);
+
+    c = test_config();
+    test_set(&c, "transpose=-24");
+    test_set(&c, "range_low=1");
+    test_set(&c, "range_high=30");
+    test_set(&c, "key=B");
+    test_set(&c, "length=4");
+    test_set(&c, "cadence=0");
+    r = test_open(&c);
+    CHECK(solver_propagate(&r->state));
+    int x0 = r->model.pitch[0];
+    CHECK(!has(r, x0, 23));
+    CHECK(removed_by(r, x0, 23) == CID_RANGE);
+    for (int p = 1; p < 128; p++) {
+        if (has(r, x0, p)) CHECK(p - 24 >= 1);
+    }
+    test_close(r);
+}
+
 static void test_lock(void) {
     PieceConfig c = test_config();
     test_set(&c, "lock=1");
@@ -390,6 +420,7 @@ int main(void) {
     test_harmony();
     test_rhythm();
     test_keys();
+    test_negative_followers();
     test_lock();
     printf("ok\n");
     return 0;

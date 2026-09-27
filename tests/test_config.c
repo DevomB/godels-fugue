@@ -1,4 +1,5 @@
 #include "config.h"
+#include "corpus.h"
 #include "theory.h"
 #include "test_util.h"
 
@@ -228,7 +229,98 @@ static void test_reference(void) {
     free(text);
 }
 
+/* Regressions: sharps survive the comment rule, and odd files fail loudly. */
+static void test_file_edges(void) {
+    PieceConfig c;
+    char err[300];
+    test_output_dir();
+
+    write_file("output/tests/sharp.txt", "key F#   # a sharp, then a comment\nkey_second C#\n");
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/sharp.txt", err, sizeof(err)));
+    CHECK(c.key == 6 && c.key_second == 1);
+
+    PieceConfig a;
+    config_defaults(&a);
+    test_set(&a, "key=A#");
+    test_set(&a, "key_second=D#");
+    test_set(&a, "modulate_at=8");
+    FILE *f = fopen("output/tests/sharp_round.txt", "w");
+    CHECK(f != NULL);
+    config_write(f, &a);
+    CHECK(fclose(f) == 0);
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/sharp_round.txt", err, sizeof(err)));
+    CHECK(memcmp(&a, &c, sizeof(a)) == 0);
+
+    char longline[700];
+    memset(longline, ' ', sizeof(longline));
+    memcpy(longline, "seed", 4);
+    memcpy(longline + 600, "1234\n", 6);
+    write_file("output/tests/long.txt", longline);
+    CHECK(!config_load_file(&c, "output/tests/long.txt", err, sizeof(err)));
+    CHECK(strstr(err, "too long") != NULL);
+
+    f = fopen("output/tests/nul.txt", "wb");
+    CHECK(f != NULL);
+    CHECK(fwrite("length 16\n\0voices 3\n", 1, 20, f) == 20);
+    CHECK(fclose(f) == 0);
+    CHECK(!config_load_file(&c, "output/tests/nul.txt", err, sizeof(err)));
+    CHECK(strstr(err, "NUL") != NULL);
+
+    write_file("output/tests/upper.JSON", "\xEF\xBB\xBF{\"voices\": 3}");
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/upper.JSON", err, sizeof(err)));
+    CHECK(c.voices == 3);
+
+    config_defaults(&c);
+    CHECK(!config_set(&c, "pc_weight", longline, err, sizeof(err)));
+}
+
+static void test_validation_edges(void) {
+    PieceConfig c;
+    char err[200];
+    config_defaults(&c);
+    c.cyclic = 1;
+    c.augment = 2;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "cyclic") != NULL);
+    c.augment = 0;
+    c.diminish = 2;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+
+    /* with delay_search, modulate_at must fit the shortest delay tried */
+    config_defaults(&c);
+    c.delay_search = 1;
+    c.delay_min = 10;
+    c.delay_max = 12;
+    c.modulate_at = 20;
+    CHECK(config_validate(&c, err, sizeof(err)));
+    c.delay_min = 1;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+}
+
+static void test_corpus(void) {
+    test_output_dir();
+    write_file("output/tests/corpus.txt", "60 64 # a comment word\n67 60 x 200 -3 64\n");
+    int counts[12] = {0};
+    CHECK(corpus_row_counts("output/tests/corpus.txt", counts) == 5);
+    CHECK(counts[0] == 2 && counts[4] == 2 && counts[7] == 1);
+    int weights[12];
+    corpus_weights_from_counts(counts, 4, weights);
+    CHECK(weights[0] == 0 && weights[4] == 0);
+    CHECK(weights[7] == 2);
+    CHECK(weights[1] == 4);
+    int none[12] = {0};
+    corpus_weights_from_counts(none, 4, weights);
+    CHECK(weights[5] == 0);
+    CHECK(corpus_dir_counts("output/tests/no-such-dir", counts) == 0);
+}
+
 int main(void) {
+    test_file_edges();
+    test_validation_edges();
+    test_corpus();
     test_defaults_and_set();
     test_validation();
     test_presets();

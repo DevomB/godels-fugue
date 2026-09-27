@@ -3,8 +3,11 @@
 
 #include "config.h"
 
-/* Silence in a voice line: before a voice enters, after it ends, or a rest. */
-enum { SOUND_REST = -1 };
+#include <limits.h>
+
+/* Silence in a voice line: before a voice enters, after it ends, or a
+ * rest. No transposition or inversion of a real pitch can produce it. */
+enum { SOUND_REST = INT_MIN };
 
 int canon_voice_delay(const PieceConfig *config, int voice);
 /* Melody index voice `voice` plays at step `time`, or -1 if it is silent. */

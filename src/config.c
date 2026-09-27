@@ -416,6 +416,10 @@ bool config_set(PieceConfig *config, const char *key, const char *value, char *e
     if (def->count == 1) return set_scalar(def, slot, value, err, cap);
 
     char buf[512];
+    if (strlen(value) >= sizeof(buf)) {
+        snprintf(err, cap, "config value for %s is too long", def->name);
+        return false;
+    }
     snprintf(buf, sizeof(buf), "%s", value);
     int n = 0;
     for (char *tok = strtok(buf, ", \t"); tok != NULL; tok = strtok(NULL, ", \t")) {
@@ -517,7 +521,7 @@ static void trim(char *s) {
     if (start > 0) memmove(s, s + start, n - start + 1);
 }
 
-static char *read_file(const char *path) {
+static char *read_file(const char *path, size_t *length) {
     FILE *f = fopen(path, "rb");
     if (f == NULL) return NULL;
     size_t cap = 4096;
@@ -538,7 +542,19 @@ static char *read_file(const char *path) {
     }
     fclose(f);
     if (data != NULL) data[len] = '\0';
+    *length = len;
     return data;
+}
+
+/* A '#' starts a comment at the start of a line or after a space, so a
+ * sharp such as "key F#" is not cut short. */
+static void strip_comment(char *line) {
+    for (char *p = line; *p != '\0'; p++) {
+        if (*p == '#' && (p == line || isspace((unsigned char)p[-1]))) {
+            *p = '\0';
+            return;
+        }
+    }
 }
 
 /* The preset line or member is applied first so the other keys override it. */
@@ -552,13 +568,15 @@ static bool load_text(PieceConfig *config, char *text, const char *path, char *e
             size_t len = next != NULL ? (size_t)(next - cursor) : strlen(cursor);
             char line[512];
             line_no++;
-            if (len >= sizeof(line)) len = sizeof(line) - 1;
+            if (len >= sizeof(line)) {
+                snprintf(err, cap, "%s:%d: line too long", path, line_no);
+                return false;
+            }
             memcpy(line, cursor, len);
             line[len] = '\0';
             cursor = next != NULL ? next + 1 : NULL;
 
-            char *hash = strchr(line, '#');
-            if (hash != NULL) *hash = '\0';
+            strip_comment(line);
             trim(line);
             if (line[0] == '\0') continue;
             char *space = line;
@@ -658,16 +676,35 @@ static bool load_json(PieceConfig *config, const char *text, const char *path,
     return ok;
 }
 
+static bool has_json_extension(const char *path) {
+    size_t n = strlen(path);
+    if (n < 5) return false;
+    const char *ext = path + n - 5;
+    const char *want = ".json";
+    for (int i = 0; i < 5; i++) {
+        if (tolower((unsigned char)ext[i]) != want[i]) return false;
+    }
+    return true;
+}
+
 bool config_load_file(PieceConfig *config, const char *path, char *err, size_t cap) {
-    char *text = read_file(path);
+    size_t length = 0;
+    char *text = read_file(path, &length);
     if (text == NULL) {
         snprintf(err, cap, "cannot read config: %s", path);
         return false;
     }
-    size_t n = strlen(path);
-    bool json = n >= 5 && strcmp(path + n - 5, ".json") == 0;
-    bool ok = json ? load_json(config, text, path, err, cap)
-                   : load_text(config, text, path, err, cap);
+    if (strlen(text) != length) {
+        snprintf(err, cap, "%s: contains a NUL byte", path);
+        free(text);
+        return false;
+    }
+    const char *body = text;
+    if ((unsigned char)body[0] == 0xEF && (unsigned char)body[1] == 0xBB &&
+        (unsigned char)body[2] == 0xBF)
+        body += 3; /* UTF-8 byte order mark */
+    bool ok = has_json_extension(path) ? load_json(config, body, path, err, cap)
+                                       : load_text(config, (char *)body, path, err, cap);
     free(text);
     return ok;
 }
@@ -701,6 +738,10 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap) {
     }
     if (config->augment >= 2 && config->diminish >= 2) {
         snprintf(err, cap, "invalid rhythm transform: augment and diminish together");
+        return false;
+    }
+    if (config->cyclic && (config->augment >= 2 || config->diminish >= 2)) {
+        snprintf(err, cap, "invalid cyclic: a looping canon cannot augment or diminish");
         return false;
     }
     for (const int *m = &config->motif_a; m <= &config->motif_d; m++) {
@@ -744,7 +785,10 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap) {
         snprintf(err, cap, "piece too long: canon spans more than %d steps", SPAN_MAX);
         return false;
     }
-    if (config->modulate_at >= 0 && config->modulate_at >= canon_span_config(config)) {
+    /* the shortest piece is the one at the smallest delay tried */
+    PieceConfig shortest = *config;
+    if (config->delay_search) shortest.delay = config->delay_min;
+    if (config->modulate_at >= 0 && config->modulate_at >= canon_span_config(&shortest)) {
         snprintf(err, cap, "invalid modulate_at: past the end of the piece");
         return false;
     }
