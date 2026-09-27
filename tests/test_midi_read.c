@@ -321,7 +321,7 @@ static void write_padded(const char *path, long size) {
     static const unsigned char note[] = {0,  0x90, 60, 80, 0x83, 0x60, 0x80,
                                          60, 0,    0,  0xFF, 0x2F, 0};
     track(&b, note, sizeof(note));
-    unsigned long pad = (unsigned long)size - b.size - 8;
+    unsigned long pad = (unsigned long)size - (unsigned long)b.size - 8;
     unsigned char head[8] = {'X',
                              'F',
                              'I',

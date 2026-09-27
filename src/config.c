@@ -525,10 +525,10 @@ static bool set_scalar(const KeyDef *def, int *slot, const char *value, char *er
     int low = def->parse != NULL && def->min == TRANSPOSE_SAME ? -24 : def->min;
     if (v < low || v > def->max) {
         if (low != def->min) {
-            char word[16];
-            def->print(def->min, word, sizeof(word));
+            char name[16];
+            def->print(def->min, name, sizeof(name));
             snprintf(err, cap, "config value for %s must be %d..%d or %s: %s", def->name, low,
-                     def->max, word, value);
+                     def->max, name, value);
         } else {
             snprintf(err, cap, "config value for %s must be %d..%d: %s", def->name, def->min,
                      def->max, value);
