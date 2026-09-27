@@ -225,25 +225,26 @@ bool export_wav(const char *path, const int *const *lines, int n_voices,
         return false;
     }
 
-    int cursor = 0;
     const short *table = sample ? wavetable_cycle() : NULL;
-    unsigned phase[4] = {0, 0, 0, 0};
-    unsigned step[4] = {0, 0, 0, 0};
+    unsigned phase[VOICE_MAX] = {0};
+    unsigned step[VOICE_MAX] = {0};
+    double angle[VOICE_MAX] = {0};
+    double angle_step[VOICE_MAX] = {0};
+    int voices = n_voices > VOICE_MAX ? VOICE_MAX : n_voices;
     for (int i = 0; i < length; i++) {
         int units = units_at(durations, i);
         if (units < 1) units = 1;
         int n = units * quarter;
         int rest = durations != NULL && durations[i] <= 0;
-        int voices = n_voices > 3 ? 3 : n_voices;
-        if (sample && !rest) {
-            for (int v = 0; v < voices; v++) {
-                if (lines[v] == NULL || lines[v][i] < 0) {
-                    step[v] = 0;
-                    continue;
-                }
-                double hz = midi_hz(lines[v][i]);
-                step[v] = (unsigned)(hz * 256.0 * 256.0 / (double)rate + 0.5);
+        for (int v = 0; v < voices; v++) {
+            if (lines[v] == NULL || lines[v][i] < 0) {
+                step[v] = 0;
+                angle_step[v] = 0.0;
+                continue;
             }
+            double hz = midi_hz(lines[v][i]);
+            step[v] = (unsigned)(hz * 256.0 * 256.0 / (double)rate + 0.5);
+            angle_step[v] = 2.0 * M_PI * hz / (double)rate;
         }
         for (int s = 0; s < n; s++) {
             int pcm = 0;
@@ -259,11 +260,11 @@ bool export_wav(const char *path, const int *const *lines, int n_voices,
                     }
                     if (nlive > 0) pcm = acc / nlive;
                 } else {
-                    double t = (double)(cursor + s) / (double)rate;
                     double mix = 0.0;
                     for (int v = 0; v < voices; v++) {
-                        if (lines[v] == NULL || lines[v][i] < 0) continue;
-                        mix += sin(2.0 * M_PI * midi_hz(lines[v][i]) * t);
+                        if (angle_step[v] == 0.0) continue;
+                        mix += sin(angle[v]);
+                        angle[v] = fmod(angle[v] + angle_step[v], 2.0 * M_PI);
                     }
                     if (voices > 0) mix /= (double)voices;
                     pcm = (int)(mix * 8000.0);
@@ -276,7 +277,6 @@ bool export_wav(const char *path, const int *const *lines, int n_voices,
                 return false;
             }
         }
-        cursor += n;
     }
 
     return fclose(f) == 0;
