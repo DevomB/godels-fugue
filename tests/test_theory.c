@@ -192,7 +192,38 @@ static void test_transforms_and_costs(void) {
     CHECK(tension_target(11, 12) == 0);
 }
 
+static void check_name(int key, int pitch, const char *want) {
+    char buf[16];
+    key_pitch_name(key, pitch, buf, sizeof(buf));
+    if (strcmp(buf, want) != 0) {
+        fprintf(stderr, "key %d pitch %d: %s, want %s\n", key, pitch, buf, want);
+        exit(1);
+    }
+}
+
+/* Scale notes take the key's letters; others follow the signature. */
+static void test_spelling(void) {
+    check_name(key_id(2, MODE_MINOR), 61, "C#4");  /* leading tone of D minor */
+    check_name(key_id(2, MODE_MINOR), 70, "Bb4");
+    check_name(key_id(7, MODE_MINOR), 66, "F#4");  /* G minor */
+    check_name(key_id(7, MODE_MINOR), 70, "Bb4");
+    check_name(key_id(6, MODE_MAJOR), 65, "E#4");  /* F# major */
+    check_name(key_id(6, MODE_MINOR), 65, "E#4");  /* raised 7th of F# minor */
+    check_name(key_id(1, MODE_MINOR), 60, "B#3");  /* C# minor: sounds C4 */
+    check_name(key_id(5, MODE_MAJOR), 66, "Gb4");  /* chromatic in F major */
+    check_name(key_id(7, MODE_MAJOR), 61, "C#4");  /* chromatic in G major */
+    check_name(key_id(0, MODE_MAJOR), 72, "C5");
+    check_name(key_id(2, MODE_DORIAN), 71, "B4");
+    check_name(-1, 63, "D#4");
+    int letter;
+    int alter;
+    int octave;
+    key_spell(key_id(1, MODE_MINOR), 60, &letter, &alter, &octave);
+    CHECK(letter == 6 && alter == 1 && octave == 3);
+}
+
 int main(void) {
+    test_spelling();
     test_scales();
     test_signatures_and_names();
     test_chords();

@@ -349,6 +349,13 @@ const PIECE = /*PIECE_DATA*/;
   const byId = {};
   for (const v of vars) byId[v.id] = v;
   const melody = vars.filter(function (v) { return v.kind === "pitch"; });
+  /* the melody index where the note containing index i was attacked */
+  const holds = {};
+  for (const v of vars) if (v.kind === "tie" && v.value === 1) holds[v.index] = true;
+  function attackOf(i) {
+    while (i > 0 && holds[i]) i--;
+    return i;
+  }
   function varOfIndex(kind, index) {
     for (const v of vars) if (v.kind === kind && v.index === index) return v;
     return null;
@@ -473,8 +480,11 @@ const PIECE = /*PIECE_DATA*/;
   function markSelection() {
     const v = byId[selected];
     let match = function () { return false; };
-    if (v && (v.kind === "pitch" || v.kind === "tie")) match = function (n) { return n.source === v.index || (v.kind === "tie" && n.source === v.index); };
-    if (v && v.kind === "chord") match = function (n) { return Math.floor(n.start / 4) === v.index; };
+    if (v && (v.kind === "pitch" || v.kind === "tie")) {
+      const attack = attackOf(v.index);
+      match = function (n) { return n.source === attack; };
+    }
+    if (v && v.kind === "chord") match = function (n) { return n.start < 4 * (v.index + 1) && n.start + n.length > 4 * v.index; };
     const any = v && v.kind !== "key";
     for (const n of noteNodes) {
       const hit = match(n);
@@ -525,7 +535,8 @@ const PIECE = /*PIECE_DATA*/;
     if (v.kind === "pitch" && score.length) {
       const heard = [];
       score.forEach(function (voice, i) {
-        for (const n of voice) if (n.source === v.index) heard.push("voice " + (i + 1) + " at step " + n.start);
+        const attack = attackOf(v.index);
+        for (const n of voice) if (n.source === attack) heard.push("voice " + (i + 1) + " in its note at step " + n.start);
       });
       if (heard.length) inspector.appendChild(el("p", { class: "muted" }, "Heard: " + heard.join(", ") + "."));
     }
@@ -582,7 +593,10 @@ const PIECE = /*PIECE_DATA*/;
     }
     const all = el("button", { type: "button" }, "Show its proof events");
     all.addEventListener("click", function () {
-      document.getElementById("f-var").value = v.var;
+      const select = document.getElementById("f-var");
+      if (!Array.from(select.options).some(function (o) { return o.value === v.var; }))
+        select.appendChild(el("option", { value: v.var }, v.var));
+      select.value = v.var;
       renderEvents(true);
       document.getElementById("events").scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
@@ -830,12 +844,12 @@ const PIECE = /*PIECE_DATA*/;
       }
     });
     play.textContent = "Stop";
-    const head = document.getElementById("playhead");
-    const left = Number(roll.dataset.left), stepW = Number(roll.dataset.stepW);
     const total = P.span * beat;
     function tick() {
       const t = audio.currentTime - t0;
       if (t > total + 0.2) { stop(); return; }
+      const head = document.getElementById("playhead");
+      const left = Number(roll.dataset.left), stepW = Number(roll.dataset.stepW);
       if (head && t >= 0) {
         const x = left + (t / beat) * stepW;
         head.setAttribute("x1", x);

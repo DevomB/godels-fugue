@@ -43,7 +43,7 @@ void explain_label(const SolverState *s, int var, int value, char *buf, size_t c
     if (v->kind == VAR_PITCH && value != PITCH_REST) {
         int key = final_key(s, model_section_at(m, v->index));
         if (key >= 0) {
-            pitch_name(value, key_fifths(key) < 0, buf, cap);
+            key_pitch_name(key, value, buf, cap);
             return;
         }
     }

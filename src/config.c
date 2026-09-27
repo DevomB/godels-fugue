@@ -192,7 +192,8 @@ static const KeyDef keys[] = {
      "(major or minor)."},
     {"modulate_at", F(modulate_at), 1, -1, SPAN_MAX, -1, parse_off_word,
      print_off_word, "key",
-     "Step where every voice switches to the second key (off = no modulation)."},
+     "Step (1 or later) where every voice switches to the second key (off = no "
+     "modulation)."},
     {"key_second", F(key_second), 1, -1, 11, -1, parse_second_key_word,
      print_second_key_word, "key",
      "Tonic of the second key, or related to search the closely related keys."},
@@ -787,6 +788,10 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap) {
     }
     /* delay_search skips delays too short to reach modulate_at, so only
      * the longest one tried has to */
+    if (config->modulate_at == 0) {
+        snprintf(err, cap, "invalid modulate_at: 0 would skip the first key; set key instead");
+        return false;
+    }
     if (config->modulate_at >= 0 && config->modulate_at >= canon_span_config(&widest)) {
         snprintf(err, cap, "invalid modulate_at: past the end of the piece");
         return false;

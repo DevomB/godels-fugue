@@ -84,7 +84,7 @@ static void test_musicxml(void) {
     CHECK(export_musicxml("output/tests/score.musicxml", &s));
     char *xml = test_slurp("output/tests/score.musicxml", NULL);
     CHECK(strncmp(xml, "<?xml", 5) == 0);
-    CHECK(strstr(xml, "<fifths>-1</fifths>") != NULL);
+    CHECK(strstr(xml, "<fifths>-1</fifths><mode>major</mode>") != NULL);
     CHECK(strstr(xml, "<fifths>0</fifths>") != NULL); /* the change to C */
     CHECK(strstr(xml, "<duration>3</duration><type>half</type><dot/>") != NULL);
     CHECK(strstr(xml, "<step>B</step><alter>-1</alter>") != NULL);
@@ -96,6 +96,15 @@ static void test_musicxml(void) {
     CHECK(p2 != NULL);
     CHECK(strstr(p2, "<rest/><duration>4</duration><type>whole</type>") != NULL);
     free(xml);
+
+    /* a dorian piece names its mode */
+    Score d = s;
+    d.key[0] = key_id(2, MODE_DORIAN);
+    d.nsections = 1;
+    CHECK(export_musicxml("output/tests/dorian.musicxml", &d));
+    char *dxml = test_slurp("output/tests/dorian.musicxml", NULL);
+    CHECK(strstr(dxml, "<fifths>0</fifths><mode>dorian</mode>") != NULL);
+    free(dxml);
 
     CHECK(export_contour("output/tests/contour.svg", &s));
     char *svg = test_slurp("output/tests/contour.svg", NULL);

@@ -17,19 +17,6 @@ static int key_at(const Score *score, int step) {
     return score->key[0];
 }
 
-/* Step letter, alteration and octave, spelled with flats in flat keys. */
-static void spell(int midi, bool flats, char *step, int *alter, int *octave) {
-    static const char sharp_steps[12] = {'C', 'C', 'D', 'D', 'E', 'F',
-                                         'F', 'G', 'G', 'A', 'A', 'B'};
-    static const char flat_steps[12] = {'C', 'D', 'D', 'E', 'E', 'F',
-                                        'G', 'G', 'A', 'A', 'B', 'B'};
-    static const int sharp_alter[12] = {0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0};
-    static const int flat_alter[12] = {0, -1, 0, -1, 0, 0, -1, 0, -1, 0, -1, 0};
-    int pc = pitch_class(midi);
-    *step = flats ? flat_steps[pc] : sharp_steps[pc];
-    *alter = flats ? flat_alter[pc] : sharp_alter[pc];
-    *octave = midi / 12 - 1;
-}
 
 static const char *note_type(int steps, bool *dotted) {
     *dotted = steps == 3;
@@ -46,10 +33,10 @@ static const char *note_type(int steps, bool *dotted) {
 
 static void write_key(FILE *f, int key) {
     fprintf(f, "<key><fifths>%d</fifths><mode>%s</mode></key>", key_fifths(key),
-            key_mode(key) == MODE_MINOR ? "minor" : "major");
+            mode_name(key_mode(key)));
 }
 
-static void write_segment(FILE *f, int pitch, int steps, bool flats, bool tie_stop,
+static void write_segment(FILE *f, int pitch, int steps, int key, bool tie_stop,
                           bool tie_start) {
     bool dotted;
     const char *type = note_type(steps, &dotted);
@@ -57,11 +44,11 @@ static void write_segment(FILE *f, int pitch, int steps, bool flats, bool tie_st
     if (pitch == SOUND_REST) {
         fprintf(f, "<rest/>");
     } else {
-        char step;
+        int letter;
         int alter;
         int octave;
-        spell(pitch, flats, &step, &alter, &octave);
-        fprintf(f, "<pitch><step>%c</step>", step);
+        key_spell(key, pitch, &letter, &alter, &octave);
+        fprintf(f, "<pitch><step>%c</step>", "CDEFGAB"[letter]);
         if (alter != 0) fprintf(f, "<alter>%d</alter>", alter);
         fprintf(f, "<octave>%d</octave></pitch>", octave);
     }
@@ -150,9 +137,9 @@ bool export_musicxml(const char *path, const Score *score) {
                     stop = score->modulate_at;
                 if (stop > end) stop = end;
                 /* a tied note keeps the spelling of its attack */
-                bool flats = key_fifths(key_at(score, n->start)) < 0;
+                int spelling_key = key_at(score, n->start);
                 bool tied = n->pitch != SOUND_REST;
-                write_segment(f, n->pitch, stop - t, flats, tied && t > n->start,
+                write_segment(f, n->pitch, stop - t, spelling_key, tied && t > n->start,
                               tied && stop < end);
                 t = stop;
             }
@@ -187,7 +174,7 @@ bool export_contour(const char *path, const Score *score) {
     const int width = 640;
     const int height = 240;
     const int pad = 20;
-    double dx = score->span > 1 ? (double)(width - 2 * pad) / (score->span - 1) : 0.0;
+    double dx = (double)(width - 2 * pad) / (score->span > 0 ? score->span : 1);
     double dy = (double)(height - 2 * pad) / (high - low > 0 ? high - low : 1);
     fprintf(f, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\" "
                "viewBox=\"0 0 %d %d\">\n  <title>Pitch contour of every voice</title>\n",
@@ -203,13 +190,14 @@ bool export_contour(const char *path, const Score *score) {
             }
             if (!open) {
                 fprintf(f, "  <polyline fill=\"none\" stroke=\"%s\" stroke-width=\"2\" "
-                           "points=\"",
+                           "stroke-linejoin=\"round\" points=\"",
                         colors[v % VOICE_MAX]);
                 open = true;
             } else {
                 fprintf(f, " ");
             }
-            fprintf(f, "%.1f,%.1f", pad + t * dx, height - pad - (p - low) * dy);
+            double y = height - pad - (p - low) * dy;
+            fprintf(f, "%.1f,%.1f %.1f,%.1f", pad + t * dx, y, pad + (t + 1) * dx, y);
         }
     }
     fprintf(f, "</svg>\n");
@@ -243,8 +231,8 @@ bool export_wav(const char *path, const Score *score, int sample) {
     if (path == NULL || score == NULL) return false;
     const int rate = 44100;
     int tempo = score->tempo > 0 ? score->tempo : 120;
-    long per_step = (long)rate * 60 / tempo;
-    long total = per_step * (score->span > 0 ? score->span : 1);
+    double per_step = (double)rate * 60.0 / tempo;
+    long total = lround(per_step * (score->span > 0 ? score->span : 1));
     float *mix = calloc((size_t)total, sizeof(float));
     if (mix == NULL) return false;
 
@@ -255,8 +243,8 @@ bool export_wav(const char *path, const Score *score, int sample) {
         for (int k = 0; k < score->voice[v].count; k++) {
             const ScoreNote *n = &score->voice[v].notes[k];
             if (n->pitch == SOUND_REST) continue;
-            long start = per_step * n->start;
-            long len = per_step * n->length;
+            long start = lround(per_step * n->start);
+            long len = lround(per_step * (n->start + n->length)) - start;
             double step = midi_hz(n->pitch) / rate;
             for (long i = 0; i < len && start + i < total; i++) {
                 double env = 1.0;

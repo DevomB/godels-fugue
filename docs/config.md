@@ -40,7 +40,7 @@ style preset first, so every other key in the file overrides it.
 | --- | --- | --- | --- |
 | `key` | C | see meaning | Tonic of the key: C, C#, Db ... B, or search to let the solver choose. |
 | `mode` | major | see meaning | major, minor, dorian, phrygian, lydian, mixolydian, locrian, or search (major or minor). |
-| `modulate_at` | off | see meaning | Step where every voice switches to the second key (off = no modulation). |
+| `modulate_at` | off | see meaning | Step (1 or later) where every voice switches to the second key (off = no modulation). |
 | `key_second` | related | see meaning | Tonic of the second key, or related to search the closely related keys. |
 | `mode_second` | auto | see meaning | Mode of the second key, or auto: the first key's mode for a named key_second, major or minor for related. |
 

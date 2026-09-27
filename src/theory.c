@@ -160,6 +160,42 @@ void pitch_name(int pitch, bool flats, char *buf, size_t cap) {
     snprintf(buf, cap, "%s%d", tonic_name(pitch, flats), pitch / 12 - 1);
 }
 
+static int letter_of(char c) {
+    static const char letters[] = "CDEFGAB";
+    const char *p = strchr(letters, c);
+    return p == NULL ? 0 : (int)(p - letters);
+}
+
+void key_spell(int key, int pitch, int *letter, int *alter, int *octave) {
+    static const int natural[7] = {0, 2, 4, 5, 7, 9, 11};
+    int pc = pitch_class(pitch);
+    int l = -1;
+    if (key_valid(key)) {
+        int mode = key_mode(key);
+        int tonic = key_tonic(key);
+        int first = letter_of(tonic_name(tonic, key_fifths(key) < 0)[0]);
+        for (int d = 0; d < 7 && l < 0; d++) {
+            if (pitch_class(tonic + mode_steps[mode][d]) == pc) l = (first + d) % 7;
+        }
+        if (l < 0 && mode == MODE_MINOR && pc == pitch_class(tonic + 11)) l = (first + 6) % 7;
+    }
+    if (l < 0) l = letter_of(tonic_name(pc, key_valid(key) && key_fifths(key) < 0)[0]);
+    int a = ((pc - natural[l]) % 12 + 18) % 12 - 6;
+    *letter = l;
+    *alter = a;
+    *octave = (pitch - a) / 12 - 1;
+}
+
+void key_pitch_name(int key, int pitch, char *buf, size_t cap) {
+    int letter;
+    int alter;
+    int octave;
+    key_spell(key, pitch, &letter, &alter, &octave);
+    const char *accidental = alter == 2 ? "##" : alter == 1 ? "#" : alter == -1 ? "b"
+                                                              : alter == -2 ? "bb" : "";
+    snprintf(buf, cap, "%c%s%d", "CDEFGAB"[letter], accidental, octave);
+}
+
 /* Roman numeral from the triad's quality: upper case for major,
  * lower case for minor, a trailing o for diminished, + for augmented. */
 void degree_name(int key, int degree, char *buf, size_t cap) {

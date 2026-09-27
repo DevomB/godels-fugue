@@ -45,6 +45,12 @@ int parse_mode(const char *name);
 int parse_tonic(const char *name);
 const char *tonic_name(int pc, bool flats);
 void pitch_name(int pitch, bool flats, char *buf, size_t cap);
+/* How a pitch is written in a key: letter 0..6 (C..B), alteration in
+ * semitones, and the written octave (B#3 sounds as C4). Scale notes take
+ * the key's own letters (C# in D minor, E# in F# major); other notes use
+ * sharps in sharp keys and flats in flat keys. key -1 means no key. */
+void key_spell(int key, int pitch, int *letter, int *alter, int *octave);
+void key_pitch_name(int key, int pitch, char *buf, size_t cap);
 
 int is_strong_time(int t, int poly_meter);
 int interval_class(int a, int b);

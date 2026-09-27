@@ -897,10 +897,11 @@ int model_energy(const Model *m, const int *values, int *breakdown) {
     return total;
 }
 
-static bool prefer_flats(const Model *m) {
+/* The configured key when it is fixed, else -1. */
+static int fixed_key(const Model *m) {
     const PieceConfig *c = &m->config;
-    if (c->key < 0 || c->mode < 0) return false;
-    return key_fifths(key_id(c->key, c->mode)) < 0;
+    if (c->key < 0 || c->mode < 0) return -1;
+    return key_id(c->key, c->mode);
 }
 
 void var_label(const Model *m, int var, char *buf, size_t cap) {
@@ -935,7 +936,7 @@ void value_label(const Model *m, int var, int value, char *buf, size_t cap) {
         if (value == PITCH_REST) {
             snprintf(buf, cap, "rest");
         } else {
-            pitch_name(value, prefer_flats(m), buf, cap);
+            key_pitch_name(fixed_key(m), value, buf, cap);
         }
         break;
     case VAR_TIE:

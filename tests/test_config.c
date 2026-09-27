@@ -100,6 +100,8 @@ static void test_validation(void) {
     CHECK(strstr(err, "too long") != NULL);
 
     config_defaults(&c);
+    c.modulate_at = 0;
+    CHECK(!config_validate(&c, err, sizeof(err)));
     c.modulate_at = 16;
     CHECK(!config_validate(&c, err, sizeof(err)));
     c.modulate_at = 15;

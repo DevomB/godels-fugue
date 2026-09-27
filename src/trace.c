@@ -133,7 +133,7 @@ static void write_score(FILE *f, const Run *run) {
             char name[16] = "rest";
             if (n->pitch != SOUND_REST) {
                 int key = score->key[score->nsections > 1 && n->start >= score->modulate_at];
-                pitch_name(n->pitch, key_fifths(key) < 0, name, sizeof(name));
+                key_pitch_name(key, n->pitch, name, sizeof(name));
             }
             fprintf(f, "%s{\"start\":%d,\"length\":%d,\"pitch\":%d,\"source\":%d,\"var\":%d,"
                        "\"label\":",
