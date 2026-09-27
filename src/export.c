@@ -68,8 +68,22 @@ bool export_musicxml(const char *path, const int *const *lines, int n_voices,
             fclose(f);
             return false;
         }
+        int measure = 1;
+        int filled = 0;
         for (int i = 0; i < length; i++) {
             int units = units_at(durations, i);
+            /* ponytail: a half note on beat 4 overfills its bar; tie across
+             * the barline once half notes reach export. */
+            if (filled >= 4) {
+                measure++;
+                filled = 0;
+                if (fprintf(f, "    </measure>\n    <measure number=\"%d\">\n",
+                            measure) < 0) {
+                    fclose(f);
+                    return false;
+                }
+            }
+            filled += units <= 0 ? 1 : units;
             if (units <= 0 || lines[v][i] < 0) {
                 if (fprintf(f,
                             "      <note><rest/><duration>1</duration>"

@@ -178,6 +178,8 @@ int main(void) {
         CHECK(c4 != NULL);
         CHECK(strstr(c4 + 1, "<step>C</step><octave>4</octave>") != NULL);
         CHECK(strstr(p2, "<step>E</step>") != NULL);
+        CHECK(strstr(p2, "<measure number=\"3\">") != NULL);
+        CHECK(strstr(p2, "<measure number=\"4\">") == NULL);
         free(buf);
     }
 
