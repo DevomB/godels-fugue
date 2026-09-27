@@ -5,12 +5,30 @@ static uint64_t bit_mask(int pitch) {
 }
 
 static int popcount(uint64_t word) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_popcountll(word);
+#else
     int count = 0;
     while (word != 0) {
         word &= word - 1;
         count++;
     }
     return count;
+#endif
+}
+
+/* word must be nonzero */
+static int lowest_bit(uint64_t word) {
+#if defined(__GNUC__) || defined(__clang__)
+    return __builtin_ctzll(word);
+#else
+    int bit = 0;
+    while ((word & 1) == 0) {
+        word >>= 1;
+        bit++;
+    }
+    return bit;
+#endif
 }
 
 void domain_clear(MidiDomain *d) {
@@ -51,8 +69,10 @@ bool domain_singleton(const MidiDomain *d) {
 /* Next legal pitch that is >= n, or -1 if none remain. */
 int domain_next(const MidiDomain *d, int n) {
     if (n < 0) n = 0;
-    for (int pitch = n; pitch <= 127; pitch++) {
-        if (domain_contains(d, pitch)) return pitch;
+    for (int w = n >> 6; w < 2; w++) {
+        uint64_t word = d->bits[w];
+        if (w == n >> 6) word &= ~(uint64_t)0 << (n & 63);
+        if (word != 0) return w * 64 + lowest_bit(word);
     }
     return -1;
 }

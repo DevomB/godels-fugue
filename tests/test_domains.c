@@ -103,6 +103,17 @@ int main(void) {
     CHECK(domain_next(&d, 64) == 64);
     CHECK(domain_next(&d, 65) == -1);
 
+    domain_clear(&d);
+    domain_add(&d, 3);
+    domain_add(&d, 63);
+    domain_add(&d, 127);
+    CHECK(domain_next(&d, -5) == 3);
+    CHECK(domain_next(&d, 4) == 63);
+    CHECK(domain_next(&d, 64) == 127);
+    CHECK(domain_next(&d, 127) == 127);
+    CHECK(domain_next(&d, 128) == -1);
+    CHECK(domain_count(&d) == 3);
+
     printf("ok\n");
     return 0;
 }
