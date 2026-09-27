@@ -1,16 +1,7 @@
+# Heavier vertical costs: weak-beat dissonances and similar motion into
+# fifths and octaves are discouraged, not forbidden.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
-energy 1
-temperature 0
-seed 1
-w_gravity 1
-w_leap 1
-w_curve 3
 w_dissonance 4
-w_parallel 2
+w_parallel 4

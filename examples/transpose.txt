@@ -1,10 +1,8 @@
+# A canon at the fifth: the follower sounds seven semitones higher, so
+# the melody avoids B (which would sound F#, outside C major).
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
-retrograde 0
+range_low 55
+range_high 79
 transpose 7

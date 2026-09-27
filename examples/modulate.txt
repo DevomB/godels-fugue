@@ -1,13 +1,12 @@
+# Modulation at step 4: every voice switches key at the same moment, so
+# melody notes heard on both sides of the change must suit both keys.
+# key_second related lets the solver pick among the closely related
+# keys; the locked F#4 at index 6 leaves G major or E minor.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
 modulate_at 4
-key_second 0
+key_second related
 lock 1
 lock_index 6
 lock_pitch 66

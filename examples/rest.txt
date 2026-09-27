@@ -1,10 +1,7 @@
+# Rhythm with a forced rest at melody index 3. The solver may add ties
+# (half notes) and at most one more rest.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
 rhythm 1
 rest_at 3

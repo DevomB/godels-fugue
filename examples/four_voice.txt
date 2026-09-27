@@ -1,0 +1,7 @@
+# Four voices at a delay of three steps, so entries land off the beat.
+length 16
+voices 4
+delay 3
+range_low 48
+range_high 79
+max_leap 9

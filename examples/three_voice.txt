@@ -1,9 +1,7 @@
+# Three voices entering four steps apart. Every strong beat must be
+# consonant across all three, and a fourth only counts against the bass.
 length 12
 voices 3
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
-retrograde 0
+range_low 55
+range_high 76

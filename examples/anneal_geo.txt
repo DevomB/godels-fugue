@@ -1,16 +1,8 @@
+# Geometric cooling: the temperature starts at 8 and is multiplied by
+# 0.75 after each decision.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
-energy 1
-temperature 0
 seed 5
-w_gravity 1
-w_leap 1
-w_curve 3
 anneal_start 8
 anneal_ratio 75

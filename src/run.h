@@ -1,0 +1,37 @@
+#ifndef RUN_H
+#define RUN_H
+
+#include "score.h"
+#include "solver.h"
+
+typedef struct DelayTrial {
+    int delay;
+    SolveStatus status;
+    int energy;
+    long nodes;
+} DelayTrial;
+
+/* Everything one invocation computes. Large; allocate on the heap. */
+typedef struct Run {
+    PieceConfig config;
+    Model model;
+    SolverState state;
+    SolveStatus status;
+    int values[VAR_MAX]; /* final value per variable, -1 if open */
+    int energy;
+    int breakdown[TERM_COUNT];
+    Score score;
+    int core[CID_MAX];
+    int core_n;
+    bool core_approximate;
+    DelayTrial delays[SPAN_MAX];
+    int ndelays;
+    bool counterfactual; /* the config locks a note */
+    SolveStatus unlocked_status;
+    int unlocked_pitch[MELODY_MAX];
+} Run;
+
+bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap);
+void run_free(Run *run);
+
+#endif

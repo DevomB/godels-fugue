@@ -1,800 +1,261 @@
-#include "canon.h"
-#include "constraint.h"
-#include "export.h"
-#include "midi.h"
+#include "config.h"
+#include "corpus.h"
+#include "explain.h"
+#include "output.h"
+#include "run.h"
 #include "sat.h"
-#include "solver.h"
 #include "theory.h"
-#include "types.h"
 
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#endif
+#define CANON_COLLAPSE_VERSION "0.2.0"
 
-static int sibling_path(char *out, size_t cap, const char *base, const char *name)
-{
-    const char *slash = strrchr(base, '/');
-    const char *bslash = strrchr(base, '\\');
-    const char *sep = slash;
-    if (bslash != NULL && (sep == NULL || bslash > sep)) {
-        sep = bslash;
-    }
-    if (sep == NULL) {
-        if (strlen(name) + 1 > cap) {
-            return 0;
-        }
-        memcpy(out, name, strlen(name) + 1);
-        return 1;
-    }
-    size_t n = (size_t)(sep - base + 1);
-    size_t m = strlen(name);
-    if (n + m + 1 > cap) {
-        return 0;
-    }
-    memcpy(out, base, n);
-    memcpy(out + n, name, m + 1);
-    return 1;
+enum { EXIT_UNSAT = 1, EXIT_TOO_LARGE = 2, EXIT_LIMIT = 3, SETS_MAX = 64 };
+
+static void usage(FILE *f) {
+    fprintf(f,
+            "usage: canon-collapse [options]\n"
+            "\n"
+            "  --config FILE        load keys from FILE (\"key value\" lines, or JSON if\n"
+            "                       the name ends in .json)\n"
+            "  --preset NAME        apply a style preset before the config file\n"
+            "  --set KEY=VALUE      override one key after the config file (repeatable)\n"
+            "  --lock INDEX PITCH   fix melody note INDEX to MIDI PITCH\n"
+            "  --explain VAR        print why a variable has its value: a melody index\n"
+            "                       such as 5, or x5, tie5, chord2, key, key2\n"
+            "  --out FILE           MIDI path; the other score files go beside it\n"
+            "                       (default output/canon.mid)\n"
+            "  --proof FILE         proof trace path (default output/proof.txt)\n"
+            "  --entropy FILE       entropy log path (default output/entropy.txt)\n"
+            "  --corpus DIR         suggest pitch-class weights from files of MIDI pitches\n"
+            "  --apply-weights      use the suggested corpus weights\n"
+            "  --sat                check the rules with the SAT backend instead\n"
+            "  --max-nodes N        give up after N search nodes (0 = no limit)\n"
+            "  --time-limit MS      give up after MS milliseconds (0 = no limit)\n"
+            "  --list-config        print every config key (--markdown for a table)\n"
+            "  --list-presets       print the style presets\n"
+            "  --version            print the version\n"
+            "\n"
+            "Exit status: 0 solved, 1 unsatisfiable or bad input, 2 too large for\n"
+            "--sat, 3 search limit reached.\n");
 }
 
-static void ensure_parent_dir(const char *path)
-{
-    const char *slash = strrchr(path, '/');
-    const char *bslash = strrchr(path, '\\');
-    const char *sep = slash;
-    if (bslash != NULL && (sep == NULL || bslash > sep)) {
-        sep = bslash;
+static int find_var(const Model *m, const char *name) {
+    char *end = NULL;
+    long index = strtol(name, &end, 10);
+    if (end != name && *end == '\0') {
+        return index >= 0 && index < m->config.length ? m->pitch[index] : -1;
     }
-    if (sep == NULL || sep == path) {
-        return;
+    for (int v = 0; v < m->nvars; v++) {
+        char label[16];
+        var_label(m, v, label, sizeof(label));
+        if (strcmp(label, name) == 0) return v;
     }
-
-    size_t n = (size_t)(sep - path);
-    char buf[512];
-    if (n >= sizeof(buf)) {
-        return;
-    }
-    memcpy(buf, path, n);
-    buf[n] = '\0';
-
-#ifdef _WIN32
-    if (_mkdir(buf) != 0 && errno != EEXIST) {
-        /* ignore other errors; writers report failure */
-    }
-#else
-    if (mkdir(buf, 0755) != 0 && errno != EEXIST) {
-        /* ignore other errors; writers report failure */
-    }
-#endif
+    return -1;
 }
 
-static int load_config(const char *path, PieceConfig *config)
-{
-    FILE *f = fopen(path, "r");
-    if (f == NULL) {
-        fprintf(stderr, "cannot read config\n");
-        return 0;
+static int run_sat(const PieceConfig *config) {
+    Model m;
+    char err[200];
+    if (!model_build(&m, config, err, sizeof(err))) {
+        fprintf(stderr, "%s\n", err);
+        return EXIT_UNSAT;
     }
-
-    char key[64];
-    int value;
-    int read;
-    while ((read = fscanf(f, "%63s %d", key, &value)) == 2) {
-        if (strcmp(key, "length") == 0) {
-            config->length = value;
-        } else if (strcmp(key, "voices") == 0) {
-            config->voices = value;
-        } else if (strcmp(key, "delay") == 0) {
-            config->delay = value;
-        } else if (strcmp(key, "range_low") == 0) {
-            config->range_low = value;
-        } else if (strcmp(key, "range_high") == 0) {
-            config->range_high = value;
-        } else if (strcmp(key, "max_leap") == 0) {
-            config->max_leap = value;
-        } else if (strcmp(key, "invert") == 0) {
-            config->invert = value;
-        } else if (strcmp(key, "invert_mod12") == 0) {
-            config->invert_mod12 = value;
-        } else if (strcmp(key, "axis") == 0) {
-            config->axis = value;
-        } else if (strcmp(key, "retrograde") == 0) {
-            config->retrograde = value;
-        } else if (strcmp(key, "energy") == 0) {
-            config->energy = value;
-        } else if (strcmp(key, "temperature") == 0) {
-            config->temperature = value;
-        } else if (strcmp(key, "seed") == 0) {
-            config->seed = value;
-        } else if (strcmp(key, "w_gravity") == 0) {
-            config->w_gravity = value;
-        } else if (strcmp(key, "w_leap") == 0) {
-            config->w_leap = value;
-        } else if (strcmp(key, "w_curve") == 0) {
-            config->w_curve = value;
-        } else if (strcmp(key, "transpose") == 0) {
-            config->transpose = value;
-        } else if (strcmp(key, "augment") == 0) {
-            config->augment = value;
-        } else if (strcmp(key, "diminish") == 0) {
-            config->diminish = value;
-        } else if (strcmp(key, "phase") == 0) {
-            config->phase = value;
-        } else if (strcmp(key, "delay_1") == 0) {
-            config->voice_delay[1] = value;
-        } else if (strcmp(key, "delay_2") == 0) {
-            config->voice_delay[2] = value;
-        } else if (strcmp(key, "delay_3") == 0) {
-            config->voice_delay[3] = value;
-        } else if (strcmp(key, "lock") == 0) {
-            config->lock = value;
-        } else if (strcmp(key, "lock_index") == 0) {
-            config->lock_index = value;
-        } else if (strcmp(key, "lock_pitch") == 0) {
-            config->lock_pitch = value;
-        } else if (strcmp(key, "anneal_start") == 0) {
-            config->anneal_start = value;
-        } else if (strcmp(key, "anneal_end") == 0) {
-            config->anneal_end = value;
-        } else if (strcmp(key, "anneal_steps") == 0) {
-            config->anneal_steps = value;
-        } else if (strcmp(key, "anneal_ratio") == 0) {
-            config->anneal_ratio = value;
-        } else if (strcmp(key, "w_dissonance") == 0) {
-            config->w_dissonance = value;
-        } else if (strcmp(key, "w_parallel") == 0) {
-            config->w_parallel = value;
-        } else if (strcmp(key, "strong_chord") == 0) {
-            config->strong_chord = value;
-        } else if (strcmp(key, "cadence") == 0) {
-            config->cadence = value;
-        } else if (strcmp(key, "rhythm") == 0) {
-            config->rhythm = value;
-        } else if (strcmp(key, "rest_at") == 0) {
-            config->rest_at = value;
-        } else if (strcmp(key, "cyclic") == 0) {
-            config->cyclic = value;
-        } else if (strcmp(key, "w_motif") == 0) {
-            config->w_motif = value;
-        } else if (strcmp(key, "motif_a") == 0) {
-            config->motif_a = value;
-        } else if (strcmp(key, "motif_b") == 0) {
-            config->motif_b = value;
-        } else if (strcmp(key, "motif_c") == 0) {
-            config->motif_c = value;
-        } else if (strcmp(key, "motif_d") == 0) {
-            config->motif_d = value;
-        } else if (strcmp(key, "modulate_at") == 0) {
-            config->modulate_at = value;
-        } else if (strcmp(key, "key_second") == 0) {
-            config->key_second = value;
-        } else if (strcmp(key, "w_modulate") == 0) {
-            config->w_modulate = value;
-        } else if (strcmp(key, "poly_meter") == 0) {
-            config->poly_meter = value;
-        } else if (strcmp(key, "sample") == 0) {
-            config->sample = value;
-        } else {
-            fprintf(stderr, "unknown config key: %s\n", key);
-            fclose(f);
-            return 0;
-        }
-    }
-
-    fclose(f);
-    if (read != EOF) {
-        fprintf(stderr, "config value for %s is not an integer\n", key);
-        return 0;
-    }
-    return 1;
-}
-
-static int validate_config(const PieceConfig *config)
-{
-    if (config->voices < 2 || config->voices > VOICE_MAX) {
-        fprintf(stderr, "invalid voices\n");
-        return 0;
-    }
-    if (config->length < 1 || config->length > MELODY_MAX) {
-        fprintf(stderr, "invalid length\n");
-        return 0;
-    }
-    if (config->delay < 0) {
-        fprintf(stderr, "invalid delay\n");
-        return 0;
-    }
-    if (config->range_low < 0 || config->range_low > 127 ||
-        config->range_high < 0 || config->range_high > 127 ||
-        config->range_low > config->range_high) {
-        fprintf(stderr, "invalid range\n");
-        return 0;
-    }
-    if (config->max_leap < 0) {
-        fprintf(stderr, "invalid max_leap\n");
-        return 0;
-    }
-    if (config->invert != 0 && config->invert != 1) {
-        fprintf(stderr, "invalid invert\n");
-        return 0;
-    }
-    if (config->invert_mod12 != 0 && config->invert_mod12 != 1) {
-        fprintf(stderr, "invalid invert_mod12\n");
-        return 0;
-    }
-    if (config->invert == 1 && (config->axis < 0 || config->axis > 127)) {
-        fprintf(stderr, "invalid axis\n");
-        return 0;
-    }
-    if (config->retrograde != 0 && config->retrograde != 1) {
-        fprintf(stderr, "invalid retrograde\n");
-        return 0;
-    }
-    if (config->energy != 0 && config->energy != 1) {
-        fprintf(stderr, "invalid energy\n");
-        return 0;
-    }
-    if (config->temperature < 0) {
-        fprintf(stderr, "invalid temperature\n");
-        return 0;
-    }
-    if (config->w_gravity < 0 || config->w_leap < 0 || config->w_curve < 0 ||
-        config->w_dissonance < 0 || config->w_parallel < 0) {
-        fprintf(stderr, "invalid weight\n");
-        return 0;
-    }
-    if (config->augment < 0 || (config->augment == 1)) {
-        fprintf(stderr, "invalid augment\n");
-        return 0;
-    }
-    if (config->diminish < 0 || config->diminish == 1) {
-        fprintf(stderr, "invalid diminish\n");
-        return 0;
-    }
-    if (config->augment >= 2 && config->diminish >= 2) {
-        fprintf(stderr, "invalid rhythm transform\n");
-        return 0;
-    }
-    if (config->phase < 0) {
-        fprintf(stderr, "invalid phase\n");
-        return 0;
-    }
-    for (int v = 0; v < VOICE_MAX; v++) {
-        if (config->voice_delay[v] < 0) {
-            fprintf(stderr, "invalid delay\n");
-            return 0;
-        }
-    }
-    if (config->lock != 0 && config->lock != 1) {
-        fprintf(stderr, "invalid lock\n");
-        return 0;
-    }
-    if (config->lock == 1 &&
-        (config->lock_index < 0 || config->lock_index >= config->length ||
-         config->lock_pitch < 0 || config->lock_pitch > 127)) {
-        fprintf(stderr, "invalid lock\n");
-        return 0;
-    }
-    if (config->strong_chord != 0 && config->strong_chord != 1) {
-        fprintf(stderr, "invalid strong_chord\n");
-        return 0;
-    }
-    if (config->cadence != 0 && config->cadence != 1) {
-        fprintf(stderr, "invalid cadence\n");
-        return 0;
-    }
-    if (config->rhythm != 0 && config->rhythm != 1) {
-        fprintf(stderr, "invalid rhythm\n");
-        return 0;
-    }
-    if (config->rest_at < -1 ||
-        (config->rest_at >= 0 && config->rest_at >= config->length)) {
-        fprintf(stderr, "invalid rest_at\n");
-        return 0;
-    }
-    if (config->rest_at >= 0 && config->rhythm == 0) {
-        fprintf(stderr, "rest_at requires rhythm\n");
-        return 0;
-    }
-    if (config->cyclic != 0 && config->cyclic != 1) {
-        fprintf(stderr, "invalid cyclic\n");
-        return 0;
-    }
-    if (config->w_motif < 0) {
-        fprintf(stderr, "invalid w_motif\n");
-        return 0;
-    }
-    if (config->modulate_at < -1 ||
-        (config->modulate_at >= 0 && config->modulate_at >= config->length)) {
-        fprintf(stderr, "invalid modulate_at\n");
-        return 0;
-    }
-    if (config->key_second < 0) {
-        fprintf(stderr, "invalid key_second\n");
-        return 0;
-    }
-    if (config->w_modulate < 0) {
-        fprintf(stderr, "invalid w_modulate\n");
-        return 0;
-    }
-    if (config->poly_meter != 0 && config->poly_meter != 1) {
-        fprintf(stderr, "invalid poly_meter\n");
-        return 0;
-    }
-    if (config->sample != 0 && config->sample != 1) {
-        fprintf(stderr, "invalid sample\n");
-        return 0;
-    }
-    if (config->anneal_steps < 0 || config->anneal_start < 0 ||
-        config->anneal_end < 0 || config->anneal_ratio < 0 ||
-        config->anneal_ratio > 99) {
-        fprintf(stderr, "invalid anneal\n");
-        return 0;
-    }
-    if (canon_span_config(config) > SPAN_MAX) {
-        fprintf(stderr, "piece too long: canon spans more than %d steps\n",
-                SPAN_MAX);
-        return 0;
-    }
-    return 1;
-}
-
-static int write_entropy(const ProofLog *log, const char *path)
-{
-    FILE *f = fopen(path, "w");
-    if (f == NULL) {
-        return 0;
-    }
-    for (int i = 0; i < log->sample_count; i++) {
-        if (fprintf(f, "%.6f\n", log->samples[i].bits) < 0) {
-            fclose(f);
-            return 0;
-        }
-    }
-    if (fclose(f) != 0) {
-        return 0;
-    }
-    return 1;
-}
-
-static int fill_voice_line(int *line, int cap, const int *melody,
-                           const int *durations, int voice,
-                           const PieceConfig *config)
-{
-    int span = canon_span_config(config);
-    if (span > cap) {
-        return -1;
-    }
-    for (int t = 0; t < span; t++) {
-        int idx = canon_map_source(config, voice, t);
-        if (idx < 0 || (durations != NULL && durations[idx] <= 0)) {
-            line[t] = -1;
-        } else {
-            line[t] = canon_sounding(config, voice, melody[idx]);
-        }
-    }
-    return span;
-}
-
-static void print_success(const int *melody, const PieceConfig *config, int backtracks,
-                          const SolverState *state)
-{
-    int length = config->length;
-    printf("melody:");
-    for (int i = 0; i < length; i++) {
-        printf(" %d", melody[i]);
-    }
-    printf("\n");
-
-    int span = canon_span_config(config);
-    for (int v = 1; v < config->voices; v++) {
-        printf("voice %d:", v + 1);
-        for (int t = 0; t < span; t++) {
-            int idx = canon_map_source(config, v, t);
-            if (idx < 0) {
-                printf(" rest");
-            } else {
-                printf(" %d", canon_sounding(config, v, melody[idx]));
-            }
-        }
-        printf("\n");
-    }
-
-    if (config->rhythm) {
-        printf("rhythm:");
-        for (int i = 0; i < length; i++) {
-            if (state->duration[i] == 0) {
-                printf(" rest");
-            } else if (state->duration[i] == 2) {
-                printf(" half");
-            } else {
-                printf(" 1");
-            }
-        }
-        printf("\n");
-    }
-
-    printf("backtracks: %d\n", backtracks);
-    printf("entropy: %.6f\n", entropy_bits(state->domains, length));
-}
-
-static void print_unsat(const SolverState *state)
-{
-    fprintf(stderr, "unsat: variable %d\n", state->failed_variable);
-    if (state->proof.event_count > 0) {
-        const ProofEvent *e = &state->proof.events[state->proof.event_count - 1];
-        fprintf(stderr, "last removal: variable %d pitch %d %s\n",
-                e->variable_id, e->removed_pitch, e->message);
-    }
-}
-
-/* Compare the locked run against the same rules with the lock lifted. */
-static void print_counterfactual(const PieceConfig *config,
-                                 const SolverState *locked, bool locked_ok,
-                                 const int *melody)
-{
-    PieceConfig unlocked_config = *config;
-    unlocked_config.lock = 0;
-    SolverState unlocked = {0};
-    int unlocked_melody[MELODY_MAX];
-    solver_init(&unlocked, &unlocked_config);
-    bool unlocked_ok = solve(&unlocked, unlocked_melody, NULL);
-
-    printf("counterfactual: index %d pitch %d\n", config->lock_index,
-           config->lock_pitch);
-    if (!unlocked_ok) {
-        printf("unsat without the lock\n");
-    } else if (!locked_ok) {
-        const char *msg = "unsat";
-        if (locked->proof.event_count > 0) {
-            msg = locked->proof.events[locked->proof.event_count - 1].message;
-        }
-        printf("killed: %s\n", msg);
+    int values[VAR_MAX];
+    int rc = sat_solve(&m, values, config->max_nodes);
+    int exit_code = 0;
+    if (rc == SAT_TOO_LARGE) {
+        fprintf(stderr, "sat: too large\n");
+        exit_code = EXIT_TOO_LARGE;
+    } else if (rc == SAT_LIMIT) {
+        fprintf(stderr, "sat: decision limit reached\n");
+        exit_code = EXIT_LIMIT;
+    } else if (rc == SAT_UNSAT) {
+        printf("unsat\n");
+        exit_code = EXIT_UNSAT;
     } else {
-        int changed = 0;
-        printf("changed:");
+        printf("melody:");
         for (int i = 0; i < config->length; i++) {
-            if (melody[i] != unlocked_melody[i]) {
-                printf(" %d", i);
-                changed++;
+            int p = values[m.pitch[i]];
+            if (p == PITCH_REST) {
+                printf(" rest");
+            } else {
+                printf(" %d", p);
             }
         }
-        printf(changed == 0 ? " none\n" : "\n");
+        printf("\n");
     }
-    solver_free(&unlocked);
+    model_free(&m);
+    return exit_code;
 }
 
-int main(int argc, char **argv)
-{
-    PieceConfig config = {
-        .length = 12,
-        .voices = 2,
-        .delay = 4,
-        .range_low = 60,
-        .range_high = 72,
-        .max_leap = 7,
-        .invert = 0,
-        .invert_mod12 = 0,
-        .axis = 67,
-        .retrograde = 0,
-        .energy = 0,
-        .temperature = 0,
-        .seed = 1,
-        .w_gravity = 0,
-        .w_leap = 0,
-        .w_curve = 0,
-        .transpose = 0,
-        .augment = 0,
-        .diminish = 0,
-        .phase = 0,
-        .voice_delay = {0},
-        .lock = 0,
-        .lock_index = 0,
-        .lock_pitch = 0,
-        .anneal_start = 0,
-        .anneal_end = 0,
-        .anneal_steps = 0,
-        .anneal_ratio = 0,
-        .w_dissonance = 0,
-        .w_parallel = 0,
-        .strong_chord = 0,
-        .cadence = 0,
-        .rhythm = 0,
-        .rest_at = -1,
-        .cyclic = 0,
-        .w_motif = 0,
-        .motif_a = 0,
-        .motif_b = 0,
-        .motif_c = -128,
-        .motif_d = -128,
-        .modulate_at = -1,
-        .key_second = 0,
-        .w_modulate = 0,
-        .poly_meter = 0,
-        .pc_weight = {0},
-        .sample = 0,
-    };
+static bool need_value(int i, int argc, int count, const char *flag) {
+    if (i + count < argc) return true;
+    fprintf(stderr, "missing value for %s\n", flag);
+    return false;
+}
 
+int main(int argc, char **argv) {
+    PieceConfig config;
+    config_defaults(&config);
     const char *config_path = NULL;
-    const char *out_path = "output/canon.mid";
-    const char *proof_path = "output/proof.txt";
-    const char *entropy_path = "output/entropy.txt";
+    const char *preset = NULL;
+    const char *sets[SETS_MAX];
+    int nsets = 0;
+    OutputPaths paths = {"output/canon.mid", "output/proof.txt", "output/entropy.txt"};
     const char *corpus_dir = NULL;
-    int apply_weights = 0;
-    int sat_mode = 0;
-    int cli_lock = 0;
-    int cli_lock_index = 0;
-    int cli_lock_pitch = 0;
+    const char *explain = NULL;
+    const char *lock_index = NULL;
+    const char *lock_pitch = NULL;
+    const char *max_nodes = NULL;
+    const char *time_limit = NULL;
+    bool apply_weights = false;
+    bool sat_mode = false;
+    bool markdown = false;
+    bool list_config = false;
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--config") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "missing value\n");
-                return 1;
-            }
-            config_path = argv[++i];
-        } else if (strcmp(argv[i], "--out") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "missing value\n");
-                return 1;
-            }
-            out_path = argv[++i];
-        } else if (strcmp(argv[i], "--proof") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "missing value\n");
-                return 1;
-            }
-            proof_path = argv[++i];
-        } else if (strcmp(argv[i], "--entropy") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "missing value\n");
-                return 1;
-            }
-            entropy_path = argv[++i];
-        } else if (strcmp(argv[i], "--corpus") == 0) {
-            if (i + 1 >= argc) {
-                fprintf(stderr, "missing value\n");
-                return 1;
-            }
-            corpus_dir = argv[++i];
-        } else if (strcmp(argv[i], "--apply-weights") == 0) {
-            apply_weights = 1;
-        } else if (strcmp(argv[i], "--sat") == 0) {
-            sat_mode = 1;
-        } else if (strcmp(argv[i], "--lock") == 0) {
-            if (i + 2 >= argc) {
-                fprintf(stderr, "missing value\n");
-                return 1;
-            }
-            cli_lock = 1;
-            cli_lock_index = atoi(argv[++i]);
-            cli_lock_pitch = atoi(argv[++i]);
+        const char *a = argv[i];
+        if (strcmp(a, "--help") == 0 || strcmp(a, "-h") == 0) {
+            usage(stdout);
+            return 0;
+        } else if (strcmp(a, "--version") == 0) {
+            printf("canon-collapse %s\n", CANON_COLLAPSE_VERSION);
+            return 0;
+        } else if (strcmp(a, "--list-presets") == 0) {
+            config_print_presets(stdout);
+            return 0;
+        } else if (strcmp(a, "--list-config") == 0) {
+            list_config = true;
+        } else if (strcmp(a, "--markdown") == 0) {
+            markdown = true;
+        } else if (strcmp(a, "--apply-weights") == 0) {
+            apply_weights = true;
+        } else if (strcmp(a, "--sat") == 0) {
+            sat_mode = true;
+        } else if (strcmp(a, "--lock") == 0) {
+            if (!need_value(i, argc, 2, a)) return EXIT_UNSAT;
+            lock_index = argv[++i];
+            lock_pitch = argv[++i];
         } else {
-            fprintf(stderr, "unknown argument: %s\n", argv[i]);
-            return 1;
+            const char **slot = NULL;
+            if (strcmp(a, "--config") == 0) slot = &config_path;
+            if (strcmp(a, "--preset") == 0) slot = &preset;
+            if (strcmp(a, "--out") == 0) slot = &paths.midi;
+            if (strcmp(a, "--proof") == 0) slot = &paths.proof;
+            if (strcmp(a, "--entropy") == 0) slot = &paths.entropy;
+            if (strcmp(a, "--corpus") == 0) slot = &corpus_dir;
+            if (strcmp(a, "--explain") == 0) slot = &explain;
+            if (strcmp(a, "--max-nodes") == 0) slot = &max_nodes;
+            if (strcmp(a, "--time-limit") == 0) slot = &time_limit;
+            if (strcmp(a, "--set") == 0) {
+                if (nsets >= SETS_MAX) {
+                    fprintf(stderr, "too many --set options\n");
+                    return EXIT_UNSAT;
+                }
+                slot = &sets[nsets++];
+            }
+            if (slot == NULL) {
+                fprintf(stderr, "unknown argument: %s\n", a);
+                usage(stderr);
+                return EXIT_UNSAT;
+            }
+            if (!need_value(i, argc, 1, a)) return EXIT_UNSAT;
+            *slot = argv[++i];
         }
     }
-
-    if (config_path != NULL && !load_config(config_path, &config)) {
-        return 1;
-    }
-    if (cli_lock) {
-        config.lock = 1;
-        config.lock_index = cli_lock_index;
-        config.lock_pitch = cli_lock_pitch;
-    }
-    if (!validate_config(&config)) {
-        return 1;
-    }
-    if (corpus_dir != NULL) {
-        int suggested[12];
-        if (!corpus_dir_weights(corpus_dir, suggested)) {
-            fprintf(stderr, "cannot read corpus\n");
-            return 1;
-        }
-        printf("weights:");
-        for (int p = 0; p < 12; p++) {
-            printf(" %d", suggested[p]);
-        }
-        printf("\n");
-        if (apply_weights) {
-            memcpy(config.pc_weight, suggested, sizeof(suggested));
-        }
-    }
-
-    if (sat_mode) {
-        int melody[MELODY_MAX];
-        int rc = sat_solve(&config, melody);
-        if (rc < 0) {
-            fprintf(stderr, "sat: too large\n");
-            return 2;
-        }
-        if (rc == 0) {
-            printf("unsat\n");
-            return 1;
-        }
-        printf("melody:");
-        for (int i = 0; i < config.length; i++) {
-            printf(" %d", melody[i]);
-        }
-        printf("\n");
+    if (list_config) {
+        config_print_reference(stdout, markdown);
         return 0;
     }
 
-    SolverState state = {0};
-    solver_init(&state, &config);
-    if (config.lock == 1) {
-        solver_lock(&state, config.lock_index, config.lock_pitch);
+    char err[300];
+    if (preset != NULL && !config_apply_preset(&config, preset, err, sizeof(err))) {
+        fprintf(stderr, "%s\n", err);
+        return EXIT_UNSAT;
+    }
+    if (config_path != NULL && !config_load_file(&config, config_path, err, sizeof(err))) {
+        fprintf(stderr, "%s\n", err);
+        return EXIT_UNSAT;
+    }
+    for (int i = 0; i < nsets; i++) {
+        if (!config_assign(&config, sets[i], err, sizeof(err))) {
+            fprintf(stderr, "%s\n", err);
+            return EXIT_UNSAT;
+        }
+    }
+    if (lock_index != NULL) {
+        if (!config_set(&config, "lock_index", lock_index, err, sizeof(err)) ||
+            !config_set(&config, "lock_pitch", lock_pitch, err, sizeof(err))) {
+            fprintf(stderr, "%s\n", err);
+            return EXIT_UNSAT;
+        }
+        config.lock = 1;
+    }
+    if ((max_nodes != NULL && !config_set(&config, "max_nodes", max_nodes, err, sizeof(err))) ||
+        (time_limit != NULL && !config_set(&config, "time_limit", time_limit, err, sizeof(err)))) {
+        fprintf(stderr, "%s\n", err);
+        return EXIT_UNSAT;
+    }
+    if (!config_validate(&config, err, sizeof(err))) {
+        fprintf(stderr, "%s\n", err);
+        return EXIT_UNSAT;
     }
 
-    int melody[MELODY_MAX];
-    int backtracks = 0;
-    bool ok = solve(&state, melody, &backtracks);
-
-    ensure_parent_dir(out_path);
-    ensure_parent_dir(proof_path);
-    ensure_parent_dir(entropy_path);
-
-    int writes_ok = 1;
-    if (!proof_write(&state.proof, proof_path)) {
-        writes_ok = 0;
-    }
-    {
-        char dag_path[512];
-        size_t n = strlen(proof_path);
-        if (n + 5 < sizeof(dag_path)) {
-            memcpy(dag_path, proof_path, n + 1);
-            char *dot = strrchr(dag_path, '.');
-            if (dot != NULL && strcmp(dot, ".txt") == 0) {
-                strcpy(dot, ".dag");
-            } else {
-                memcpy(dag_path + n, ".dag", 5);
-            }
-            ensure_parent_dir(dag_path);
-            if (!proof_write_dag(&state.proof, dag_path)) {
-                writes_ok = 0;
-            }
+    if (corpus_dir != NULL) {
+        int counts[12] = {0};
+        int weights[12];
+        if (!corpus_dir_counts(corpus_dir, counts)) {
+            fprintf(stderr, "cannot read corpus: %s\n", corpus_dir);
+            return EXIT_UNSAT;
         }
-    }
-    if (!write_entropy(&state.proof, entropy_path)) {
-        writes_ok = 0;
+        corpus_weights_from_counts(counts, config.w_corpus, weights);
+        printf("weights:");
+        for (int p = 0; p < 12; p++) printf(" %d", weights[p]);
+        printf("\n");
+        if (apply_weights) memcpy(config.pc_weight, weights, sizeof(weights));
     }
 
-    if (ok) {
-        int energy = 0;
-        if (config.energy == 1) {
-            energy = melody_energy_full(
-                melody, config.length, config.delay, config.w_gravity,
-                config.w_leap, config.w_curve, config.w_dissonance,
-                config.w_parallel, config.w_motif, config.motif_a,
-                config.motif_b, config.motif_c, config.motif_d, config.invert,
-                config.axis, config.transpose, config.w_modulate,
-                config.modulate_at, config.pc_weight);
-        }
-        int lines[VOICE_MAX][SPAN_MAX];
-        const int *line_ptrs[VOICE_MAX];
-        int starts[VOICE_MAX];
-        int span = canon_span_config(&config);
-        for (int v = 0; v < config.voices; v++) {
-            if (fill_voice_line(lines[v], SPAN_MAX, melody, state.duration, v,
-                                &config) != span) {
-                writes_ok = 0;
-            }
-            line_ptrs[v] = lines[v];
-            starts[v] = 0;
-        }
-        if (writes_ok &&
-            !midi_write_voices(out_path, line_ptrs, starts, config.voices, span,
-                               NULL)) {
-            writes_ok = 0;
-        }
-        {
-            char xml_path[512];
-            char svg_path[512];
-            char wav_path[512];
-            char json_path[512];
-            if (sibling_path(xml_path, sizeof(xml_path), out_path,
-                             "score.musicxml")) {
-                ensure_parent_dir(xml_path);
-                if (!export_musicxml(xml_path, line_ptrs, config.voices, span,
-                                     NULL)) {
-                    writes_ok = 0;
-                }
-            }
-            if (sibling_path(svg_path, sizeof(svg_path), out_path,
-                             "contour.svg")) {
-                ensure_parent_dir(svg_path);
-                if (!export_contour(svg_path, melody, config.length)) {
-                    writes_ok = 0;
-                }
-            }
-            if (sibling_path(wav_path, sizeof(wav_path), out_path,
-                             "voices.wav")) {
-                ensure_parent_dir(wav_path);
-                if (!export_wav(wav_path, line_ptrs, config.voices, span,
-                                NULL, config.sample)) {
-                    writes_ok = 0;
-                }
-            }
-            if (sibling_path(json_path, sizeof(json_path), proof_path,
-                             "proof.json")) {
-                ensure_parent_dir(json_path);
-                if (!export_trace(json_path, &state.proof)) {
-                    writes_ok = 0;
-                }
-            }
-            char html_path[512];
-            if (sibling_path(html_path, sizeof(html_path), out_path,
-                             "score.html")) {
-                ensure_parent_dir(html_path);
-                if (!export_score_page(html_path, melody, &config, &state,
-                                       backtracks, energy)) {
-                    writes_ok = 0;
-                }
-            }
-        }
-        print_success(melody, &config, backtracks, &state);
-        if (config.energy == 1) {
-            printf("energy: %d\n", energy);
-        }
-        if (config.lock == 1) {
-            print_counterfactual(&config, &state, true, melody);
-        }
-        {
-            char report_path[512];
-            if (sibling_path(report_path, sizeof(report_path), out_path,
-                             "report.txt")) {
-                ensure_parent_dir(report_path);
-                if (!export_report(report_path, &config, backtracks,
-                                   entropy_bits(state.domains, config.length),
-                                   energy, NULL, 0)) {
-                    writes_ok = 0;
-                }
-            }
-        }
-        solver_free(&state);
-        return writes_ok ? 0 : 1;
+    if (sat_mode) return run_sat(&config);
+
+    Run *run = malloc(sizeof(Run));
+    if (run == NULL) {
+        fprintf(stderr, "out of memory\n");
+        return EXIT_UNSAT;
+    }
+    if (!run_piece(run, &config, err, sizeof(err))) {
+        fprintf(stderr, "%s\n", err);
+        free(run);
+        return EXIT_UNSAT;
     }
 
-    {
-        char json_path[512];
-        if (sibling_path(json_path, sizeof(json_path), proof_path,
-                         "proof.json")) {
-            ensure_parent_dir(json_path);
-            if (!export_trace(json_path, &state.proof)) {
-                writes_ok = 0;
-            }
+    bool writes_ok = output_write_all(run, &paths);
+    int exit_code = 0;
+    if (run->status == SOLVE_SAT) {
+        output_print_summary(stdout, run);
+    } else {
+        output_print_failure(stderr, run);
+        exit_code = run->status == SOLVE_LIMIT ? EXIT_LIMIT : EXIT_UNSAT;
+    }
+    if (run->counterfactual) output_print_counterfactual(stdout, run);
+    if (explain != NULL) {
+        int var = find_var(&run->model, explain);
+        if (var < 0) {
+            fprintf(stderr, "no variable named %s\n", explain);
+            exit_code = EXIT_UNSAT;
+        } else {
+            Explanation e;
+            explain_var(&run->state, var, &e);
+            explain_print(stdout, &run->state, &e);
         }
     }
-
-    {
-        int core[16];
-        int core_n = 0;
-        if (solver_unsat_core(&config, core, 16, &core_n)) {
-            fprintf(stderr, "core:");
-            for (int i = 0; i < core_n; i++) {
-                fprintf(stderr, " %s", constraint_name(core[i]));
-            }
-            fprintf(stderr, "\n");
-        }
-        char report_path[512];
-        if (sibling_path(report_path, sizeof(report_path), out_path,
-                         "report.txt")) {
-            ensure_parent_dir(report_path);
-            export_report(report_path, &config, backtracks,
-                          entropy_bits(state.domains, config.length), 0, core,
-                          core_n);
-        }
+    if (!writes_ok) {
+        fprintf(stderr, "could not write every output file\n");
+        if (exit_code == 0) exit_code = EXIT_UNSAT;
     }
-    print_unsat(&state);
-    if (config.lock == 1) {
-        print_counterfactual(&config, &state, false, melody);
-    }
-    solver_free(&state);
-    return 1;
+    run_free(run);
+    free(run);
+    return exit_code;
 }

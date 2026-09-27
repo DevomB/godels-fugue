@@ -4,17 +4,13 @@ static uint64_t bit_mask(int pitch) {
     return (uint64_t)1 << (pitch & 63);
 }
 
+/* Branch-free; a builtin would call a library routine unless the build
+ * targets a CPU with a popcount instruction. */
 static int popcount(uint64_t word) {
-#if defined(__GNUC__) || defined(__clang__)
-    return __builtin_popcountll(word);
-#else
-    int count = 0;
-    while (word != 0) {
-        word &= word - 1;
-        count++;
-    }
-    return count;
-#endif
+    word = word - ((word >> 1) & 0x5555555555555555ULL);
+    word = (word & 0x3333333333333333ULL) + ((word >> 2) & 0x3333333333333333ULL);
+    word = (word + (word >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+    return (int)((word * 0x0101010101010101ULL) >> 56);
 }
 
 /* word must be nonzero */
@@ -91,4 +87,13 @@ int domain_collect(const MidiDomain *d, int *out) {
 
 bool domain_equal(const MidiDomain *a, const MidiDomain *b) {
     return a->bits[0] == b->bits[0] && a->bits[1] == b->bits[1];
+}
+
+int domain_rank(const MidiDomain *d, int value) {
+    if (value <= 0) return 0;
+    if (value > 127) return domain_count(d);
+    uint64_t below = value >= 64 ? d->bits[0] : d->bits[0] & ((bit_mask(value)) - 1);
+    int rank = popcount(below);
+    if (value > 64) rank += popcount(d->bits[1] & (bit_mask(value) - 1));
+    return rank;
 }

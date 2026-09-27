@@ -1,9 +1,5 @@
 #include "domain.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-
-#define CHECK(cond) do { if (!(cond)) { fprintf(stderr, "fail %s:%d: %s\n", __FILE__, __LINE__, #cond); exit(1); } } while (0)
+#include "test_util.h"
 
 int main(void) {
     MidiDomain d;

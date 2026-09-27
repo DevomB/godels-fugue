@@ -1,0 +1,8 @@
+# Rhythm as a variable: each note can be tied to the next (up to a
+# dotted half) or be a rest. Soft costs discourage ties across strong
+# beats and bars of four plain quarter notes.
+length 16
+voices 2
+delay 4
+rhythm 1
+max_hold 2

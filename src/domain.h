@@ -19,5 +19,6 @@ int domain_value(const MidiDomain *d);
 int domain_next(const MidiDomain *d, int n); /* next pitch >= n, or -1 */
 int domain_collect(const MidiDomain *d, int *out);
 bool domain_equal(const MidiDomain *a, const MidiDomain *b);
+int domain_rank(const MidiDomain *d, int value); /* members below value */
 
 #endif

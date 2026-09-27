@@ -1,339 +1,151 @@
 #include "midi.h"
+#include "theory.h"
+#include "test_util.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+typedef struct Note {
+    int on;
+    int off;
+    int pitch;
+    int channel;
+} Note;
 
-#ifdef _WIN32
-#include <direct.h>
-#else
-#include <sys/stat.h>
-#endif
+typedef struct Track {
+    int nnotes;
+    Note notes[64];
+    int tempo;     /* microseconds per quarter, or -1 */
+    int fifths[4]; /* key signatures in order */
+    int nkeys;
+    int key_tick[4];
+    char name[32];
+} Track;
 
-#define CHECK(cond, msg)                                                       \
-	do {                                                                   \
-		if (!(cond)) {                                                 \
-			fprintf(stderr, "FAIL: %s\n", (msg));                  \
-			exit(1);                                               \
-		}                                                              \
-	} while (0)
-
-static unsigned int read_u16be(const unsigned char *p)
-{
-	return ((unsigned int)p[0] << 8) | (unsigned int)p[1];
+static unsigned read_be(const unsigned char *p, int n) {
+    unsigned v = 0;
+    for (int i = 0; i < n; i++) v = (v << 8) | p[i];
+    return v;
 }
 
-static unsigned int read_u32be(const unsigned char *p)
-{
-	return ((unsigned int)p[0] << 24) | ((unsigned int)p[1] << 16) |
-	       ((unsigned int)p[2] << 8) | (unsigned int)p[3];
+static unsigned read_vlq(const unsigned char *p, size_t *pos) {
+    unsigned v = 0;
+    for (;;) {
+        unsigned char b = p[(*pos)++];
+        v = (v << 7) | (b & 0x7F);
+        if (!(b & 0x80)) return v;
+    }
 }
 
-static int read_vlq(const unsigned char *p, size_t len, size_t *pos,
-		    unsigned int *out)
-{
-	unsigned int value = 0;
-	int bytes = 0;
-	for (;;) {
-		if (*pos >= len || bytes >= 4)
-			return -1;
-		unsigned char b = p[(*pos)++];
-		bytes++;
-		value = (value << 7) | (unsigned int)(b & 0x7F);
-		if ((b & 0x80) == 0)
-			break;
-	}
-	*out = value;
-	return 0;
+static void parse_track(const unsigned char *p, size_t len, Track *t) {
+    memset(t, 0, sizeof(*t));
+    t->tempo = -1;
+    size_t pos = 0;
+    int tick = 0;
+    int open_pitch[128];
+    for (int i = 0; i < 128; i++) open_pitch[i] = -1;
+    while (pos < len) {
+        tick += (int)read_vlq(p, &pos);
+        unsigned char status = p[pos++];
+        if (status == 0xFF) {
+            unsigned char type = p[pos++];
+            unsigned n = read_vlq(p, &pos);
+            if (type == 0x51) t->tempo = (int)read_be(p + pos, 3);
+            if (type == 0x59 && t->nkeys < 4) {
+                t->key_tick[t->nkeys] = tick;
+                t->fifths[t->nkeys++] = (signed char)p[pos];
+            }
+            if (type == 0x03 && n < sizeof(t->name)) memcpy(t->name, p + pos, n);
+            pos += n;
+            if (type == 0x2F) return;
+            continue;
+        }
+        unsigned char kind = status & 0xF0;
+        if (kind == 0xC0) {
+            pos++;
+            continue;
+        }
+        CHECK(kind == 0x90 || kind == 0x80);
+        int pitch = p[pos++];
+        int vel = p[pos++];
+        if (kind == 0x90 && vel > 0) {
+            CHECK(t->nnotes < 64);
+            open_pitch[pitch] = t->nnotes;
+            t->notes[t->nnotes].on = tick;
+            t->notes[t->nnotes].pitch = pitch;
+            t->notes[t->nnotes].channel = status & 0x0F;
+            t->nnotes++;
+        } else {
+            CHECK(open_pitch[pitch] >= 0);
+            t->notes[open_pitch[pitch]].off = tick;
+            open_pitch[pitch] = -1;
+        }
+    }
+    CHECK(0); /* no end-of-track event */
 }
 
-typedef struct {
-	int tick;
-	int pitch;
-	int channel;
-	int velocity;
-} NoteOn;
-
-static int parse_track_note_ons(const unsigned char *p, size_t len,
-				NoteOn *ons, int max_ons, int *n_ons)
-{
-	size_t pos = 0;
-	int tick = 0;
-	*n_ons = 0;
-
-	while (pos < len) {
-		unsigned int delta;
-		if (read_vlq(p, len, &pos, &delta) != 0)
-			return -1;
-		tick += (int)delta;
-		if (pos >= len)
-			return -1;
-
-		unsigned char status = p[pos++];
-		if (status == 0xFF) {
-			if (pos + 1 >= len)
-				return -1;
-			unsigned char type = p[pos++];
-			unsigned int meta_len;
-			if (read_vlq(p, len, &pos, &meta_len) != 0)
-				return -1;
-			if (pos + meta_len > len)
-				return -1;
-			pos += meta_len;
-			if (type == 0x2F)
-				return 0;
-			continue;
-		}
-
-		int channel = status & 0x0F;
-		unsigned char kind = status & 0xF0;
-
-		if (kind == 0xC0) {
-			if (pos >= len)
-				return -1;
-			pos++; /* program */
-			continue;
-		}
-		if (kind == 0x90 || kind == 0x80) {
-			if (pos + 1 >= len)
-				return -1;
-			int pitch = p[pos++];
-			int vel = p[pos++];
-			if (kind == 0x90 && vel > 0) {
-				if (*n_ons >= max_ons)
-					return -1;
-				ons[*n_ons].tick = tick;
-				ons[*n_ons].pitch = pitch;
-				ons[*n_ons].channel = channel;
-				ons[*n_ons].velocity = vel;
-				(*n_ons)++;
-			}
-			continue;
-		}
-		return -1;
-	}
-	return -1;
+static int read_file(const char *path, Track *tracks, int max_tracks) {
+    long size = 0;
+    unsigned char *buf = (unsigned char *)test_slurp(path, &size);
+    CHECK(size > 14);
+    CHECK(memcmp(buf, "MThd", 4) == 0);
+    CHECK(read_be(buf + 4, 4) == 6);
+    CHECK(read_be(buf + 8, 2) == 1);
+    CHECK(read_be(buf + 12, 2) == MIDI_PPQ);
+    int ntrks = (int)read_be(buf + 10, 2);
+    CHECK(ntrks <= max_tracks);
+    size_t pos = 14;
+    for (int k = 0; k < ntrks; k++) {
+        CHECK(memcmp(buf + pos, "MTrk", 4) == 0);
+        unsigned len = read_be(buf + pos + 4, 4);
+        CHECK(pos + 8 + len <= (size_t)size);
+        parse_track(buf + pos + 8, len, &tracks[k]);
+        pos += 8 + len;
+    }
+    CHECK(pos == (size_t)size);
+    free(buf);
+    return ntrks;
 }
 
-int main(void)
-{
-#ifdef _WIN32
-	_mkdir("output");
-#else
-	mkdir("output", 0755);
-#endif
+int main(void) {
+    test_output_dir();
+    Score s;
+    memset(&s, 0, sizeof(s));
+    s.voices = 2;
+    s.span = 8;
+    s.tempo = 90;
+    s.nsections = 2;
+    s.key[0] = key_id(0, MODE_MAJOR);
+    s.key[1] = key_id(9, MODE_MINOR);
+    s.modulate_at = 4;
+    /* voice 1: half C, quarter rest, quarter E, whole G */
+    ScoreNote lead[] = {{0, 2, 60, 0}, {2, 1, SOUND_REST, -1}, {3, 1, 64, 2}, {4, 4, 67, 3}};
+    ScoreNote follow[] = {{0, 4, SOUND_REST, -1}, {4, 2, 60, 0}, {6, 2, 64, 2}};
+    s.voice[0].count = 4;
+    memcpy(s.voice[0].notes, lead, sizeof(lead));
+    s.voice[1].count = 3;
+    memcpy(s.voice[1].notes, follow, sizeof(follow));
+    CHECK(midi_write_score("output/tests/canon.mid", &s));
 
-	const int melody[] = {60, 64, 67, 72};
-	const int length = 4;
-	const int delay = 2;
-	const char *path = "output/test_canon.mid";
+    Track tracks[4];
+    CHECK(read_file("output/tests/canon.mid", tracks, 4) == 3);
+    const Track *conductor = &tracks[0];
+    CHECK(conductor->nnotes == 0);
+    CHECK(conductor->tempo == 60000000 / 90);
+    CHECK(conductor->nkeys == 2);
+    CHECK(conductor->fifths[0] == 0 && conductor->key_tick[0] == 0);
+    CHECK(conductor->fifths[1] == 0 && conductor->key_tick[1] == 4 * MIDI_PPQ);
 
-	CHECK(midi_write_canon(path, melody, melody, length, delay),
-	      "write failed");
+    const Track *v1 = &tracks[1];
+    CHECK(strcmp(v1->name, "Voice 1") == 0);
+    CHECK(v1->nnotes == 3);
+    CHECK(v1->notes[0].on == 0 && v1->notes[0].off == 2 * MIDI_PPQ);
+    CHECK(v1->notes[1].pitch == 64 && v1->notes[1].on == 3 * MIDI_PPQ);
+    CHECK(v1->notes[2].off - v1->notes[2].on == 4 * MIDI_PPQ);
+    CHECK(v1->notes[0].channel == 0);
+    const Track *v2 = &tracks[2];
+    CHECK(v2->nnotes == 2);
+    CHECK(v2->notes[0].on == 4 * MIDI_PPQ && v2->notes[0].channel == 1);
 
-	FILE *f = fopen(path, "rb");
-	CHECK(f != NULL, "open output");
-	CHECK(fseek(f, 0, SEEK_END) == 0, "seek end");
-	long sz = ftell(f);
-	CHECK(sz > 0, "empty file");
-	CHECK(fseek(f, 0, SEEK_SET) == 0, "seek start");
-
-	unsigned char *buf = malloc((size_t)sz);
-	CHECK(buf != NULL, "malloc");
-	CHECK(fread(buf, 1, (size_t)sz, f) == (size_t)sz, "fread");
-	fclose(f);
-
-	CHECK(sz >= 14, "too short");
-	CHECK(memcmp(buf, "MThd", 4) == 0, "MThd magic");
-	CHECK(read_u32be(buf + 4) == 6, "header length");
-	CHECK(read_u16be(buf + 8) == 1, "format");
-	CHECK(read_u16be(buf + 10) == 2, "ntrks");
-	CHECK(read_u16be(buf + 12) == 480, "division");
-
-	size_t pos = 14;
-	int tracks_found = 0;
-	NoteOn voice0[8], voice1[8];
-	int n0 = 0, n1 = 0;
-
-	while (pos + 8 <= (size_t)sz) {
-		CHECK(memcmp(buf + pos, "MTrk", 4) == 0, "MTrk magic");
-		pos += 4;
-		unsigned int chunk_len = read_u32be(buf + pos);
-		pos += 4;
-		CHECK(pos + chunk_len <= (size_t)sz, "chunk overrun");
-
-		NoteOn ons[8];
-		int n_ons = 0;
-		CHECK(parse_track_note_ons(buf + pos, chunk_len, ons, 8,
-					  &n_ons) == 0,
-		      "parse track");
-
-		if (tracks_found == 0) {
-			memcpy(voice0, ons, sizeof(ons));
-			n0 = n_ons;
-		} else if (tracks_found == 1) {
-			memcpy(voice1, ons, sizeof(ons));
-			n1 = n_ons;
-		}
-		tracks_found++;
-		pos += chunk_len;
-	}
-
-	CHECK(tracks_found == 2, "two MTrk");
-
-	CHECK(n0 == 4, "voice0 note count");
-	const int expect_ticks0[] = {0, 480, 960, 1440};
-	const int expect_pitches[] = {60, 64, 67, 72};
-	for (int i = 0; i < 4; i++) {
-		CHECK(voice0[i].tick == expect_ticks0[i], "voice0 tick");
-		CHECK(voice0[i].pitch == expect_pitches[i], "voice0 pitch");
-		CHECK(voice0[i].channel == 0, "voice0 channel");
-		CHECK(voice0[i].velocity == 80, "voice0 velocity");
-	}
-
-	CHECK(n1 == 4, "voice1 note count");
-	const int expect_ticks1[] = {960, 1440, 1920, 2400};
-	for (int i = 0; i < 4; i++) {
-		CHECK(voice1[i].tick == expect_ticks1[i], "voice1 tick");
-		CHECK(voice1[i].pitch == expect_pitches[i], "voice1 pitch");
-		CHECK(voice1[i].channel == 1, "voice1 channel");
-		CHECK(voice1[i].velocity == 80, "voice1 velocity");
-	}
-
-	free(buf);
-
-	{
-		const int *lines[3];
-		int starts[3];
-		const char *path3 = "output/test_three.mid";
-		int line0[] = {60, 64, 67, 72};
-		int line1[] = {60, 64, 67, 72};
-		int line2[] = {60, 64, 67, 72};
-		lines[0] = line0;
-		lines[1] = line1;
-		lines[2] = line2;
-		starts[0] = 0;
-		starts[1] = 960;
-		starts[2] = 1920;
-		CHECK(midi_write_voices(path3, lines, starts, 3, length, NULL),
-		      "write 3 voices");
-
-		f = fopen(path3, "rb");
-		CHECK(f != NULL, "open 3-voice");
-		CHECK(fseek(f, 0, SEEK_END) == 0, "seek end 3");
-		sz = ftell(f);
-		CHECK(sz > 0, "empty 3-voice");
-		CHECK(fseek(f, 0, SEEK_SET) == 0, "seek start 3");
-		buf = malloc((size_t)sz);
-		CHECK(buf != NULL, "malloc 3");
-		CHECK(fread(buf, 1, (size_t)sz, f) == (size_t)sz, "fread 3");
-		fclose(f);
-
-		CHECK(memcmp(buf, "MThd", 4) == 0, "MThd 3");
-		CHECK(read_u16be(buf + 8) == 1, "format 3");
-		CHECK(read_u16be(buf + 10) == 3, "ntrks 3");
-		CHECK(read_u16be(buf + 12) == 480, "division 3");
-
-		pos = 14;
-		tracks_found = 0;
-		while (pos + 8 <= (size_t)sz) {
-			CHECK(memcmp(buf + pos, "MTrk", 4) == 0, "MTrk 3");
-			pos += 4;
-			unsigned int chunk_len = read_u32be(buf + pos);
-			pos += 4;
-			CHECK(pos + chunk_len <= (size_t)sz, "chunk 3");
-			NoteOn ons[8];
-			int n_ons = 0;
-			CHECK(parse_track_note_ons(buf + pos, chunk_len, ons, 8,
-						  &n_ons) == 0,
-			      "parse 3");
-			CHECK(n_ons == 4, "note count 3");
-			CHECK(ons[0].channel == tracks_found, "channel 3");
-			CHECK(ons[0].velocity == 80, "velocity 3");
-			if (tracks_found == 2) {
-				CHECK(ons[0].tick == 1920, "voice3 start");
-				CHECK(ons[0].pitch == 60, "voice3 pitch");
-			}
-			tracks_found++;
-			pos += chunk_len;
-		}
-		CHECK(tracks_found == 3, "three MTrk");
-		free(buf);
-	}
-
-	{
-		const int *lines[1];
-		int starts[1];
-		int durs[] = {1, 1, 0, 1};
-		int line0[] = {60, 64, 67, 72};
-		const char *path_r = "output/test_rest.mid";
-		lines[0] = line0;
-		starts[0] = 0;
-		CHECK(midi_write_voices(path_r, lines, starts, 1, length, durs),
-		      "write rest");
-		f = fopen(path_r, "rb");
-		CHECK(f != NULL, "open rest");
-		CHECK(fseek(f, 0, SEEK_END) == 0, "seek rest");
-		sz = ftell(f);
-		CHECK(sz > 0, "empty rest");
-		CHECK(fseek(f, 0, SEEK_SET) == 0, "start rest");
-		buf = malloc((size_t)sz);
-		CHECK(buf != NULL, "malloc rest");
-		CHECK(fread(buf, 1, (size_t)sz, f) == (size_t)sz, "fread rest");
-		fclose(f);
-		pos = 14;
-		CHECK(memcmp(buf + pos, "MTrk", 4) == 0, "MTrk rest");
-		pos += 4;
-		unsigned int chunk_len = read_u32be(buf + pos);
-		pos += 4;
-		NoteOn ons[8];
-		int n_ons = 0;
-		CHECK(parse_track_note_ons(buf + pos, chunk_len, ons, 8,
-					  &n_ons) == 0,
-		      "parse rest");
-		CHECK(n_ons == 3, "rest skips a note");
-		CHECK(ons[2].pitch == 72, "note after rest");
-		CHECK(ons[2].tick == 960, "zero duration does not consume a slot");
-		free(buf);
-	}
-
-	{
-		const int *lines[1];
-		int starts[1];
-		int durs[] = {2, 1};
-		int line0[] = {60, 64};
-		const char *path_h = "output/test_half.mid";
-		lines[0] = line0;
-		starts[0] = 0;
-		CHECK(midi_write_voices(path_h, lines, starts, 1, 2, durs),
-		      "write half");
-		f = fopen(path_h, "rb");
-		CHECK(f != NULL, "open half");
-		CHECK(fseek(f, 0, SEEK_END) == 0, "seek half");
-		sz = ftell(f);
-		CHECK(sz > 0, "empty half");
-		CHECK(fseek(f, 0, SEEK_SET) == 0, "start half");
-		buf = malloc((size_t)sz);
-		CHECK(buf != NULL, "malloc half");
-		CHECK(fread(buf, 1, (size_t)sz, f) == (size_t)sz, "fread half");
-		fclose(f);
-		pos = 14;
-		CHECK(memcmp(buf + pos, "MTrk", 4) == 0, "MTrk half");
-		pos += 4;
-		unsigned int chunk_len = read_u32be(buf + pos);
-		pos += 4;
-		NoteOn ons[8];
-		int n_ons = 0;
-		CHECK(parse_track_note_ons(buf + pos, chunk_len, ons, 8,
-					  &n_ons) == 0,
-		      "parse half");
-		CHECK(n_ons == 2, "half then quarter");
-		CHECK(ons[0].tick == 0, "half starts at 0");
-		CHECK(ons[1].tick == 960, "quarter follows the half");
-		CHECK(ons[1].pitch == 64, "second pitch");
-		free(buf);
-	}
-
-	printf("ok\n");
-	return 0;
+    s.voice[0].notes[0].pitch = 200;
+    CHECK(!midi_write_score("output/tests/bad.mid", &s));
+    printf("ok\n");
+    return 0;
 }

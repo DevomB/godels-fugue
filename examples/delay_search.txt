@@ -1,0 +1,7 @@
+# The canon delay is searched as the outermost variable: every delay
+# from 1 to 8 is solved and the lowest-energy result wins.
+length 12
+voices 2
+delay_search 1
+delay_min 1
+delay_max 8

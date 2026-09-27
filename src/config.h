@@ -1,0 +1,132 @@
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#include "types.h"
+
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+
+enum { CONSONANCE_OFF, CONSONANCE_STRONG, CONSONANCE_ALL };
+enum { ORDER_MRV, ORDER_ENTROPY, ORDER_COLLAPSE, ORDER_INDEX };
+enum { KEY_SEARCH = -1 };
+
+/* Every field is an int so one table can load, check and print them.
+ * See config.c for ranges, defaults and the help text of each key. */
+typedef struct PieceConfig {
+    /* shape */
+    int length;
+    int voices;
+    int delay;
+    int voice_delay[VOICE_MAX]; /* 0 = voice * delay */
+    int phase;
+    int range_low;
+    int range_high;
+    /* canon transforms */
+    int transpose;
+    int invert;
+    int axis;
+    int invert_mod12;
+    int retrograde;
+    int augment;
+    int diminish;
+    int cyclic;
+    /* keys */
+    int key;
+    int mode;
+    int modulate_at;
+    int key_second;
+    int mode_second;
+    /* hard rules */
+    int max_leap;
+    int consonance;
+    int allow_fourth;
+    int allow_unison;
+    int parallels;
+    int harmony;
+    int progression;
+    int cadence;
+    int poly_meter;
+    /* rhythm */
+    int rhythm;
+    int max_hold;
+    int rest_at;
+    int max_rests;
+    /* user lock */
+    int lock;
+    int lock_index;
+    int lock_pitch;
+    /* soft rules */
+    int energy;
+    int temperature;
+    int seed;
+    int anneal_start;
+    int anneal_end;
+    int anneal_steps;
+    int anneal_ratio;
+    int w_gravity;
+    int w_curve;
+    int w_leap;
+    int w_repeat;
+    int w_recover;
+    int w_dissonance;
+    int w_parallel;
+    int w_motif;
+    int motif_a;
+    int motif_b;
+    int motif_c;
+    int motif_d;
+    int w_modulate;
+    int w_harmony;
+    int w_rest;
+    int w_hold;
+    int w_syncopation;
+    int w_rhythm;
+    int w_final;
+    int w_corpus;
+    int pc_weight[12];
+    /* search */
+    int var_order;
+    int hierarchy;
+    int backjump;
+    int learn;
+    int max_nodes;
+    int time_limit;
+    int delay_search;
+    int delay_min;
+    int delay_max;
+    /* output */
+    int tempo;
+    int sample;
+} PieceConfig;
+
+void config_defaults(PieceConfig *config);
+
+/* Set one key from its text form. Array keys take a comma- or
+ * space-separated list. Returns false and fills err on failure. */
+bool config_set(PieceConfig *config, const char *key, const char *value, char *err,
+                size_t cap);
+/* "key=value" form used by --set. */
+bool config_assign(PieceConfig *config, const char *assignment, char *err, size_t cap);
+bool config_apply_preset(PieceConfig *config, const char *name, char *err, size_t cap);
+/* Text files hold "key value" lines ("#" starts a comment); a file
+ * whose name ends in .json holds one object of key/value members.
+ * The key "preset" applies a preset in place. */
+bool config_load_file(PieceConfig *config, const char *path, char *err, size_t cap);
+bool config_validate(const PieceConfig *config, char *err, size_t cap);
+
+/* Every key and its current value, in the text format. */
+void config_write(FILE *f, const PieceConfig *config);
+int config_key_count(void);
+const char *config_key_name(int index);
+/* Text form of one key's value; arrays are comma-separated. */
+void config_key_value(const PieceConfig *config, int index, char *buf, size_t cap);
+/* Reference of every key: plain text, or a Markdown table. */
+void config_print_reference(FILE *f, bool markdown);
+void config_print_presets(FILE *f);
+int config_preset_count(void);
+const char *config_preset_name(int index);
+
+int config_voice_count(const PieceConfig *config);
+
+#endif

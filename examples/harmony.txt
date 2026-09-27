@@ -1,0 +1,9 @@
+# Harmony variables: each bar gets a chord (I..vii) chosen by the
+# solver. Strong-beat notes must be its chord tones, consecutive chords
+# follow the usual root progressions, and the cadence ends V (or vii) to I.
+length 16
+voices 3
+delay 4
+range_low 55
+range_high 79
+harmony 1

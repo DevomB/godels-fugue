@@ -1,0 +1,11 @@
+# The key is a variable too. Locking the first note to F#4 removes every
+# key without F#; the solver then picks among the rest by cost (fewer
+# accidentals, and how stable F# is in each).
+length 12
+voices 2
+delay 4
+key search
+mode search
+lock 1
+lock_index 0
+lock_pitch 66

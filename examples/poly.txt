@@ -1,9 +1,6 @@
+# Polymeter: every third step is strong as well as every fourth, so the
+# consonance rule applies on a 3-against-4 grid.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
 poly_meter 1

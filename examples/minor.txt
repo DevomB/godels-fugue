@@ -1,0 +1,9 @@
+# A minor. The scale holds both G and G#, and V is E major, so the
+# cadence approaches A from E, G# or B.
+length 12
+voices 2
+delay 4
+key A
+mode minor
+range_low 57
+range_high 76

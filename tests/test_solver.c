@@ -1,488 +1,353 @@
-#include "canon.h"
-#include "constraint.h"
-#include "domain.h"
-#include "proof.h"
-#include "solver.h"
-#include "types.h"
+#include "run.h"
+#include "sat.h"
+#include "theory.h"
+#include "test_util.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#define CHECK(cond)                                                            \
-    do {                                                                       \
-        if (!(cond)) {                                                         \
-            fprintf(stderr, "fail %s:%d: %s\n", __FILE__, __LINE__, #cond);    \
-            exit(1);                                                           \
-        }                                                                      \
-    } while (0)
-
-static PieceConfig test_config(void) {
-    PieceConfig c;
-    c.length = 12;
-    c.voices = 2;
-    c.delay = 4;
-    c.range_low = 60;
-    c.range_high = 72;
-    c.max_leap = 7;
-    c.invert = 0;
-    c.invert_mod12 = 0;
-    c.axis = 67;
-    c.retrograde = 0;
-    c.energy = 0;
-    c.temperature = 0;
-    c.seed = 1;
-    c.w_gravity = 0;
-    c.w_leap = 0;
-    c.w_curve = 0;
-    c.transpose = 0;
-    c.augment = 0;
-    c.diminish = 0;
-    c.phase = 0;
-    for (int v = 0; v < VOICE_MAX; v++) {
-        c.voice_delay[v] = 0;
+/* Every hard constraint of the model holds for a full assignment. */
+static bool satisfies_model(const Model *m, const int *values) {
+    for (int ci = 0; ci < m->ncons; ci++) {
+        const Constraint *c = &m->cons[ci];
+        if (c->type == C_MAX_RESTS) {
+            int rests = 0;
+            for (int i = 0; i < m->config.length; i++) rests += values[m->pitch[i]] == PITCH_REST;
+            if (rests > c->param) return false;
+            continue;
+        }
+        int vals[SCOPE_MAX];
+        for (int i = 0; i < c->n; i++) vals[i] = values[c->vars[i]];
+        if (!constraint_holds(m, c, vals)) return false;
     }
-    c.lock = 0;
-    c.lock_index = 0;
-    c.lock_pitch = 0;
-    c.anneal_start = 0;
-    c.anneal_end = 0;
-    c.anneal_steps = 0;
-    c.anneal_ratio = 0;
-    c.w_dissonance = 0;
-    c.w_parallel = 0;
-    c.strong_chord = 0;
-    c.cadence = 0;
-    c.rhythm = 0;
-    c.rest_at = -1;
-    c.cyclic = 0;
-    c.w_motif = 0;
-    c.motif_a = 0;
-    c.motif_b = 0;
-    c.motif_c = -128;
-    c.motif_d = -128;
-    c.modulate_at = -1;
-    c.key_second = 0;
-    c.w_modulate = 0;
-    c.poly_meter = 0;
-    for (int i = 0; i < 12; i++) {
-        c.pc_weight[i] = 0;
+    for (int v = 0; v < m->nvars; v++) {
+        if (!domain_contains(&m->initial[v], values[v])) return false;
     }
-    c.sample = 0;
+    return true;
+}
+
+static void test_default(void) {
+    PieceConfig c = test_config();
+    TestRun *a = test_solve(&c);
+    TestRun *b = test_solve(&c);
+    CHECK(a->status == SOLVE_SAT);
+    CHECK(memcmp(a->values, b->values, sizeof(int) * (size_t)a->model.nvars) == 0);
+    CHECK(a->state.proof.event_count == b->state.proof.event_count);
+    CHECK(a->state.stats.backtracks == b->state.stats.backtracks);
+    CHECK(satisfies_model(&a->model, a->values));
+    CHECK(solver_entropy(&a->state) == 0.0);
+    /* no melody note repeats the one before it */
+    for (int i = 1; i < c.length; i++) CHECK(test_pitch(a, i) != test_pitch(a, i - 1));
+    CHECK(pitch_class(test_pitch(a, c.length - 1)) == 0);
+    test_close(a);
+    test_close(b);
+}
+
+static void test_limits(void) {
+    PieceConfig c = test_config();
+    c.max_nodes = 3;
+    TestRun *r = test_solve(&c);
+    CHECK(r->status == SOLVE_LIMIT);
+    CHECK(r->state.limit_hit);
+    test_close(r);
+}
+
+static const char *const shapes[][8] = {
+    {"voices=2", NULL},
+    {"voices=3", "length=16", "range_low=55", "range_high=79", NULL},
+    {"rhythm=1", "harmony=1", "length=16", NULL},
+    {"retrograde=1", "rhythm=1", NULL},
+    {"augment=2", NULL},
+    {"key=search", "mode=search", "modulate_at=8", "lock=1", "lock_index=10", "lock_pitch=66", NULL},
+    {"invert=1", "axis=68", "range_high=76", NULL},
+    {"cyclic=1", "cadence=0", "allow_unison=1", NULL},
+};
+
+static PieceConfig shape_config(size_t s) {
+    PieceConfig c = test_config();
+    for (int k = 0; shapes[s][k] != NULL; k++) test_set(&c, shapes[s][k]);
     return c;
 }
 
+static void test_orders(void) {
+    for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
+        for (int order = ORDER_MRV; order <= ORDER_INDEX; order++) {
+            PieceConfig c = shape_config(s);
+            c.var_order = order;
+            TestRun *r = test_solve(&c);
+            if (r->status != SOLVE_SAT) {
+                fprintf(stderr, "shape %u order %d: status %d\n", (unsigned)s, order, r->status);
+            }
+            CHECK(r->status == SOLVE_SAT);
+            CHECK(satisfies_model(&r->model, r->values));
+            test_close(r);
+        }
+    }
+}
+
+static void test_sampling(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "temperature=4");
+    test_set(&c, "seed=7");
+    TestRun *a = test_solve(&c);
+    TestRun *b = test_solve(&c);
+    CHECK(a->status == SOLVE_SAT);
+    CHECK(memcmp(a->values, b->values, sizeof(int) * (size_t)a->model.nvars) == 0);
+    test_close(a);
+    test_close(b);
+
+    c = test_config();
+    test_set(&c, "anneal_start=6");
+    test_set(&c, "anneal_ratio=70");
+    TestRun *g = test_solve(&c);
+    CHECK(g->status == SOLVE_SAT && satisfies_model(&g->model, g->values));
+    test_close(g);
+    c = test_config();
+    test_set(&c, "anneal_start=6");
+    test_set(&c, "anneal_end=1");
+    test_set(&c, "anneal_steps=8");
+    TestRun *l = test_solve(&c);
+    CHECK(l->status == SOLVE_SAT && satisfies_model(&l->model, l->values));
+    test_close(l);
+}
+
+static void test_lock(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "lock=1");
+    test_set(&c, "lock_index=3");
+    test_set(&c, "lock_pitch=69");
+    TestRun *r = test_solve(&c);
+    CHECK(r->status == SOLVE_SAT);
+    CHECK(test_pitch(r, 3) == 69);
+    test_close(r);
+}
+
+/* A free first variable, then four notes that must all sound consonant
+ * together (so pairwise distinct) over `holes` pitches. With three
+ * holes the notes cannot all fit, arc consistency cannot see it, and
+ * the conflict never involves the first variable. */
+static void build_pigeons(Model *m, int holes, int backjump, int learn) {
+    static const int pitches[4] = {60, 64, 67, 76};
+    memset(m, 0, sizeof(*m));
+    config_defaults(&m->config);
+    m->config.time_limit = 0;
+    m->config.var_order = ORDER_INDEX;
+    m->config.energy = 0;
+    m->config.backjump = backjump;
+    m->config.learn = learn;
+    m->voices = 1;
+    m->span = 1;
+    m->nbars = 1;
+    m->nsections = 1;
+    m->max_rests_con = -1;
+    m->nvars = 5;
+    for (int v = 0; v < m->nvars; v++) {
+        m->vars[v].kind = VAR_PITCH;
+        m->vars[v].index = v;
+        domain_clear(&m->initial[v]);
+        for (int h = 0; h < (v == 0 ? 2 : holes); h++) domain_add(&m->initial[v], pitches[h]);
+    }
+    m->cons_cap = 6;
+    m->cons = calloc((size_t)m->cons_cap, sizeof(Constraint));
+    CHECK(m->cons != NULL);
+    for (int a = 1; a < 5; a++) {
+        for (int b = a + 1; b < 5; b++) {
+            Constraint *c = &m->cons[m->ncons++];
+            c->rule = CID_CONSONANCE;
+            c->type = C_CONSONANCE;
+            c->n = 2;
+            c->vars[0] = a;
+            c->vars[1] = b;
+            c->nslots = 2;
+            c->slot[0] = 0;
+            c->slot[1] = 1;
+            c->time = -1;
+        }
+    }
+    CHECK(model_link(m));
+}
+
+static void test_backjumping(void) {
+    long nodes[2];
+    for (int bj = 0; bj <= 1; bj++) {
+        Model m;
+        build_pigeons(&m, 3, bj, 0);
+        SolverState s;
+        CHECK(solver_init(&s, &m));
+        CHECK(solver_solve(&s) == SOLVE_UNSAT);
+        nodes[bj] = s.stats.nodes;
+        if (bj) CHECK(s.stats.backjumps >= 1);
+        if (!bj) CHECK(s.stats.backjumps == 0);
+        solver_free(&s);
+        model_free(&m);
+    }
+    CHECK(nodes[1] < nodes[0]);
+
+    Model m;
+    build_pigeons(&m, 3, 1, 1);
+    SolverState s;
+    CHECK(solver_init(&s, &m));
+    CHECK(solver_solve(&s) == SOLVE_UNSAT);
+    CHECK(s.stats.learned >= 1);
+    solver_free(&s);
+    model_free(&m);
+
+    build_pigeons(&m, 4, 1, 1);
+    CHECK(solver_init(&s, &m));
+    CHECK(solver_solve(&s) == SOLVE_SAT);
+    int values[VAR_MAX];
+    solver_values(&s, values);
+    CHECK(satisfies_model(&m, values));
+    solver_free(&s);
+    model_free(&m);
+}
+
+/* Backjumping skips only subtrees with no solution, so it finds the
+ * same first solution. Learning may reorder the search but never
+ * changes whether a solution exists. */
+static void test_search_equivalence(void) {
+    static const char *const hard[][10] = {
+        {"var_order=index", "energy=0", "voices=4", "delay=3", "length=20", "consonance=all",
+         "range_low=55", "range_high=79", NULL},
+        {"var_order=index", "voices=3", "length=24", "delay=2", "consonance=all",
+         "range_low=55", "range_high=76", NULL},
+        {"voices=3", "delay=2", "max_leap=3", NULL},
+        {"harmony=1", "consonance=all", "voices=3", "length=16", "range_low=55",
+         "range_high=79", NULL},
+    };
+    for (size_t h = 0; h < sizeof(hard) / sizeof(hard[0]); h++) {
+        PieceConfig c = test_config();
+        for (int k = 0; hard[h][k] != NULL; k++) test_set(&c, hard[h][k]);
+        c.learn = 0;
+        c.backjump = 0;
+        TestRun *plain = test_solve(&c);
+        c.backjump = 1;
+        TestRun *jump = test_solve(&c);
+        c.learn = 1;
+        TestRun *learn = test_solve(&c);
+        CHECK(plain->status == jump->status);
+        CHECK(plain->status == learn->status);
+        CHECK(jump->state.stats.nodes <= plain->state.stats.nodes);
+        if (plain->status == SOLVE_SAT) {
+            CHECK(memcmp(plain->values, jump->values, sizeof(int) * (size_t)plain->model.nvars) ==
+                  0);
+            CHECK(satisfies_model(&learn->model, learn->values));
+        }
+        test_close(plain);
+        test_close(jump);
+        test_close(learn);
+    }
+}
+
+static void test_unsat_core(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "range_low=60");
+    test_set(&c, "range_high=60");
+    TestRun *r = test_solve(&c);
+    CHECK(r->status == SOLVE_UNSAT);
+    int core[CID_MAX];
+    int n = 0;
+    bool approximate = true;
+    CHECK(solver_unsat_core(&r->model, core, CID_MAX, &n, &approximate));
+    CHECK(!approximate);
+    CHECK(n >= 1);
+    unsigned char in_core[CID_MAX] = {0};
+    for (int i = 0; i < n; i++) in_core[core[i]] = 1;
+    /* with every other rule skipped the core alone stays unsat ... */
+    SolverState s;
+    CHECK(solver_init(&s, &r->model));
+    for (int rule = 1; rule < CID_MAX; rule++) s.skip[rule] = !in_core[rule];
+    CHECK(solver_solve(&s) == SOLVE_UNSAT);
+    solver_free(&s);
+    /* ... and dropping any one core rule as well makes it satisfiable */
+    for (int i = 0; i < n; i++) {
+        CHECK(solver_init(&s, &r->model));
+        for (int rule = 1; rule < CID_MAX; rule++) s.skip[rule] = !in_core[rule];
+        s.skip[core[i]] = 1;
+        CHECK(solver_solve(&s) == SOLVE_SAT);
+        solver_free(&s);
+    }
+    test_close(r);
+
+    c = test_config();
+    TestRun *ok = test_open(&c);
+    CHECK(!solver_unsat_core(&ok->model, core, CID_MAX, &n, &approximate));
+    test_close(ok);
+}
+
+static void test_sat_backend(void) {
+    for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
+        PieceConfig c = shape_config(s);
+        TestRun *r = test_solve(&c);
+        int values[VAR_MAX];
+        int rc = sat_solve(&r->model, values, 0);
+        CHECK(rc != SAT_LIMIT);
+        if (rc == SAT_TOO_LARGE) {
+            test_close(r);
+            continue;
+        }
+        CHECK((rc == SAT_SAT) == (r->status == SOLVE_SAT));
+        if (rc == SAT_SAT) CHECK(satisfies_model(&r->model, values));
+        test_close(r);
+    }
+    PieceConfig c = test_config();
+    test_set(&c, "range_low=60");
+    test_set(&c, "range_high=60");
+    TestRun *r = test_open(&c);
+    CHECK(sat_solve(&r->model, NULL, 0) == SAT_UNSAT);
+    test_close(r);
+
+    c = test_config();
+    TestRun *d = test_open(&c);
+    CHECK(sat_solve(&d->model, NULL, 1) == SAT_LIMIT);
+    test_close(d);
+}
+
+static void test_run_pipeline(void) {
+    Run *run = malloc(sizeof(Run));
+    CHECK(run != NULL);
+    char err[200];
+    PieceConfig c = test_config();
+    test_set(&c, "delay_search=1");
+    test_set(&c, "delay_min=1");
+    test_set(&c, "delay_max=6");
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->status == SOLVE_SAT);
+    CHECK(run->ndelays == 6);
+    int best = -1;
+    for (int i = 0; i < run->ndelays; i++) {
+        const DelayTrial *t = &run->delays[i];
+        if (t->status != SOLVE_SAT) continue;
+        if (best < 0 || t->energy < run->delays[best].energy) best = i;
+    }
+    CHECK(best >= 0);
+    CHECK(run->config.delay == run->delays[best].delay);
+    CHECK(run->energy == run->delays[best].energy);
+    run_free(run);
+
+    c = test_config();
+    test_set(&c, "lock=1");
+    test_set(&c, "lock_index=0");
+    test_set(&c, "lock_pitch=61");
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->status == SOLVE_UNSAT);
+    CHECK(run->counterfactual);
+    CHECK(run->unlocked_status == SOLVE_SAT);
+    bool lock_in_core = false;
+    for (int i = 0; i < run->core_n; i++) lock_in_core |= run->core[i] == CID_LOCK;
+    CHECK(lock_in_core);
+    run_free(run);
+    free(run);
+}
+
 int main(void) {
-    PieceConfig config = test_config();
-
-    /* 1. Init domains + empty-row fixpoint */
-    {
-        SolverState s = {0};
-        solver_init(&s, &config);
-
-        for (int i = 0; i < config.length; i++) {
-            CHECK(domain_count(&s.domains[i]) == 8);
-            CHECK(domain_contains(&s.domains[i], 60));
-            CHECK(domain_contains(&s.domains[i], 72));
-            CHECK(!domain_contains(&s.domains[i], 61));
-        }
-
-        CHECK(propagate_to_fixpoint(&s));
-        CHECK(s.backtracks == 0);
-        CHECK(entropy_bits(s.domains, config.length) == 36.0);
-        CHECK(s.proof.sample_count >= 1);
-        CHECK(s.proof.samples[0].bits == 36.0);
-        CHECK(s.proof.event_count == 0);
-
-        solver_free(&s);
-    }
-
-    /* 2. Forced singleton is not a backtrack */
-    {
-        SolverState s = {0};
-        solver_init(&s, &config);
-
-        domain_clear(&s.domains[3]);
-        domain_add(&s.domains[3], 60);
-        CHECK(propagate_to_fixpoint(&s));
-        CHECK(domain_singleton(&s.domains[3]));
-        CHECK(domain_value(&s.domains[3]) == 60);
-        CHECK(s.backtracks == 0);
-
-        solver_free(&s);
-    }
-
-    /* 3. Contradiction restores */
-    {
-        SolverState s = {0};
-        solver_init(&s, &config);
-
-        MidiDomain copy0 = s.domains[0];
-        SolverSnapshot snap;
-        int events_before;
-
-        solver_save(&s, &snap);
-        events_before = s.proof.event_count;
-
-        domain_clear(&s.domains[0]);
-        domain_add(&s.domains[0], 60);
-        domain_clear(&s.domains[1]);
-        domain_add(&s.domains[1], 72);
-
-        CHECK(!propagate_to_fixpoint(&s));
-        CHECK(s.failed);
-
-        solver_restore(&s, &snap);
-        CHECK(!s.failed);
-        CHECK(s.failed_variable == -1);
-        CHECK(domain_equal(&s.domains[0], &copy0));
-        CHECK(domain_count(&s.domains[1]) == 8);
-        CHECK(domain_contains(&s.domains[1], 64));
-        CHECK(s.proof.event_count == events_before);
-
-        solver_free(&s);
-    }
-
-    /* 4. Two fresh solves agree */
-    {
-        SolverState a = {0};
-        SolverState b = {0};
-        int melody_a[MELODY_MAX];
-        int melody_b[MELODY_MAX];
-        int bt_a = -1;
-        int bt_b = -1;
-
-        solver_init(&a, &config);
-        solver_init(&b, &config);
-
-        CHECK(solve(&a, melody_a, &bt_a));
-        CHECK(solve(&b, melody_b, &bt_b));
-        CHECK(bt_a == bt_b);
-        CHECK(memcmp(melody_a, melody_b, (size_t)config.length * sizeof(int)) == 0);
-        CHECK(entropy_bits(a.domains, config.length) == 0.0);
-        CHECK(entropy_bits(b.domains, config.length) == 0.0);
-
-        solver_free(&a);
-        solver_free(&b);
-    }
-
-    /* 5. Leap revision drops 60 next to 72; 67 remains */
-    {
-        SolverState s = {0};
-        int melody[MELODY_MAX];
-        int backtracks = -1;
-        int removed_sixty = 0;
-
-        solver_init(&s, &config);
-        domain_clear(&s.domains[1]);
-        domain_add(&s.domains[1], 72);
-        domain_clear(&s.domains[0]);
-        domain_add(&s.domains[0], 60);
-        domain_add(&s.domains[0], 67);
-
-        CHECK(solve(&s, melody, &backtracks));
-        CHECK(melody[0] == 67);
-        CHECK(melody[1] == 72);
-        for (int i = 0; i < s.proof.event_count; i++) {
-            if (s.proof.events[i].variable_id == 0 &&
-                s.proof.events[i].removed_pitch == 60) {
-                removed_sixty = 1;
-            }
-        }
-        CHECK(removed_sixty);
-
-        solver_free(&s);
-    }
-
-    /* 6. Three-voice identity canon */
-    {
-        PieceConfig three = test_config();
-        three.voices = 3;
-        SolverState a = {0};
-        SolverState b = {0};
-        int melody_a[MELODY_MAX];
-        int melody_b[MELODY_MAX];
-        int bt_a = -1;
-        int bt_b = -1;
-
-        solver_init(&a, &three);
-        solver_init(&b, &three);
-        CHECK(solve(&a, melody_a, &bt_a));
-        CHECK(solve(&b, melody_b, &bt_b));
-        CHECK(bt_a == bt_b);
-        CHECK(memcmp(melody_a, melody_b, (size_t)three.length * sizeof(int)) == 0);
-        CHECK(canon_span_voices(three.length, three.delay, 3) == 20);
-        CHECK(canon_melody_index(2, 8, three.delay, three.length) == 0);
-        CHECK(entropy_bits(a.domains, three.length) == 0.0);
-
-        solver_free(&a);
-        solver_free(&b);
-    }
-
-    /* 7. Transposed follower still solves */
-    {
-        PieceConfig tr = test_config();
-        tr.transpose = 7;
-        SolverState s = {0};
-        int melody[MELODY_MAX];
-        int backtracks = -1;
-        solver_init(&s, &tr);
-        CHECK(solve(&s, melody, &backtracks));
-        CHECK(canon_sounding(&tr, 1, melody[0]) == melody[0] + 7);
-        solver_free(&s);
-    }
-
-    /* 8. Locked 60 next to singleton 72 is killed by leap */
-    {
-        PieceConfig cfg = test_config();
-        SolverState s = {0};
-        int melody[MELODY_MAX];
-        int backtracks = -1;
-        solver_init(&s, &cfg);
-        domain_clear(&s.domains[1]);
-        domain_add(&s.domains[1], 72);
-        solver_lock(&s, 0, 60);
-        CHECK(!solve(&s, melody, &backtracks));
-        CHECK(s.failed);
-        CHECK(s.proof.event_count > 0);
-        CHECK(strcmp(s.proof.events[s.proof.event_count - 1].message,
-                     "melodic leap") == 0);
-        solver_free(&s);
-    }
-
-    /* 8b. Primary lock: illegal pitch is unsat; legal pitch stays */
-    {
-        PieceConfig bad = test_config();
-        SolverState s = {0};
-        int melody[MELODY_MAX];
-        int backtracks = -1;
-        solver_init(&s, &bad);
-        solver_lock(&s, 0, 61);
-        CHECK(!solve(&s, melody, &backtracks));
-        CHECK(s.failed);
-        {
-            int linked = 0;
-            for (int i = 0; i < s.proof.event_count; i++) {
-                const ProofEvent *ev = &s.proof.events[i];
-                if (ev->variable_id == 0 && ev->removed_pitch == 61 &&
-                    ev->parent_count == 1 && ev->parent_events[0] == -1 &&
-                    ev->parent_vars[0] == 0 && ev->parent_pitches[0] == 61) {
-                    linked = 1;
-                }
-            }
-            CHECK(linked);
-        }
-        solver_free(&s);
-
-        PieceConfig good = test_config();
-        solver_init(&s, &good);
-        solver_lock(&s, 0, 60);
-        CHECK(solve(&s, melody, &backtracks));
-        CHECK(melody[0] == 60);
-        solver_free(&s);
-    }
-
-    /* 9. Annealing schedule is deterministic for a fixed seed */
-    {
-        PieceConfig an = test_config();
-        an.energy = 1;
-        an.anneal_start = 4;
-        an.anneal_end = 1;
-        an.anneal_steps = 8;
-        an.seed = 3;
-        an.w_gravity = 1;
-        an.w_leap = 1;
-        an.w_curve = 3;
-        SolverState a = {0};
-        SolverState b = {0};
-        int ma[MELODY_MAX];
-        int mb[MELODY_MAX];
-        int bta = -1;
-        int btb = -1;
-        solver_init(&a, &an);
-        solver_init(&b, &an);
-        CHECK(solve(&a, ma, &bta));
-        CHECK(solve(&b, mb, &btb));
-        CHECK(bta == btb);
-        CHECK(memcmp(ma, mb, (size_t)an.length * sizeof(int)) == 0);
-        {
-            static const int linear[] = {60, 60, 67, 64, 60, 62,
-                                         62, 64, 67, 60, 64, 64};
-            CHECK(memcmp(ma, linear, sizeof(linear)) == 0);
-            PieceConfig ratio0 = an;
-            ratio0.anneal_ratio = 0;
-            SolverState z = {0};
-            int mz[MELODY_MAX];
-            int btz = -1;
-            solver_init(&z, &ratio0);
-            CHECK(solve(&z, mz, &btz));
-            CHECK(memcmp(mz, linear, sizeof(linear)) == 0);
-            solver_free(&z);
-        }
-        solver_free(&a);
-        solver_free(&b);
-    }
-
-    /* 9b. Geometric ratio cools T *= ratio/100; fixed seed matches */
-    {
-        PieceConfig geo = test_config();
-        geo.energy = 1;
-        geo.anneal_start = 8;
-        geo.anneal_ratio = 75;
-        geo.seed = 5;
-        geo.w_gravity = 1;
-        geo.w_leap = 1;
-        geo.w_curve = 3;
-        SolverState a = {0};
-        SolverState b = {0};
-        int ma[MELODY_MAX];
-        int mb[MELODY_MAX];
-        int bta = -1;
-        int btb = -1;
-        solver_init(&a, &geo);
-        solver_init(&b, &geo);
-        CHECK(solve(&a, ma, &bta));
-        CHECK(solve(&b, mb, &btb));
-        CHECK(bta == btb);
-        CHECK(memcmp(ma, mb, (size_t)geo.length * sizeof(int)) == 0);
-        solver_free(&a);
-        solver_free(&b);
-    }
-
-    /* 10. Rest occupies a rhythm domain slot; other slots are searched */
-    {
-        PieceConfig cfg = test_config();
-        cfg.rhythm = 1;
-        cfg.rest_at = 3;
-        SolverState s = {0};
-        int melody[MELODY_MAX];
-        int backtracks = -1;
-        solver_init(&s, &cfg);
-        CHECK(s.rhythm_mask[3] == RHYTHM_REST);
-        CHECK(s.duration[3] == 0);
-        CHECK(s.duration[0] == -1);
-        CHECK((s.rhythm_mask[0] & RHYTHM_REST) != 0);
-        CHECK((s.rhythm_mask[0] & RHYTHM_QUARTER) != 0);
-        CHECK((s.rhythm_mask[0] & RHYTHM_HALF) != 0);
-        CHECK(solve(&s, melody, &backtracks));
-        CHECK(s.duration[3] == 0);
-        CHECK(s.duration[0] == 1);
-        CHECK(s.rhythm_mask[0] == RHYTHM_QUARTER);
-        solver_free(&s);
-    }
-
-    /* 10b. rest_at 0 is a real index; open slots collapse to quarters first */
-    {
-        PieceConfig cfg = test_config();
-        cfg.rhythm = 1;
-        cfg.rest_at = 0;
-        SolverState a = {0};
-        SolverState b = {0};
-        int ma[MELODY_MAX];
-        int mb[MELODY_MAX];
-        int bta = -1;
-        int btb = -1;
-        solver_init(&a, &cfg);
-        CHECK(a.rhythm_mask[0] == RHYTHM_REST);
-        CHECK(a.duration[0] == 0);
-        CHECK(a.duration[1] == -1);
-        solver_init(&b, &cfg);
-        CHECK(solve(&a, ma, &bta));
-        CHECK(solve(&b, mb, &btb));
-        CHECK(bta == btb);
-        CHECK(memcmp(ma, mb, (size_t)cfg.length * sizeof(int)) == 0);
-        CHECK(a.duration[0] == 0);
-        for (int i = 1; i < cfg.length; i++) {
-            CHECK(a.duration[i] == 1);
-            CHECK(a.rhythm_mask[i] == RHYTHM_QUARTER);
-        }
-        solver_free(&a);
-        solver_free(&b);
-    }
-
-    /* 11. Cadence plus a singleton C range has cadence in the unsat core */
-    {
-        PieceConfig cfg = test_config();
-        cfg.cadence = 1;
-        cfg.range_low = 60;
-        cfg.range_high = 60;
-        int core[8];
-        int n = 0;
-        CHECK(solver_unsat_core(&cfg, core, 8, &n));
-        int has_cadence = 0;
-        for (int i = 0; i < n; i++) {
-            if (core[i] == CID_CADENCE) has_cadence = 1;
-        }
-        CHECK(has_cadence);
-        int has_leap = 0;
-        for (int i = 0; i < n; i++) {
-            if (core[i] == CID_LEAP) has_leap = 1;
-        }
-        CHECK(!has_leap);
-        for (int i = 0; i < n; i++) {
-            SolverState drop = {0};
-            int melody[MELODY_MAX];
-            int bt = -1;
-            solver_init(&drop, &cfg);
-            drop.skip_cid[core[i]] = 1;
-            CHECK(solve(&drop, melody, &bt));
-            solver_free(&drop);
-        }
-        cfg.cadence = 0;
-        SolverState s = {0};
-        int melody[MELODY_MAX];
-        int bt = -1;
-        solver_init(&s, &cfg);
-        CHECK(solve(&s, melody, &bt));
-        solver_free(&s);
-    }
-
-    /* 12. Motif window [2,2] stays the known energy line. */
-    {
-        PieceConfig cfg = test_config();
-        cfg.energy = 1;
-        cfg.w_gravity = 1;
-        cfg.w_leap = 1;
-        cfg.w_curve = 3;
-        cfg.w_motif = 4;
-        cfg.motif_a = 2;
-        cfg.motif_b = 2;
-        cfg.motif_c = -128;
-        cfg.motif_d = -128;
-        SolverState s = {0};
-        int melody[MELODY_MAX];
-        int bt = -1;
-        static const int expect[] = {60, 60, 62, 62, 64, 71,
-                                     69, 67, 67, 64, 64, 64};
-        solver_init(&s, &cfg);
-        CHECK(solve(&s, melody, &bt));
-        CHECK(memcmp(melody, expect, sizeof(expect)) == 0);
-        solver_free(&s);
-    }
-
-    /* 13. F (65) legal before modulate_at; illegal after. F# after. */
-    {
-        PieceConfig cfg = test_config();
-        cfg.modulate_at = 4;
-        SolverState s = {0};
-        solver_init(&s, &cfg);
-        CHECK(domain_contains(&s.domains[3], 65));
-        CHECK(!domain_contains(&s.domains[4], 65));
-        CHECK(domain_contains(&s.domains[4], 66));
-        CHECK(!domain_contains(&s.domains[3], 66));
-        solver_lock(&s, 3, 65);
-        int melody[MELODY_MAX];
-        int bt = -1;
-        CHECK(solve(&s, melody, &bt));
-        CHECK(melody[3] == 65);
-        solver_free(&s);
-
-        solver_init(&s, &cfg);
-        solver_lock(&s, 4, 65);
-        CHECK(!solve(&s, melody, &bt));
-        solver_free(&s);
-    }
-
+    test_default();
+    test_limits();
+    test_orders();
+    test_sampling();
+    test_lock();
+    test_backjumping();
+    test_search_equivalence();
+    test_unsat_core();
+    test_sat_backend();
+    test_run_pipeline();
     printf("ok\n");
     return 0;
 }

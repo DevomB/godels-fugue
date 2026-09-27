@@ -1,15 +1,11 @@
+# Energy weights: try cheaper values first. Gravity pulls toward stable
+# degrees, the curve asks for an arch of tension, leaps cost per four
+# semitones, and repeated notes cost extra.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
-retrograde 0
 energy 1
-temperature 0
-seed 1
 w_gravity 1
 w_leap 1
 w_curve 3
+w_repeat 6

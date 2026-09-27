@@ -1,9 +1,6 @@
+# The follower plays the melody backwards, so the first note is also
+# the follower's last and has to suit the cadence.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
 retrograde 1

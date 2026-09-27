@@ -1,325 +1,374 @@
 #include "sat.h"
 
-#include "canon.h"
-#include "theory.h"
-
+#include <stdlib.h>
 #include <string.h>
 
-enum { SAT_VAR_MAX = 256, SAT_CLAUSE_MAX = 8192, SAT_LIT_MAX = 16 };
+enum {
+    SAT_VAR_LIMIT = 8192,
+    SAT_LIT_LIMIT = 4000000,
+    SAT_TUPLE_LIMIT = 2000000
+};
 
-typedef struct {
-    int n;
-    int lit[SAT_LIT_MAX];
-} SatClause;
-
-typedef struct {
+typedef struct Cnf {
     int nvars;
     int nclauses;
-    SatClause clauses[SAT_CLAUSE_MAX];
-    int var_of[MELODY_MAX][128];
-    int note_of[SAT_VAR_MAX + 1];
-    int pitch_of[SAT_VAR_MAX + 1];
-    int n_pitches[MELODY_MAX];
-    int pitches[MELODY_MAX][16];
-    int val[SAT_VAR_MAX + 1];
-    int trail[SAT_VAR_MAX];
-    int trail_n;
-} SatState;
+    int *clause_start; /* nclauses + 1 */
+    int *lits;         /* +v true, -v false; v is 1-based */
+    int nlits;
+    int clause_cap;
+    int lit_cap;
+    bool too_large;
+} Cnf;
 
-static int add_var(SatState *s, int note, int pitch) {
-    if (s->nvars >= SAT_VAR_MAX) return 0;
-    s->nvars += 1;
-    s->var_of[note][pitch] = s->nvars;
-    s->note_of[s->nvars] = note;
-    s->pitch_of[s->nvars] = pitch;
-    return 1;
-}
-
-static int add_clause(SatState *s, const int *lits, int n) {
-    if (n < 1 || n > SAT_LIT_MAX || s->nclauses >= SAT_CLAUSE_MAX) return 0;
-    SatClause *c = &s->clauses[s->nclauses++];
-    c->n = n;
-    memcpy(c->lit, lits, (size_t)n * sizeof(int));
-    return 1;
-}
-
-static int add_bin(SatState *s, int a, int b) {
-    int lits[2] = {a, b};
-    return add_clause(s, lits, 2);
-}
-
-static int lit_value(const SatState *s, int lit) {
-    int v = lit < 0 ? -lit : lit;
-    int val = s->val[v];
-    if (val == 0) return 0;
-    return lit < 0 ? -val : val;
-}
-
-static void assign_lit(SatState *s, int lit) {
-    int v = lit < 0 ? -lit : lit;
-    s->val[v] = lit < 0 ? -1 : 1;
-    s->trail[s->trail_n++] = v;
-}
-
-static int propagate(SatState *s) {
-    int changed = 1;
-    while (changed) {
-        changed = 0;
-        for (int i = 0; i < s->nclauses; i++) {
-            const SatClause *c = &s->clauses[i];
-            int open = 0;
-            int last = 0;
-            int sat = 0;
-            for (int k = 0; k < c->n; k++) {
-                int lv = lit_value(s, c->lit[k]);
-                if (lv > 0) {
-                    sat = 1;
-                    break;
-                }
-                if (lv == 0) {
-                    open += 1;
-                    last = c->lit[k];
-                }
-            }
-            if (sat) continue;
-            if (open == 0) return 0;
-            if (open == 1) {
-                assign_lit(s, last);
-                changed = 1;
-            }
+static bool cnf_add(Cnf *c, const int *lits, int n) {
+    if (c->nlits + n > SAT_LIT_LIMIT) {
+        c->too_large = true;
+        return false;
+    }
+    if (c->nclauses + 2 > c->clause_cap) {
+        int cap = c->clause_cap == 0 ? 1024 : c->clause_cap * 2;
+        int *grown = realloc(c->clause_start, (size_t)cap * sizeof(int));
+        if (grown == NULL) {
+            c->too_large = true;
+            return false;
         }
+        c->clause_start = grown;
+        c->clause_cap = cap;
     }
-    return 1;
+    if (c->nlits + n > c->lit_cap) {
+        int cap = c->lit_cap == 0 ? 4096 : c->lit_cap;
+        while (cap < c->nlits + n) cap *= 2;
+        int *grown = realloc(c->lits, (size_t)cap * sizeof(int));
+        if (grown == NULL) {
+            c->too_large = true;
+            return false;
+        }
+        c->lits = grown;
+        c->lit_cap = cap;
+    }
+    c->clause_start[c->nclauses] = c->nlits;
+    memcpy(c->lits + c->nlits, lits, (size_t)n * sizeof(int));
+    c->nlits += n;
+    c->nclauses++;
+    c->clause_start[c->nclauses] = c->nlits;
+    return true;
 }
 
-static int dpll(SatState *s) {
-    int mark = s->trail_n;
-    if (!propagate(s)) {
-        while (s->trail_n > mark) {
-            s->trail_n -= 1;
-            s->val[s->trail[s->trail_n]] = 0;
-        }
-        return 0;
-    }
-    int pick = 0;
-    for (int v = 1; v <= s->nvars; v++) {
-        if (s->val[v] == 0) {
-            pick = v;
-            break;
-        }
-    }
-    if (pick == 0) return 1;
-    assign_lit(s, pick);
-    if (dpll(s)) return 1;
-    while (s->trail_n > mark) {
-        s->trail_n -= 1;
-        s->val[s->trail[s->trail_n]] = 0;
-    }
-    assign_lit(s, -pick);
-    if (dpll(s)) return 1;
-    while (s->trail_n > mark) {
-        s->trail_n -= 1;
-        s->val[s->trail[s->trail_n]] = 0;
+typedef struct Encoding {
+    const Model *m;
+    MidiDomain dom[VAR_MAX];
+    int first[VAR_MAX]; /* boolean id of each variable's lowest value */
+    int count[VAR_MAX];
+    int values[VAR_MAX][128];
+} Encoding;
+
+static int lit_of(const Encoding *e, int var, int value) {
+    for (int k = 0; k < e->count[var]; k++) {
+        if (e->values[var][k] == value) return e->first[var] + k;
     }
     return 0;
 }
 
-static int fill_domains(SatState *s, const PieceConfig *c) {
-    memset(s, 0, sizeof(*s));
-    for (int i = 0; i < c->length; i++) {
-        for (int p = c->range_low; p <= c->range_high; p++) {
-            if (!pitch_in_scale(p, i, c->modulate_at)) continue;
-            if (c->lock && i == c->lock_index && p != c->lock_pitch) continue;
-            int sound = canon_sounding(c, 1, p);
-            if (sound < c->range_low || sound > c->range_high) continue;
-            if (!pitch_in_scale(sound, i, c->modulate_at)) continue;
-            if (s->n_pitches[i] >= 16) return -1;
-            s->pitches[i][s->n_pitches[i]++] = p;
-            if (!add_var(s, i, p)) return -1;
-        }
-        if (s->n_pitches[i] == 0) return 0;
-    }
-    return 1;
-}
-
-static int encode_exact_one(SatState *s, int length) {
-    for (int i = 0; i < length; i++) {
-        int n = s->n_pitches[i];
-        int lits[SAT_LIT_MAX];
-        if (n > SAT_LIT_MAX) return 0;
-        for (int k = 0; k < n; k++) {
-            lits[k] = s->var_of[i][s->pitches[i][k]];
-        }
-        if (!add_clause(s, lits, n)) return 0;
-        for (int a = 0; a < n; a++) {
-            for (int b = a + 1; b < n; b++) {
-                if (!add_bin(s, -lits[a], -lits[b])) return 0;
-            }
-        }
-    }
-    return 1;
-}
-
-static int encode_leap(SatState *s, const PieceConfig *c) {
-    for (int i = 0; i + 1 < c->length; i++) {
-        for (int a = 0; a < s->n_pitches[i]; a++) {
-            int p = s->pitches[i][a];
-            for (int b = 0; b < s->n_pitches[i + 1]; b++) {
-                int q = s->pitches[i + 1][b];
-                if (!leap_exceeds(p, q, c->max_leap)) continue;
-                if (!add_bin(s, -s->var_of[i][p], -s->var_of[i + 1][q]))
-                    return 0;
-            }
-        }
-    }
-    return 1;
-}
-
-static int encode_second(SatState *s, const PieceConfig *c) {
-    int voices = c->voices;
-    if (voices < 2) voices = 2;
-    if (voices > VOICE_MAX) voices = VOICE_MAX;
-    int span = canon_span_config(c);
-    for (int t = 0; t < span; t++) {
-        if (!is_strong_time(t, c->poly_meter)) continue;
-        for (int va = 0; va < voices; va++) {
-            for (int vb = va + 1; vb < voices; vb++) {
-                int i0 = canon_map_source(c, va, t);
-                int i1 = canon_map_source(c, vb, t);
-                if (i0 < 0 || i1 < 0) continue;
-                for (int a = 0; a < s->n_pitches[i0]; a++) {
-                    int p = s->pitches[i0][a];
-                    int sp = canon_sounding(c, va, p);
-                    for (int b = 0; b < s->n_pitches[i1]; b++) {
-                        int q = s->pitches[i1][b];
-                        if (!is_second(sp, canon_sounding(c, vb, q))) continue;
-                        if (!add_bin(s, -s->var_of[i0][p], -s->var_of[i1][q]))
-                            return 0;
-                    }
+/* Node consistency, independent of the solver's propagator: a
+ * constraint with one open variable filters that variable directly. */
+static bool filter_domains(Encoding *e) {
+    const Model *m = e->m;
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (int ci = 0; ci < m->ncons; ci++) {
+            const Constraint *c = &m->cons[ci];
+            if (c->type == C_MAX_RESTS) continue;
+            int open = -1;
+            int nopen = 0;
+            int vals[SCOPE_MAX];
+            for (int i = 0; i < c->n; i++) {
+                if (domain_count(&e->dom[c->vars[i]]) == 1) {
+                    vals[i] = domain_value(&e->dom[c->vars[i]]);
+                } else {
+                    open = i;
+                    nopen++;
                 }
             }
+            if (nopen > 1) continue;
+            if (nopen == 0) {
+                if (!constraint_holds(m, c, vals)) return false;
+                continue;
+            }
+            int values[128];
+            int n = domain_collect(&e->dom[c->vars[open]], values);
+            for (int k = 0; k < n; k++) {
+                vals[open] = values[k];
+                if (constraint_holds(m, c, vals)) continue;
+                domain_remove(&e->dom[c->vars[open]], values[k]);
+                changed = true;
+            }
+            if (domain_count(&e->dom[c->vars[open]]) == 0) return false;
         }
     }
-    return 1;
+    return true;
 }
 
-static int encode_parallel(SatState *s, const PieceConfig *c) {
-    int voices = c->voices;
-    if (voices < 2) voices = 2;
-    if (voices > VOICE_MAX) voices = VOICE_MAX;
-    int span = canon_span_config(c);
-    for (int t = 0; t + 1 < span; t++) {
-        for (int va = 0; va < voices; va++) {
-            for (int vb = va + 1; vb < voices; vb++) {
-                int i0 = canon_map_source(c, va, t);
-                int i1 = canon_map_source(c, va, t + 1);
-                int i2 = canon_map_source(c, vb, t);
-                int i3 = canon_map_source(c, vb, t + 1);
-                if (i0 < 0 || i1 < 0 || i2 < 0 || i3 < 0) continue;
-                const int idx[4] = {i0, i1, i2, i3};
-                for (int a = 0; a < s->n_pitches[i0]; a++) {
-                    int p0 = s->pitches[i0][a];
-                    int s0 = canon_sounding(c, va, p0);
-                    for (int b = 0; b < s->n_pitches[i1]; b++) {
-                        int p1 = s->pitches[i1][b];
-                        int s1 = canon_sounding(c, va, p1);
-                        for (int d = 0; d < s->n_pitches[i2]; d++) {
-                            int p2 = s->pitches[i2][d];
-                            int s2 = canon_sounding(c, vb, p2);
-                            for (int e = 0; e < s->n_pitches[i3]; e++) {
-                                int p3 = s->pitches[i3][e];
-                                int s3 = canon_sounding(c, vb, p3);
-                                const int values[4] = {p0, p1, p2, p3};
-                                int lits[4];
-                                int n = 0;
-                                int consistent = 1;
-                                for (int k = 0; k < 4 && consistent; k++) {
-                                    int dup = 0;
-                                    for (int j = 0; j < k; j++) {
-                                        if (idx[j] != idx[k]) continue;
-                                        if (values[j] != values[k]) consistent = 0;
-                                        dup = 1;
-                                    }
-                                    if (!dup) lits[n++] = -s->var_of[idx[k]][values[k]];
-                                }
-                                if (!consistent) continue;
-                                if (!is_parallel_fifth(s0, s2, s1, s3) &&
-                                    !is_parallel_octave(s0, s2, s1, s3))
-                                    continue;
-                                if (!add_clause(s, lits, n)) return 0;
-                            }
-                        }
-                    }
+static void encode_constraint(const Encoding *e, const Constraint *c, Cnf *cnf) {
+    long tuples = 1;
+    for (int i = 0; i < c->n; i++) {
+        tuples *= e->count[c->vars[i]];
+        if (tuples > SAT_TUPLE_LIMIT) {
+            cnf->too_large = true;
+            return;
+        }
+    }
+    int idx[SCOPE_MAX] = {0};
+    int vals[SCOPE_MAX];
+    int lits[SCOPE_MAX];
+    for (;;) {
+        for (int i = 0; i < c->n; i++) vals[i] = e->values[c->vars[i]][idx[i]];
+        if (!constraint_holds(e->m, c, vals)) {
+            for (int i = 0; i < c->n; i++) lits[i] = -(e->first[c->vars[i]] + idx[i]);
+            if (!cnf_add(cnf, lits, c->n)) return;
+        }
+        int i = 0;
+        for (; i < c->n; i++) {
+            if (++idx[i] < e->count[c->vars[i]]) break;
+            idx[i] = 0;
+        }
+        if (i == c->n) return;
+    }
+}
+
+/* At most `limit` rests: forbid every set of limit + 1 rest literals. */
+static void encode_max_rests(const Encoding *e, int limit, Cnf *cnf) {
+    const Model *m = e->m;
+    int rests[MELODY_MAX];
+    int n = 0;
+    for (int i = 0; i < m->config.length; i++) {
+        int lit = lit_of(e, m->pitch[i], PITCH_REST);
+        if (lit != 0) rests[n++] = lit;
+    }
+    int k = limit + 1;
+    if (k > n) return;
+    int pick[MELODY_MAX + 1];
+    for (int i = 0; i < k; i++) pick[i] = i;
+    long clauses = 0;
+    for (;;) {
+        int lits[MELODY_MAX + 1];
+        for (int i = 0; i < k; i++) lits[i] = -rests[pick[i]];
+        if (!cnf_add(cnf, lits, k) || ++clauses > SAT_TUPLE_LIMIT) {
+            cnf->too_large = true;
+            return;
+        }
+        int i = k - 1;
+        while (i >= 0 && pick[i] == n - k + i) i--;
+        if (i < 0) return;
+        pick[i]++;
+        for (int j = i + 1; j < k; j++) pick[j] = pick[j - 1] + 1;
+    }
+}
+
+typedef struct Dpll {
+    const Cnf *cnf;
+    int *occ_start; /* per literal slot: 2 * v + (negative ? 1 : 0) */
+    int *occ;
+    signed char *val;
+    int *trail;
+    int trail_n;
+    int qhead;
+} Dpll;
+
+static int slot_of(int lit) {
+    return lit > 0 ? 2 * lit : 2 * -lit + 1;
+}
+
+static signed char lit_value(const Dpll *d, int lit) {
+    signed char v = d->val[lit > 0 ? lit : -lit];
+    return lit > 0 ? v : (signed char)-v;
+}
+
+static void assign(Dpll *d, int lit) {
+    d->val[lit > 0 ? lit : -lit] = lit > 0 ? 1 : -1;
+    d->trail[d->trail_n++] = lit;
+}
+
+static bool propagate(Dpll *d) {
+    const Cnf *c = d->cnf;
+    while (d->qhead < d->trail_n) {
+        int lit = d->trail[d->qhead++];
+        int falsified = slot_of(-lit);
+        for (int o = d->occ_start[falsified]; o < d->occ_start[falsified + 1]; o++) {
+            int cl = d->occ[o];
+            int open = 0;
+            int unit = 0;
+            bool sat = false;
+            for (int k = c->clause_start[cl]; k < c->clause_start[cl + 1]; k++) {
+                signed char v = lit_value(d, c->lits[k]);
+                if (v > 0) {
+                    sat = true;
+                    break;
+                }
+                if (v == 0) {
+                    open++;
+                    unit = c->lits[k];
                 }
             }
+            if (sat) continue;
+            if (open == 0) return false;
+            if (open == 1) assign(d, unit);
         }
     }
-    return 1;
+    return true;
 }
 
-static int encode_unary_ok(SatState *s, const PieceConfig *c, int idx, int voice,
-                           int (*ok)(int)) {
-    for (int k = 0; k < s->n_pitches[idx]; k++) {
-        int p = s->pitches[idx][k];
-        if (ok(canon_sounding(c, voice, p))) continue;
-        int lit = -s->var_of[idx][p];
-        if (!add_clause(s, &lit, 1)) return 0;
+static void undo(Dpll *d, int mark) {
+    while (d->trail_n > mark) {
+        int lit = d->trail[--d->trail_n];
+        d->val[lit > 0 ? lit : -lit] = 0;
     }
-    return 1;
+    d->qhead = mark;
 }
 
-static int encode_harmony(SatState *s, const PieceConfig *c) {
-    int voices = c->voices;
-    if (voices < 1) voices = 1;
-    if (voices > VOICE_MAX) voices = VOICE_MAX;
-    int span = canon_span_config(c);
-    if (c->strong_chord) {
-        for (int t = 0; t < span; t += 4) {
-            for (int v = 0; v < voices; v++) {
-                int idx = canon_map_source(c, v, t);
-                if (idx < 0) continue;
-                if (!encode_unary_ok(s, c, idx, v, in_c_triad)) return 0;
-            }
+static int run_dpll(Dpll *d, long max_decisions) {
+    const Cnf *c = d->cnf;
+    typedef struct Choice {
+        int var;
+        int mark;
+        bool flipped;
+    } Choice;
+    Choice *stack = malloc((size_t)(c->nvars + 1) * sizeof(Choice));
+    if (stack == NULL) return SAT_TOO_LARGE;
+    int depth = 0;
+    long decisions = 0;
+    int next = 1;
+    /* unit clauses first */
+    for (int cl = 0; cl < c->nclauses; cl++) {
+        if (c->clause_start[cl + 1] - c->clause_start[cl] != 1) continue;
+        int lit = c->lits[c->clause_start[cl]];
+        signed char v = lit_value(d, lit);
+        if (v < 0) {
+            free(stack);
+            return SAT_UNSAT;
         }
+        if (v == 0) assign(d, lit);
     }
-    if (c->cadence) {
-        int t = ((span - 1) / 4) * 4;
-        if (t < 0) t = 0;
-        for (int v = 0; v < voices; v++) {
-            int idx = canon_map_source(c, v, t);
-            if (idx < 0) continue;
-            if (!encode_unary_ok(s, c, idx, v, in_c_dominant)) return 0;
-        }
-    }
-    return 1;
-}
-
-int sat_solve(const PieceConfig *config, int *melody) {
-    if (config == NULL || config->length < 1 || config->length > MELODY_MAX) {
-        return -1;
-    }
-    static SatState s;
-    int built = fill_domains(&s, config);
-    if (built < 0) return -1;
-    if (built == 0) return 0;
-    if (!encode_exact_one(&s, config->length) || !encode_leap(&s, config) ||
-        !encode_second(&s, config) || !encode_parallel(&s, config) ||
-        !encode_harmony(&s, config)) {
-        return -1;
-    }
-    if (!dpll(&s)) return 0;
-    if (melody != NULL) {
-        for (int i = 0; i < config->length; i++) {
-            melody[i] = -1;
-            for (int k = 0; k < s.n_pitches[i]; k++) {
-                int p = s.pitches[i][k];
-                int v = s.var_of[i][p];
-                if (s.val[v] > 0) {
-                    melody[i] = p;
+    int result = SAT_UNSAT;
+    for (;;) {
+        if (!propagate(d)) {
+            bool resumed = false;
+            while (depth > 0) {
+                Choice *top = &stack[--depth];
+                undo(d, top->mark);
+                if (!top->flipped) {
+                    top->flipped = true;
+                    depth++;
+                    assign(d, -top->var);
+                    resumed = true;
                     break;
                 }
             }
+            if (!resumed) break;
+            next = 1;
+            continue;
+        }
+        while (next <= c->nvars && d->val[next] != 0) next++;
+        if (next > c->nvars) {
+            result = SAT_SAT;
+            break;
+        }
+        if (max_decisions > 0 && ++decisions > max_decisions) {
+            result = SAT_LIMIT;
+            break;
+        }
+        stack[depth].var = next;
+        stack[depth].mark = d->trail_n;
+        stack[depth].flipped = false;
+        depth++;
+        assign(d, next);
+    }
+    free(stack);
+    return result;
+}
+
+int sat_solve(const Model *m, int *values, long max_decisions) {
+    Encoding *e = malloc(sizeof(Encoding));
+    if (e == NULL) return SAT_TOO_LARGE;
+    e->m = m;
+    for (int v = 0; v < m->nvars; v++) e->dom[v] = m->initial[v];
+    if (!filter_domains(e)) {
+        free(e);
+        return SAT_UNSAT;
+    }
+    int nb = 0;
+    for (int v = 0; v < m->nvars; v++) {
+        e->count[v] = domain_collect(&e->dom[v], e->values[v]);
+        e->first[v] = nb + 1;
+        nb += e->count[v];
+    }
+    if (nb > SAT_VAR_LIMIT) {
+        free(e);
+        return SAT_TOO_LARGE;
+    }
+
+    Cnf cnf;
+    memset(&cnf, 0, sizeof(cnf));
+    cnf.nvars = nb;
+    for (int v = 0; v < m->nvars && !cnf.too_large; v++) {
+        int lits[128];
+        for (int k = 0; k < e->count[v]; k++) lits[k] = e->first[v] + k;
+        cnf_add(&cnf, lits, e->count[v]);
+        for (int a = 0; a < e->count[v]; a++) {
+            for (int b = a + 1; b < e->count[v]; b++) {
+                int pair[2] = {-(e->first[v] + a), -(e->first[v] + b)};
+                cnf_add(&cnf, pair, 2);
+            }
         }
     }
-    return 1;
+    for (int ci = 0; ci < m->ncons && !cnf.too_large; ci++) {
+        const Constraint *c = &m->cons[ci];
+        if (c->type == C_MAX_RESTS) {
+            encode_max_rests(e, c->param, &cnf);
+        } else {
+            encode_constraint(e, c, &cnf);
+        }
+    }
+
+    int result = SAT_TOO_LARGE;
+    Dpll d;
+    memset(&d, 0, sizeof(d));
+    if (!cnf.too_large) {
+        d.cnf = &cnf;
+        int slots = 2 * nb + 2;
+        d.occ_start = calloc((size_t)slots + 1, sizeof(int));
+        d.occ = malloc((size_t)(cnf.nlits > 0 ? cnf.nlits : 1) * sizeof(int));
+        d.val = calloc((size_t)nb + 1, 1);
+        d.trail = malloc((size_t)(nb + 1) * sizeof(int));
+        if (d.occ_start != NULL && d.occ != NULL && d.val != NULL && d.trail != NULL) {
+            for (int k = 0; k < cnf.nlits; k++) d.occ_start[slot_of(cnf.lits[k]) + 1]++;
+            for (int s = 0; s < slots; s++) d.occ_start[s + 1] += d.occ_start[s];
+            int *fill = malloc((size_t)slots * sizeof(int));
+            if (fill != NULL) {
+                memcpy(fill, d.occ_start, (size_t)slots * sizeof(int));
+                for (int cl = 0; cl < cnf.nclauses; cl++) {
+                    for (int k = cnf.clause_start[cl]; k < cnf.clause_start[cl + 1]; k++)
+                        d.occ[fill[slot_of(cnf.lits[k])]++] = cl;
+                }
+                free(fill);
+                result = run_dpll(&d, max_decisions);
+            }
+        }
+    }
+    if (result == SAT_SAT && values != NULL) {
+        for (int v = 0; v < m->nvars; v++) {
+            values[v] = -1;
+            for (int k = 0; k < e->count[v]; k++) {
+                if (d.val[e->first[v] + k] > 0) values[v] = e->values[v][k];
+            }
+        }
+    }
+    free(d.occ_start);
+    free(d.occ);
+    free(d.val);
+    free(d.trail);
+    free(cnf.clause_start);
+    free(cnf.lits);
+    free(e);
+    return result;
 }

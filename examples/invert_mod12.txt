@@ -1,9 +1,10 @@
+# Pitch-class inversion around D keeps each note's octave and maps
+# C major onto itself (C and E swap, D stays, F and B swap).
 length 12
 voices 2
 delay 4
 range_low 60
 range_high 72
-max_leap 7
 invert 1
 invert_mod12 1
-axis 67
+axis 62

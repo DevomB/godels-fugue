@@ -1,9 +1,8 @@
+# The cadence rule (on by default): the melody ends on the tonic, the
+# note before it comes from the dominant triad, and every follower ends
+# on a tonic-triad note. With rhythm on, the final note may be held.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
 cadence 1
+rhythm 1

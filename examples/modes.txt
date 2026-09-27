@@ -1,0 +1,9 @@
+# D dorian, the scale of the white keys from D.
+length 16
+voices 2
+delay 4
+key D
+mode dorian
+range_low 57
+range_high 74
+rhythm 1

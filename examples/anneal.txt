@@ -1,17 +1,9 @@
+# Sampling with a cooling temperature: early decisions explore, later
+# ones settle. Linear schedule from 4 to 1 over 8 decisions.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
-energy 1
-temperature 0
 seed 3
-w_gravity 1
-w_leap 1
-w_curve 3
 anneal_start 4
 anneal_end 1
 anneal_steps 8

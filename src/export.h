@@ -1,21 +1,15 @@
 #ifndef EXPORT_H
 #define EXPORT_H
 
-#include "proof.h"
-#include "types.h"
+#include "score.h"
 
 #include <stdbool.h>
 
-bool export_musicxml(const char *path, const int *const *lines, int n_voices,
-                     int length, const int *durations);
-bool export_contour(const char *path, const int *melody, int length);
-bool export_wav(const char *path, const int *const *lines, int n_voices,
-                int length, const int *durations, int sample);
-bool export_trace(const char *path, const ProofLog *log);
-bool export_score_page(const char *path, const int *melody,
-                       const PieceConfig *config, const SolverState *state,
-                       int backtracks, int energy);
-bool export_report(const char *path, const PieceConfig *config, int backtracks,
-                   double entropy, int energy, const int *core, int core_n);
+/* 4/4 bars of quarter-note steps; long notes split at barlines with ties. */
+bool export_musicxml(const char *path, const Score *score);
+/* Pitch over time for every voice. */
+bool export_contour(const char *path, const Score *score);
+/* 16-bit mono at 44.1 kHz; sample = 1 uses a triangle wavetable. */
+bool export_wav(const char *path, const Score *score, int sample);
 
 #endif

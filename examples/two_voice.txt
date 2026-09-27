@@ -1,3 +1,4 @@
+# The plain two-voice canon: voice 2 repeats the melody four steps later.
 length 12
 voices 2
 delay 4

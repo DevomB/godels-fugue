@@ -1,178 +1,230 @@
 #include "export.h"
 
 #include "canon.h"
-#include "constraint.h"
+#include "theory.h"
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
 
-static const char *pitch_step(int midi, int *alter, int *octave) {
-    static const char *steps[] = {"C", "C", "D", "D", "E", "F",
-                                  "F", "G", "G", "A", "A", "B"};
-    static const int alters[] = {0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0};
-    int pc = midi % 12;
-    if (pc < 0) pc += 12;
-    *alter = alters[pc];
+static int key_at(const Score *score, int step) {
+    if (score->nsections > 1 && step >= score->modulate_at) return score->key[1];
+    return score->key[0];
+}
+
+/* Step letter, alteration and octave, spelled with flats in flat keys. */
+static void spell(int midi, bool flats, char *step, int *alter, int *octave) {
+    static const char sharp_steps[12] = {'C', 'C', 'D', 'D', 'E', 'F',
+                                         'F', 'G', 'G', 'A', 'A', 'B'};
+    static const char flat_steps[12] = {'C', 'D', 'D', 'E', 'E', 'F',
+                                        'G', 'G', 'A', 'A', 'B', 'B'};
+    static const int sharp_alter[12] = {0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 1, 0};
+    static const int flat_alter[12] = {0, -1, 0, -1, 0, 0, -1, 0, -1, 0, -1, 0};
+    int pc = pitch_class(midi);
+    *step = flats ? flat_steps[pc] : sharp_steps[pc];
+    *alter = flats ? flat_alter[pc] : sharp_alter[pc];
     *octave = midi / 12 - 1;
-    return steps[pc];
 }
 
-static int units_at(const int *durations, int i) {
-    if (durations == NULL) return 1;
-    return durations[i];
-}
-
-bool export_musicxml(const char *path, const int *const *lines, int n_voices,
-                     int length, const int *durations) {
-    if (path == NULL || lines == NULL || n_voices < 1 || length < 0) {
-        return false;
+static const char *note_type(int steps, bool *dotted) {
+    *dotted = steps == 3;
+    switch (steps) {
+    case 1:
+        return "quarter";
+    case 2:
+    case 3:
+        return "half";
+    default:
+        return "whole";
     }
+}
 
+static void write_key(FILE *f, int key) {
+    fprintf(f, "<key><fifths>%d</fifths><mode>%s</mode></key>", key_fifths(key),
+            key_mode(key) == MODE_MINOR ? "minor" : "major");
+}
+
+static void write_segment(FILE *f, int pitch, int steps, bool flats, bool tie_stop,
+                          bool tie_start) {
+    bool dotted;
+    const char *type = note_type(steps, &dotted);
+    fprintf(f, "      <note>");
+    if (pitch == SOUND_REST) {
+        fprintf(f, "<rest/>");
+    } else {
+        char step;
+        int alter;
+        int octave;
+        spell(pitch, flats, &step, &alter, &octave);
+        fprintf(f, "<pitch><step>%c</step>", step);
+        if (alter != 0) fprintf(f, "<alter>%d</alter>", alter);
+        fprintf(f, "<octave>%d</octave></pitch>", octave);
+    }
+    fprintf(f, "<duration>%d</duration>", steps);
+    if (tie_stop) fprintf(f, "<tie type=\"stop\"/>");
+    if (tie_start) fprintf(f, "<tie type=\"start\"/>");
+    fprintf(f, "<type>%s</type>%s", type, dotted ? "<dot/>" : "");
+    if (tie_stop || tie_start) {
+        fprintf(f, "<notations>");
+        if (tie_stop) fprintf(f, "<tied type=\"stop\"/>");
+        if (tie_start) fprintf(f, "<tied type=\"start\"/>");
+        fprintf(f, "</notations>");
+    }
+    fprintf(f, "</note>\n");
+}
+
+static bool low_voice(const Score *score, int v) {
+    long sum = 0;
+    int n = 0;
+    for (int t = 0; t < score->span; t++) {
+        if (score->line[v][t] == SOUND_REST) continue;
+        sum += score->line[v][t];
+        n++;
+    }
+    return n > 0 && sum / n < 57;
+}
+
+bool export_musicxml(const char *path, const Score *score) {
+    if (path == NULL || score == NULL || score->voices < 1) return false;
     FILE *f = fopen(path, "w");
     if (f == NULL) return false;
+    int bars = (score->span + 3) / 4;
+    fprintf(f, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+               "<!DOCTYPE score-partwise PUBLIC \"-//Recordare//DTD MusicXML 3.1 "
+               "Partwise//EN\" \"http://www.musicxml.org/dtds/partwise.dtd\">\n"
+               "<score-partwise version=\"3.1\">\n"
+               "  <work><work-title>Canon Collapse</work-title></work>\n"
+               "  <part-list>\n");
+    for (int v = 0; v < score->voices; v++) {
+        fprintf(f, "    <score-part id=\"P%d\"><part-name>Voice %d</part-name></score-part>\n",
+                v + 1, v + 1);
+    }
+    fprintf(f, "  </part-list>\n");
 
-    if (fprintf(f,
-                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                "<score-partwise version=\"3.1\">\n"
-                "  <part-list>\n") < 0) {
-        fclose(f);
-        return false;
-    }
-    for (int v = 0; v < n_voices; v++) {
-        if (fprintf(f,
-                    "    <score-part id=\"P%d\"><part-name>Voice %d</part-name>"
-                    "</score-part>\n",
-                    v + 1, v + 1) < 0) {
-            fclose(f);
-            return false;
-        }
-    }
-    if (fprintf(f, "  </part-list>\n") < 0) {
-        fclose(f);
-        return false;
-    }
-
-    for (int v = 0; v < n_voices; v++) {
-        if (lines[v] == NULL ||
-            fprintf(f, "  <part id=\"P%d\">\n    <measure number=\"1\">\n"
-                       "      <attributes><divisions>1</divisions>"
-                       "<key><fifths>0</fifths></key>"
-                       "<time><beats>4</beats><beat-type>4</beat-type></time>"
-                       "<clef><sign>G</sign><line>2</line></clef></attributes>\n",
-                    v + 1) < 0) {
-            fclose(f);
-            return false;
-        }
-        int measure = 1;
-        int filled = 0;
-        for (int i = 0; i < length; i++) {
-            int units = units_at(durations, i);
-            /* ponytail: a half note on beat 4 overfills its bar; tie across
-             * the barline once half notes reach export. */
-            if (filled >= 4) {
-                measure++;
-                filled = 0;
-                if (fprintf(f, "    </measure>\n    <measure number=\"%d\">\n",
-                            measure) < 0) {
-                    fclose(f);
-                    return false;
-                }
+    for (int v = 0; v < score->voices; v++) {
+        fprintf(f, "  <part id=\"P%d\">\n", v + 1);
+        /* Walk the voice's notes plus a padding rest to the end of the bar,
+         * cutting each at barlines and at the key change. */
+        ScoreNote notes[SPAN_MAX + 1];
+        int count = score->voice[v].count;
+        memcpy(notes, score->voice[v].notes, (size_t)count * sizeof(ScoreNote));
+        if (bars * 4 > score->span) {
+            ScoreNote pad = {score->span, bars * 4 - score->span, SOUND_REST, -1};
+            if (count > 0 && notes[count - 1].pitch == SOUND_REST) {
+                notes[count - 1].length += pad.length;
+            } else {
+                notes[count++] = pad;
             }
-            filled += units <= 0 ? 1 : units;
-            if (units <= 0 || lines[v][i] < 0) {
-                if (fprintf(f,
-                            "      <note><rest/><duration>1</duration>"
-                            "<type>quarter</type></note>\n") < 0) {
-                    fclose(f);
-                    return false;
+        }
+        int measure = 0;
+        for (int k = 0; k < count; k++) {
+            const ScoreNote *n = &notes[k];
+            int t = n->start;
+            int end = n->start + n->length;
+            while (t < end) {
+                if (t % 4 == 0 && t / 4 + 1 != measure) {
+                    if (measure > 0) fprintf(f, "    </measure>\n");
+                    measure = t / 4 + 1;
+                    fprintf(f, "    <measure number=\"%d\">\n", measure);
+                    if (measure == 1) {
+                        fprintf(f, "      <attributes><divisions>1</divisions>");
+                        write_key(f, score->key[0]);
+                        fprintf(f, "<time><beats>4</beats><beat-type>4</beat-type></time>"
+                                   "<clef><sign>%s</sign><line>%d</line></clef>"
+                                   "</attributes>\n",
+                                low_voice(score, v) ? "F" : "G", low_voice(score, v) ? 4 : 2);
+                    }
                 }
+                if (score->nsections > 1 && t == score->modulate_at && t > 0) {
+                    fprintf(f, "      <attributes>");
+                    write_key(f, score->key[1]);
+                    fprintf(f, "</attributes>\n");
+                }
+                int stop = (t / 4 + 1) * 4;
+                if (score->nsections > 1 && t < score->modulate_at && score->modulate_at < stop)
+                    stop = score->modulate_at;
+                if (stop > end) stop = end;
+                /* a tied note keeps the spelling of its attack */
+                bool flats = key_fifths(key_at(score, n->start)) < 0;
+                bool tied = n->pitch != SOUND_REST;
+                write_segment(f, n->pitch, stop - t, flats, tied && t > n->start,
+                              tied && stop < end);
+                t = stop;
+            }
+        }
+        if (measure > 0) fprintf(f, "    </measure>\n");
+        fprintf(f, "  </part>\n");
+    }
+    fprintf(f, "</score-partwise>\n");
+    bool ok = !ferror(f);
+    return fclose(f) == 0 && ok;
+}
+
+bool export_contour(const char *path, const Score *score) {
+    static const char *const colors[VOICE_MAX] = {"#1f5fbf", "#c2410c", "#15803d", "#7e22ce"};
+    if (path == NULL || score == NULL) return false;
+    FILE *f = fopen(path, "w");
+    if (f == NULL) return false;
+    int low = 127;
+    int high = 0;
+    for (int v = 0; v < score->voices; v++) {
+        for (int t = 0; t < score->span; t++) {
+            int p = score->line[v][t];
+            if (p == SOUND_REST) continue;
+            if (p < low) low = p;
+            if (p > high) high = p;
+        }
+    }
+    if (low > high) {
+        low = 60;
+        high = 72;
+    }
+    const int width = 640;
+    const int height = 240;
+    const int pad = 20;
+    double dx = score->span > 1 ? (double)(width - 2 * pad) / (score->span - 1) : 0.0;
+    double dy = (double)(height - 2 * pad) / (high - low > 0 ? high - low : 1);
+    fprintf(f, "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\" "
+               "viewBox=\"0 0 %d %d\">\n  <title>Pitch contour of every voice</title>\n",
+            width, height, width, height);
+    for (int v = 0; v < score->voices; v++) {
+        bool open = false;
+        for (int t = 0; t <= score->span; t++) {
+            int p = t < score->span ? score->line[v][t] : SOUND_REST;
+            if (p == SOUND_REST) {
+                if (open) fprintf(f, "\"/>\n");
+                open = false;
                 continue;
             }
-            int alter = 0;
-            int octave = 4;
-            const char *step = pitch_step(lines[v][i], &alter, &octave);
-            const char *type = units >= 2 ? "half" : "quarter";
-            if (fprintf(f, "      <note><pitch><step>%s</step>", step) < 0) {
-                fclose(f);
-                return false;
+            if (!open) {
+                fprintf(f, "  <polyline fill=\"none\" stroke=\"%s\" stroke-width=\"2\" "
+                           "points=\"",
+                        colors[v % VOICE_MAX]);
+                open = true;
+            } else {
+                fprintf(f, " ");
             }
-            if (alter != 0 &&
-                fprintf(f, "<alter>%d</alter>", alter) < 0) {
-                fclose(f);
-                return false;
-            }
-            if (fprintf(f,
-                        "<octave>%d</octave></pitch><duration>%d</duration>"
-                        "<type>%s</type></note>\n",
-                        octave, units, type) < 0) {
-                fclose(f);
-                return false;
-            }
-        }
-        if (fprintf(f, "    </measure>\n  </part>\n") < 0) {
-            fclose(f);
-            return false;
+            fprintf(f, "%.1f,%.1f", pad + t * dx, height - pad - (p - low) * dy);
         }
     }
-
-    if (fprintf(f, "</score-partwise>\n") < 0) {
-        fclose(f);
-        return false;
-    }
-    return fclose(f) == 0;
+    fprintf(f, "</svg>\n");
+    bool ok = !ferror(f);
+    return fclose(f) == 0 && ok;
 }
 
-bool export_contour(const char *path, const int *melody, int length) {
-    if (path == NULL || (length > 0 && melody == NULL) || length < 0) {
-        return false;
-    }
-
-    FILE *f = fopen(path, "w");
-    if (f == NULL) return false;
-
-    if (fprintf(f,
-                "<svg xmlns=\"http://www.w3.org/2000/svg\" "
-                "width=\"640\" height=\"240\" viewBox=\"0 0 640 240\">\n"
-                "  <polyline fill=\"none\" stroke=\"#222\" "
-                "stroke-width=\"2\" points=\"") < 0) {
-        fclose(f);
-        return false;
-    }
-
-    for (int i = 0; i < length; i++) {
-        int x = length <= 1 ? 20 : 20 + (600 * i) / (length - 1);
-        int y = 220 - (melody[i] - 48) * 4;
-        if (y < 10) y = 10;
-        if (y > 230) y = 230;
-        if (fprintf(f, "%s%d,%d", i == 0 ? "" : " ", x, y) < 0) {
-            fclose(f);
-            return false;
-        }
-    }
-
-    if (fprintf(f, "\"/>\n</svg>\n") < 0) {
-        fclose(f);
-        return false;
-    }
-    return fclose(f) == 0;
-}
-
-static int write_u16le(FILE *f, unsigned int v) {
-    unsigned char b[2] = {(unsigned char)(v & 0xFF),
-                          (unsigned char)((v >> 8) & 0xFF)};
+static int write_u16le(FILE *f, unsigned v) {
+    unsigned char b[2] = {(unsigned char)(v & 0xFF), (unsigned char)((v >> 8) & 0xFF)};
     return fwrite(b, 1, 2, f) == 2 ? 0 : -1;
 }
 
-static int write_u32le(FILE *f, unsigned int v) {
-    unsigned char b[4] = {(unsigned char)(v & 0xFF),
-                          (unsigned char)((v >> 8) & 0xFF),
-                          (unsigned char)((v >> 16) & 0xFF),
-                          (unsigned char)((v >> 24) & 0xFF)};
+static int write_u32le(FILE *f, unsigned v) {
+    unsigned char b[4] = {(unsigned char)(v & 0xFF), (unsigned char)((v >> 8) & 0xFF),
+                          (unsigned char)((v >> 16) & 0xFF), (unsigned char)((v >> 24) & 0xFF)};
     return fwrite(b, 1, 4, f) == 4 ? 0 : -1;
 }
 
@@ -180,277 +232,66 @@ static double midi_hz(int pitch) {
     return 440.0 * pow(2.0, ((double)pitch - 69.0) / 12.0);
 }
 
-/* 256-sample cycle stored in this file. Triangle, not the live sine path. */
-static const short *wavetable_cycle(void) {
-    static short table[256];
-    static int ready = 0;
-    if (!ready) {
-        for (int i = 0; i < 256; i++) {
-            int rise = i < 128 ? i : 255 - i;
-            table[i] = (short)((rise - 64) * 400);
-        }
-        ready = 1;
-    }
-    return table;
+/* One cycle of a triangle wave, 256 samples. */
+static double wavetable(double phase) {
+    int i = (int)(phase * 256.0) & 255;
+    int rise = i < 128 ? i : 255 - i;
+    return (rise - 64) / 64.0;
 }
 
-bool export_wav(const char *path, const int *const *lines, int n_voices,
-                int length, const int *durations, int sample) {
-    if (path == NULL || lines == NULL || n_voices < 1 || length < 0) {
-        return false;
-    }
-
+bool export_wav(const char *path, const Score *score, int sample) {
+    if (path == NULL || score == NULL) return false;
     const int rate = 44100;
-    const int quarter = rate / 4;
-    int samples = 0;
-    for (int i = 0; i < length; i++) {
-        int units = units_at(durations, i);
-        if (units < 1) units = 1;
-        samples += units * quarter;
+    int tempo = score->tempo > 0 ? score->tempo : 120;
+    long per_step = (long)rate * 60 / tempo;
+    long total = per_step * (score->span > 0 ? score->span : 1);
+    float *mix = calloc((size_t)total, sizeof(float));
+    if (mix == NULL) return false;
+
+    const long attack = rate / 200; /* 5 ms */
+    const long release = rate / 40; /* 25 ms */
+    for (int v = 0; v < score->voices; v++) {
+        double phase = 0.0; /* continuous per voice, so re-attacks do not click */
+        for (int k = 0; k < score->voice[v].count; k++) {
+            const ScoreNote *n = &score->voice[v].notes[k];
+            if (n->pitch == SOUND_REST) continue;
+            long start = per_step * n->start;
+            long len = per_step * n->length;
+            double step = midi_hz(n->pitch) / rate;
+            for (long i = 0; i < len && start + i < total; i++) {
+                double env = 1.0;
+                if (i < attack) env = (double)i / attack;
+                if (len - i < release) env *= (double)(len - i) / release;
+                double wave = sample ? wavetable(phase) : sin(2.0 * M_PI * phase);
+                mix[start + i] += (float)(wave * env);
+                phase += step;
+                if (phase >= 1.0) phase -= floor(phase);
+            }
+        }
     }
-    if (samples < 1) samples = quarter;
 
     FILE *f = fopen(path, "wb");
-    if (f == NULL) return false;
-
-    unsigned int data_bytes = (unsigned int)samples * 2u;
+    if (f == NULL) {
+        free(mix);
+        return false;
+    }
+    unsigned data_bytes = (unsigned)total * 2u;
+    int rc = 0;
     if (fwrite("RIFF", 1, 4, f) != 4 || write_u32le(f, 36 + data_bytes) != 0 ||
         fwrite("WAVE", 1, 4, f) != 4 || fwrite("fmt ", 1, 4, f) != 4 ||
-        write_u32le(f, 16) != 0 || write_u16le(f, 1) != 0 ||
-        write_u16le(f, 1) != 0 || write_u32le(f, (unsigned int)rate) != 0 ||
-        write_u32le(f, (unsigned int)rate * 2u) != 0 || write_u16le(f, 2) != 0 ||
-        write_u16le(f, 16) != 0 || fwrite("data", 1, 4, f) != 4 ||
-        write_u32le(f, data_bytes) != 0) {
-        fclose(f);
-        return false;
+        write_u32le(f, 16) != 0 || write_u16le(f, 1) != 0 || write_u16le(f, 1) != 0 ||
+        write_u32le(f, (unsigned)rate) != 0 || write_u32le(f, (unsigned)rate * 2u) != 0 ||
+        write_u16le(f, 2) != 0 || write_u16le(f, 16) != 0 || fwrite("data", 1, 4, f) != 4 ||
+        write_u32le(f, data_bytes) != 0)
+        rc = -1;
+    double scale = 9000.0 / (score->voices > 0 ? score->voices : 1);
+    for (long i = 0; i < total && rc == 0; i++) {
+        long pcm = lround(mix[i] * scale);
+        if (pcm > 32767) pcm = 32767;
+        if (pcm < -32768) pcm = -32768;
+        rc = write_u16le(f, (unsigned)(pcm & 0xFFFF));
     }
-
-    const short *table = sample ? wavetable_cycle() : NULL;
-    unsigned phase[VOICE_MAX] = {0};
-    unsigned step[VOICE_MAX] = {0};
-    double angle[VOICE_MAX] = {0};
-    double angle_step[VOICE_MAX] = {0};
-    int voices = n_voices > VOICE_MAX ? VOICE_MAX : n_voices;
-    for (int i = 0; i < length; i++) {
-        int units = units_at(durations, i);
-        if (units < 1) units = 1;
-        int n = units * quarter;
-        int rest = durations != NULL && durations[i] <= 0;
-        for (int v = 0; v < voices; v++) {
-            if (lines[v] == NULL || lines[v][i] < 0) {
-                step[v] = 0;
-                angle_step[v] = 0.0;
-                continue;
-            }
-            double hz = midi_hz(lines[v][i]);
-            step[v] = (unsigned)(hz * 256.0 * 256.0 / (double)rate + 0.5);
-            angle_step[v] = 2.0 * M_PI * hz / (double)rate;
-        }
-        for (int s = 0; s < n; s++) {
-            int pcm = 0;
-            if (!rest) {
-                if (sample) {
-                    int acc = 0;
-                    int nlive = 0;
-                    for (int v = 0; v < voices; v++) {
-                        if (step[v] == 0) continue;
-                        acc += table[(phase[v] >> 8) & 255];
-                        phase[v] += step[v];
-                        nlive++;
-                    }
-                    if (nlive > 0) pcm = acc / nlive;
-                } else {
-                    double mix = 0.0;
-                    for (int v = 0; v < voices; v++) {
-                        if (angle_step[v] == 0.0) continue;
-                        mix += sin(angle[v]);
-                        angle[v] = fmod(angle[v] + angle_step[v], 2.0 * M_PI);
-                    }
-                    if (voices > 0) mix /= (double)voices;
-                    pcm = (int)(mix * 8000.0);
-                }
-            }
-            if (pcm > 32767) pcm = 32767;
-            if (pcm < -32768) pcm = -32768;
-            if (write_u16le(f, (unsigned int)(pcm & 0xFFFF)) != 0) {
-                fclose(f);
-                return false;
-            }
-        }
-    }
-
-    return fclose(f) == 0;
-}
-
-static int json_escape(FILE *f, const char *s) {
-    if (s == NULL) return 0;
-    for (int i = 0; s[i] != '\0'; i++) {
-        unsigned char c = (unsigned char)s[i];
-        if (c == '"' || c == '\\') {
-            if (fputc('\\', f) == EOF || fputc((int)c, f) == EOF) return -1;
-        } else if (c < 32) {
-            if (fprintf(f, "\\u%04x", c) < 0) return -1;
-        } else if (fputc((int)c, f) == EOF) {
-            return -1;
-        }
-    }
-    return 0;
-}
-
-bool export_trace(const char *path, const ProofLog *log) {
-    if (path == NULL || log == NULL) return false;
-
-    FILE *f = fopen(path, "w");
-    if (f == NULL) return false;
-
-    if (fprintf(f, "{\"events\":[") < 0) {
-        fclose(f);
-        return false;
-    }
-    for (int i = 0; i < log->event_count; i++) {
-        const ProofEvent *e = &log->events[i];
-        if (fprintf(f,
-                    "%s{\"variable\":%d,\"pitch\":%d,\"constraint\":%d,"
-                    "\"message\":\"",
-                    i == 0 ? "" : ",", e->variable_id, e->removed_pitch,
-                    e->constraint_id) < 0 ||
-            json_escape(f, e->message) != 0 || fprintf(f, "\"}") < 0) {
-            fclose(f);
-            return false;
-        }
-    }
-    if (fprintf(f, "]}\n") < 0) {
-        fclose(f);
-        return false;
-    }
-    return fclose(f) == 0;
-}
-
-bool export_score_page(const char *path, const int *melody,
-                       const PieceConfig *config, const SolverState *state,
-                       int backtracks, int energy) {
-    if (path == NULL || melody == NULL || config == NULL || state == NULL) {
-        return false;
-    }
-
-    FILE *f = fopen(path, "w");
-    if (f == NULL) return false;
-
-    int length = config->length;
-    if (fprintf(f,
-                "<!DOCTYPE html>\n<html lang=\"en\"><head>"
-                "<meta charset=\"utf-8\"><title>Score</title>"
-                "<style>body{font:16px/1.4 sans-serif;margin:2rem;}"
-                "pre{background:#f6f6f6;padding:1rem;}</style>"
-                "</head><body>\n<h1>Score</h1>\n<pre>\nmelody:") < 0) {
-        fclose(f);
-        return false;
-    }
-    for (int i = 0; i < length; i++) {
-        if (fprintf(f, " %d", melody[i]) < 0) {
-            fclose(f);
-            return false;
-        }
-    }
-    if (fprintf(f, "\n") < 0) {
-        fclose(f);
-        return false;
-    }
-
-    int span = canon_span_config(config);
-    for (int v = 1; v < config->voices; v++) {
-        if (fprintf(f, "voice %d:", v + 1) < 0) {
-            fclose(f);
-            return false;
-        }
-        for (int t = 0; t < span; t++) {
-            int idx = canon_map_source(config, v, t);
-            if (idx < 0) {
-                if (fprintf(f, " rest") < 0) {
-                    fclose(f);
-                    return false;
-                }
-            } else if (fprintf(f, " %d",
-                               canon_sounding(config, v, melody[idx])) < 0) {
-                fclose(f);
-                return false;
-            }
-        }
-        if (fprintf(f, "\n") < 0) {
-            fclose(f);
-            return false;
-        }
-    }
-
-    if (fprintf(f, "backtracks: %d\nentropy: %.6f\n", backtracks,
-                entropy_bits(state->domains, length)) < 0) {
-        fclose(f);
-        return false;
-    }
-    if (config->energy == 1 && fprintf(f, "energy: %d\n", energy) < 0) {
-        fclose(f);
-        return false;
-    }
-    if (fprintf(f,
-                "</pre>\n<label>variable id <input id=\"varfilter\" "
-                "type=\"text\"></label>\n<ul id=\"events\">\n") < 0) {
-        fclose(f);
-        return false;
-    }
-    for (int i = 0; i < state->proof.event_count; i++) {
-        const ProofEvent *e = &state->proof.events[i];
-        if (fprintf(f, "<li data-var=\"%d\">variable %d pitch %d %s</li>\n",
-                    e->variable_id, e->variable_id, e->removed_pitch,
-                    e->message[0] ? e->message : "") < 0) {
-            fclose(f);
-            return false;
-        }
-    }
-    if (fprintf(f,
-                "</ul>\n<script>"
-                "document.getElementById('varfilter').oninput=function(){"
-                "var q=this.value.trim();"
-                "document.querySelectorAll('#events li').forEach(function(li){"
-                "li.style.display=(!q||li.getAttribute('data-var')===q)?'':'none';"
-                "});};"
-                "</script>\n</body></html>\n") < 0) {
-        fclose(f);
-        return false;
-    }
-    return fclose(f) == 0;
-}
-
-bool export_report(const char *path, const PieceConfig *config, int backtracks,
-                   double entropy, int energy, const int *core, int core_n) {
-    if (path == NULL || config == NULL) return false;
-
-    FILE *f = fopen(path, "w");
-    if (f == NULL) return false;
-
-    if (fprintf(f,
-                "rules: invert=%d retrograde=%d cadence=%d strong_chord=%d "
-                "cyclic=%d motif=%d\nbacktracks: %d\nentropy: %.6f\nenergy: %d\n",
-                config->invert, config->retrograde, config->cadence,
-                config->strong_chord, config->cyclic, config->w_motif,
-                backtracks, entropy, energy) < 0) {
-        fclose(f);
-        return false;
-    }
-    if (core_n > 0 && core != NULL) {
-        if (fprintf(f, "core:") < 0) {
-            fclose(f);
-            return false;
-        }
-        for (int i = 0; i < core_n; i++) {
-            if (fprintf(f, " %s", constraint_name(core[i])) < 0) {
-                fclose(f);
-                return false;
-            }
-        }
-        if (fprintf(f, "\n") < 0) {
-            fclose(f);
-            return false;
-        }
-    }
-    return fclose(f) == 0;
+    free(mix);
+    if (fclose(f) != 0) rc = -1;
+    return rc == 0;
 }

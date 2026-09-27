@@ -1,88 +1,22 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-#include "domain.h"
-#include "proof.h"
+/* Size limits shared by every module.
+ * A melody step is one quarter note; a bar is four steps. */
+enum {
+    MELODY_MAX = 32,
+    VOICE_MAX = 4,
+    SPAN_MAX = 128,
+    BAR_MAX = SPAN_MAX / 4,
+    SECTION_MAX = 2,
+    /* pitch + tie per melody note, one chord per bar, one key per section */
+    VAR_MAX = 2 * MELODY_MAX + BAR_MAX + SECTION_MAX
+};
 
-#include <stdbool.h>
-#include <stdint.h>
+/* Pitch value 0 stands for a rest, so the lowest playable pitch is 1. */
+enum { PITCH_REST = 0 };
 
-enum { MELODY_MAX = 32, VOICE_MAX = 4, SPAN_MAX = 128 };
-
-typedef struct PieceConfig {
-    int length;
-    int voices;
-    int delay;
-    int range_low;
-    int range_high;
-    int max_leap;
-    int invert; /* 0 = identity canon, 1 = inversion */
-    int invert_mod12; /* 0 = T(p)=2a-p; 1 = pitch-class fold */
-    int axis;
-    int retrograde; /* 0 = forward follower, 1 = reversed follower */
-    int energy;      /* 0 = ascending MIDI, 1 = cost order */
-    int temperature; /* 0 = cheapest first; >0 = weighted sample */
-    int seed;
-    int w_gravity;
-    int w_leap;
-    int w_curve;
-    int transpose; /* add to follower sounding pitch; 0 = off */
-    int augment;   /* 0 = off; k>=2 holds each source for k steps */
-    int diminish;  /* 0 = off; k>=2 reads every kth source step */
-    int phase;     /* extra follower delay steps; 0 = off */
-    int voice_delay[VOICE_MAX]; /* 0 = use voice * delay */
-    int lock; /* 0 = off; force lock_index to lock_pitch before search */
-    int lock_index;
-    int lock_pitch;
-    int anneal_start;
-    int anneal_end;
-    int anneal_steps; /* 0 = off */
-    int anneal_ratio; /* 0 = linear; 1..99 = T *= ratio/100 */
-    int w_dissonance; /* vertical second/tritone; order only */
-    int w_parallel;   /* soft parallel fifth/octave; order only */
-    int strong_chord; /* 0 = off; 1 = C-E-G on t%4==0 */
-    int cadence;      /* 0 = off; 1 = last strong beat is V (G/B/D) */
-    int rhythm;       /* 0 = all quarters; 1 = rest/quarter/half domain */
-    int rest_at;      /* -1 = off; else force rest at that melody index */
-    int cyclic;       /* 0 = off; 1 = follower wraps modulo length */
-    int w_motif;      /* soft interval-pattern cost; 0 = off */
-    int motif_a;
-    int motif_b;
-    int motif_c; /* -128 = unused window slot */
-    int motif_d;
-    int modulate_at; /* -1 = off; else switch to G major at this index */
-    int key_second;  /* 0 = G major (the second key) */
-    int w_modulate;  /* 0 = off; pivot-note cost in the new key */
-    int poly_meter;  /* 0 = t%4==0; 1 = also t%3==0 */
-    int pc_weight[12]; /* 0 = off; extra pitch-class cost */
-    int sample;        /* 0 = sine WAV; 1 = 256-sample table */
-} PieceConfig;
-
-typedef struct SolverState {
-    PieceConfig config;
-    MidiDomain domains[MELODY_MAX];
-    ProofLog proof;
-    bool failed;
-    int failed_variable;
-    int backtracks;
-    uint32_t rng;
-    int anneal_step;
-    int ac3_q[MELODY_MAX];
-    int ac3_n;
-    unsigned char ac3_in[MELODY_MAX];
-    unsigned char rhythm_mask[MELODY_MAX]; /* bit0 rest, bit1 quarter, bit2 half */
-    int duration[MELODY_MAX];              /* 0 rest, 1 quarter, 2 half */
-    unsigned char skip_cid[16];            /* unsat-core search mutes */
-} SolverState;
-
-enum { RHYTHM_REST = 1, RHYTHM_QUARTER = 2, RHYTHM_HALF = 4 };
-
-static inline void solver_enqueue(SolverState *s, int var) {
-    if (var < 0 || var >= s->config.length || s->ac3_in[var]) {
-        return;
-    }
-    s->ac3_in[var] = 1;
-    s->ac3_q[s->ac3_n++] = var;
-}
+/* Tie variable values: a new attack, or a continuation of the previous note. */
+enum { TIE_NOTE = 0, TIE_HOLD = 1 };
 
 #endif

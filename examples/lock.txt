@@ -1,11 +1,9 @@
+# A lock the rules reject: C#4 is not in C major. The run fails, the
+# unsat core names scale and lock, and the counterfactual shows the
+# rules alone are satisfiable.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
 lock 1
 lock_index 0
 lock_pitch 61

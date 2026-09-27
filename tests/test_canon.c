@@ -1,117 +1,83 @@
 #include "canon.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#define CHECK(cond)                                                            \
-    do {                                                                       \
-        if (!(cond)) {                                                         \
-            fprintf(stderr, "FAIL: %s (%s:%d)\n", #cond, __FILE__, __LINE__);  \
-            exit(1);                                                           \
-        }                                                                      \
-    } while (0)
+#include "test_util.h"
 
 int main(void) {
-    const int delay = 4;
-    const int length = 12;
+    PieceConfig c = test_config();
 
-    /* voice 1 silent at t < 4 */
-    CHECK(canon_melody_index(1, 0, delay, length) == -1);
-    CHECK(canon_melody_index(1, 1, delay, length) == -1);
-    CHECK(canon_melody_index(1, 2, delay, length) == -1);
-    CHECK(canon_melody_index(1, 3, delay, length) == -1);
+    /* plain canon at delay 4 */
+    CHECK(canon_voice_delay(&c, 0) == 0);
+    CHECK(canon_voice_delay(&c, 1) == 4);
+    CHECK(canon_voice_delay(&c, 2) == 8);
+    CHECK(canon_map_source(&c, 0, 0) == 0);
+    CHECK(canon_map_source(&c, 0, 11) == 11);
+    CHECK(canon_map_source(&c, 0, 12) == -1);
+    CHECK(canon_map_source(&c, 1, 3) == -1);
+    CHECK(canon_map_source(&c, 1, 4) == 0);
+    CHECK(canon_map_source(&c, 1, 15) == 11);
+    CHECK(canon_map_source(&c, 1, 16) == -1);
+    CHECK(canon_map_source(&c, 4, 4) == -1);
+    CHECK(canon_map_source(&c, -1, 4) == -1);
+    CHECK(canon_span_config(&c) == 16);
 
-    /* voice 0 silent at t >= 12 */
-    CHECK(canon_melody_index(0, 12, delay, length) == -1);
-    CHECK(canon_melody_index(0, 13, delay, length) == -1);
-    CHECK(canon_melody_index(0, 14, delay, length) == -1);
-    CHECK(canon_melody_index(0, 15, delay, length) == -1);
+    c.voices = 3;
+    CHECK(canon_map_source(&c, 2, 7) == -1);
+    CHECK(canon_map_source(&c, 2, 8) == 0);
+    CHECK(canon_span_config(&c) == 20);
+    c.voices = 2;
 
-    /* t=4: voice0 index 4, voice1 index 0 */
-    CHECK(canon_melody_index(0, 4, delay, length) == 4);
-    CHECK(canon_melody_index(1, 4, delay, length) == 0);
+    /* retrograde: the follower starts from the melody's end */
+    c.retrograde = 1;
+    CHECK(canon_map_source(&c, 1, 4) == 11);
+    CHECK(canon_map_source(&c, 1, 15) == 0);
+    CHECK(canon_map_source(&c, 0, 4) == 4);
+    c.retrograde = 0;
 
-    /* span is length + delay */
-    CHECK(canon_span(length, delay) == 16);
+    /* transposition and inversion change only the sounding pitch */
+    c.transpose = 7;
+    CHECK(canon_sounding(&c, 1, 60) == 67);
+    CHECK(canon_sounding(&c, 0, 60) == 60);
+    CHECK(canon_sounding(&c, 1, PITCH_REST) == SOUND_REST);
+    c.transpose = 0;
+    c.invert = 1;
+    c.axis = 67;
+    CHECK(canon_sounding(&c, 1, 62) == 72);
+    c.invert_mod12 = 1;
+    c.axis = 62;
+    CHECK(canon_sounding(&c, 1, 60) == 64);
+    c.invert = 0;
+    c.invert_mod12 = 0;
 
-    /* t=15 voice 1 is 11; t=11 voice 0 is 11 */
-    CHECK(canon_melody_index(1, 15, delay, length) == 11);
-    CHECK(canon_melody_index(0, 11, delay, length) == 11);
+    /* augmentation holds each note; diminution skips notes */
+    c.augment = 2;
+    CHECK(canon_map_source(&c, 1, 4) == 0);
+    CHECK(canon_map_source(&c, 1, 5) == 0);
+    CHECK(canon_map_source(&c, 1, 6) == 1);
+    CHECK(canon_span_config(&c) == 28);
+    c.augment = 0;
+    c.diminish = 2;
+    CHECK(canon_map_source(&c, 1, 4) == 0);
+    CHECK(canon_map_source(&c, 1, 5) == 2);
+    CHECK(canon_map_source(&c, 1, 10) == -1);
+    CHECK(canon_span_config(&c) == 12);
+    c.diminish = 0;
 
-    /* voice 2 (third part) silent at t < 8, then x0 */
-    CHECK(canon_melody_index(2, 4, delay, length) == -1);
-    CHECK(canon_melody_index(2, 7, delay, length) == -1);
-    CHECK(canon_melody_index(2, 8, delay, length) == 0);
-    CHECK(canon_melody_index(2, 19, delay, length) == 11);
-    CHECK(canon_span_voices(length, delay, 3) == 20);
-    CHECK(canon_melody_index(3, 12, delay, length) == 0);
-    CHECK(canon_melody_index(4, 4, delay, length) == -1);
+    /* phase and per-voice delays */
+    c.phase = 1;
+    CHECK(canon_voice_delay(&c, 1) == 5);
+    CHECK(canon_map_source(&c, 1, 4) == -1);
+    CHECK(canon_map_source(&c, 1, 5) == 0);
+    c.phase = 0;
+    c.voice_delay[1] = 2;
+    CHECK(canon_voice_delay(&c, 1) == 2);
+    CHECK(canon_span_config(&c) == 14);
+    c.voice_delay[1] = 0;
 
-    /* canon_source_index: delay 4, length 12, retrograde 1 */
-    CHECK(canon_source_index(1, 0, delay, length, 1) == -1);
-    CHECK(canon_source_index(1, 1, delay, length, 1) == -1);
-    CHECK(canon_source_index(1, 2, delay, length, 1) == -1);
-    CHECK(canon_source_index(1, 3, delay, length, 1) == -1);
-    CHECK(canon_source_index(1, 4, delay, length, 1) == 11);
-    CHECK(canon_source_index(1, 8, delay, length, 1) == 7);
-    CHECK(canon_source_index(1, 15, delay, length, 1) == 0);
-    CHECK(canon_source_index(1, 4, delay, length, 0) == 0);
-    CHECK(canon_source_index(0, 4, delay, length, 1) == 4);
-    CHECK(canon_source_index(2, 4, delay, length, 1) == -1);
-    CHECK(canon_source_index(2, 8, delay, length, 0) == 0);
-    CHECK(canon_source_index(2, 8, delay, length, 1) == 11);
-    CHECK(canon_source_index(3, 12, delay, length, 0) == 0);
-    CHECK(canon_source_index(4, 16, delay, length, 0) == -1);
-
-    {
-        PieceConfig c;
-        memset(&c, 0, sizeof(c));
-        c.length = 12;
-        c.voices = 2;
-        c.delay = 4;
-        CHECK(canon_map_source(&c, 1, 4) == 0);
-        CHECK(canon_map_source(&c, 1, 3) == -1);
-        CHECK(canon_span_config(&c) == 16);
-        CHECK(canon_sounding(&c, 1, 60) == 60);
-
-        c.transpose = 7;
-        CHECK(canon_sounding(&c, 1, 60) == 67);
-        CHECK(canon_sounding(&c, 0, 60) == 60);
-
-        c.transpose = 0;
-        c.augment = 2;
-        CHECK(canon_map_source(&c, 1, 4) == 0);
-        CHECK(canon_map_source(&c, 1, 5) == 0);
-        CHECK(canon_map_source(&c, 1, 6) == 1);
-        CHECK(canon_span_config(&c) == 28);
-
-        c.augment = 0;
-        c.diminish = 2;
-        CHECK(canon_map_source(&c, 1, 4) == 0);
-        CHECK(canon_map_source(&c, 1, 5) == 2);
-        CHECK(canon_span_config(&c) == 12);
-
-        c.diminish = 0;
-        c.phase = 1;
-        CHECK(canon_voice_delay(&c, 1) == 5);
-        CHECK(canon_map_source(&c, 1, 4) == -1);
-        CHECK(canon_map_source(&c, 1, 5) == 0);
-
-        c.phase = 0;
-        c.voice_delay[1] = 2;
-        CHECK(canon_voice_delay(&c, 1) == 2);
-        CHECK(canon_map_source(&c, 1, 2) == 0);
-        CHECK(canon_span_config(&c) == 14);
-
-        c.voice_delay[1] = 0;
-        c.delay = 4;
-        c.cyclic = 1;
-        CHECK(canon_map_source(&c, 1, 0) == 8);
-        CHECK(canon_map_source(&c, 1, 3) == 11);
-        CHECK(canon_map_source(&c, 1, 4) == 0);
-        CHECK(canon_span_config(&c) == 12);
-    }
+    /* a cyclic canon wraps and lasts one melody length */
+    c.cyclic = 1;
+    CHECK(canon_map_source(&c, 1, 0) == 8);
+    CHECK(canon_map_source(&c, 1, 3) == 11);
+    CHECK(canon_map_source(&c, 1, 4) == 0);
+    CHECK(canon_span_config(&c) == 12);
 
     printf("ok\n");
     return 0;

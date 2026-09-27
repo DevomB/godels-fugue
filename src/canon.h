@@ -1,15 +1,17 @@
 #ifndef CANON_H
 #define CANON_H
 
-#include "types.h"
+#include "config.h"
 
-int canon_melody_index(int voice, int time, int delay, int length);
-int canon_span(int length, int delay);
-int canon_span_voices(int length, int delay, int voices);
-int canon_source_index(int voice, int time, int delay, int length, int retrograde);
+/* Silence in a voice line: before a voice enters, after it ends, or a rest. */
+enum { SOUND_REST = -1 };
+
 int canon_voice_delay(const PieceConfig *config, int voice);
+/* Melody index voice `voice` plays at step `time`, or -1 if it is silent. */
 int canon_map_source(const PieceConfig *config, int voice, int time);
+/* Number of steps from the first entry to the last note of any voice. */
 int canon_span_config(const PieceConfig *config);
+/* Pitch a voice sounds for a melody pitch; SOUND_REST for a rest. */
 int canon_sounding(const PieceConfig *config, int voice, int source_pitch);
 
 #endif

@@ -1,10 +1,5 @@
+# A per-voice entry: voice 2 enters after two steps instead of four.
 length 12
 voices 2
 delay 4
-range_low 60
-range_high 72
-max_leap 7
-invert 0
-axis 67
-retrograde 0
 delay_1 2

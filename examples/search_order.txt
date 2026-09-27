@@ -1,0 +1,8 @@
+# Choose the next variable by entropy (the one whose value costs make
+# it most certain) rather than by fewest remaining values.
+length 16
+voices 3
+delay 4
+range_low 55
+range_high 79
+var_order entropy

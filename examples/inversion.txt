@@ -1,8 +1,10 @@
+# The follower plays the melody upside down. Mirroring around G#4 (68)
+# maps C major onto itself and the tonic C onto E, so the follower can
+# stay in the key and end on a tonic-triad note.
 length 12
 voices 2
 delay 4
 range_low 60
-range_high 72
-max_leap 7
+range_high 76
 invert 1
-axis 67
+axis 68

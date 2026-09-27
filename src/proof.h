@@ -2,20 +2,46 @@
 #define PROOF_H
 
 #include "domain.h"
+#include "types.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 
-enum { PROOF_PARENT_MAX = 8 };
+/* A set of decision levels (1-based). Every variable carries the set of
+ * decisions its current domain depends on; conflicts are unions of them. */
+typedef struct LevelSet {
+    uint64_t bits[(VAR_MAX + 64) / 64];
+} LevelSet;
+
+void levelset_clear(LevelSet *s);
+void levelset_add(LevelSet *s, int level);
+void levelset_remove(LevelSet *s, int level);
+bool levelset_has(const LevelSet *s, int level);
+void levelset_union(LevelSet *s, const LevelSet *other);
+int levelset_max(const LevelSet *s); /* 0 when empty */
+int levelset_count(const LevelSet *s);
+
+enum {
+    PROOF_REMOVE, /* a value left a domain */
+    PROOF_DECIDE, /* the search chose a value */
+    PROOF_FORCED  /* removals left one value */
+};
+
+enum { PROOF_PARENT_MAX = 8, PROOF_MESSAGE_MAX = 40 };
 
 typedef struct ProofEvent {
+    int type;
     int variable_id;
-    int removed_pitch;
-    int constraint_id;
-    char message[160];
+    int value;      /* removed, chosen or forced value */
+    int rule;       /* CID_* of a removal */
+    int constraint; /* model constraint index, or -1 */
+    int level;      /* decisions on the search path when recorded */
+    LevelSet reason;
     int parent_count;
-    int parent_events[PROOF_PARENT_MAX]; /* >=0 prior event; -1 assignment */
+    int parent_events[PROOF_PARENT_MAX]; /* prior event, or -1 */
     int parent_vars[PROOF_PARENT_MAX];
-    int parent_pitches[PROOF_PARENT_MAX];
+    int parent_values[PROOF_PARENT_MAX]; /* value if the parent was collapsed, else -1 */
+    char message[PROOF_MESSAGE_MAX];
 } ProofEvent;
 
 typedef struct EntropySample {
@@ -41,15 +67,11 @@ void proof_init(ProofLog *log);
 void proof_free(ProofLog *log);
 ProofMark proof_mark(const ProofLog *log);
 void proof_truncate(ProofLog *log, ProofMark mark);
-bool proof_append_removal(ProofLog *log, int variable_id, int removed_pitch,
-                          int constraint_id, const char *message);
-bool proof_append_removal_deps(ProofLog *log, int variable_id, int removed_pitch,
-                               int constraint_id, const char *message,
-                               const int *related_vars, int related_count,
-                               const MidiDomain *domains);
+/* Appends a zeroed event and returns it, or NULL when out of memory. */
+ProofEvent *proof_append(ProofLog *log, int type, int variable_id, int value);
+void proof_add_parent(ProofEvent *event, int parent_event, int parent_var,
+                      int parent_value);
 bool proof_append_entropy(ProofLog *log, double bits);
-bool proof_write(const ProofLog *log, const char *path);
-bool proof_write_dag(const ProofLog *log, const char *path);
 double entropy_bits(const MidiDomain *domains, int count);
 
 #endif

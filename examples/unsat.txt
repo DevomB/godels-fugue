@@ -1,9 +1,8 @@
+# An impossible rule set: one available pitch, but the cadence needs a
+# dominant-triad note before the final tonic. The unsat core is printed.
 length 12
 voices 2
 delay 4
 range_low 60
 range_high 60
-max_leap 7
-invert 0
-axis 67
 cadence 1
