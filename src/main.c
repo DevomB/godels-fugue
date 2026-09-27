@@ -84,7 +84,8 @@ static int load_config(const char *path, PieceConfig *config)
 
     char key[64];
     int value;
-    while (fscanf(f, "%63s %d", key, &value) == 2) {
+    int read;
+    while ((read = fscanf(f, "%63s %d", key, &value)) == 2) {
         if (strcmp(key, "length") == 0) {
             config->length = value;
         } else if (strcmp(key, "voices") == 0) {
@@ -179,10 +180,18 @@ static int load_config(const char *path, PieceConfig *config)
             config->poly_meter = value;
         } else if (strcmp(key, "sample") == 0) {
             config->sample = value;
+        } else {
+            fprintf(stderr, "unknown config key: %s\n", key);
+            fclose(f);
+            return 0;
         }
     }
 
     fclose(f);
+    if (read != EOF) {
+        fprintf(stderr, "config value for %s is not an integer\n", key);
+        return 0;
+    }
     return 1;
 }
 
@@ -325,6 +334,11 @@ static int validate_config(const PieceConfig *config)
         config->anneal_end < 0 || config->anneal_ratio < 0 ||
         config->anneal_ratio > 99) {
         fprintf(stderr, "invalid anneal\n");
+        return 0;
+    }
+    if (canon_span_config(config) > SPAN_MAX) {
+        fprintf(stderr, "piece too long: canon spans more than %d steps\n",
+                SPAN_MAX);
         return 0;
     }
     return 1;
