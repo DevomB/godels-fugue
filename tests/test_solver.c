@@ -203,7 +203,7 @@ static void test_backjumping(void) {
  * same first solution. Learning may reorder the search but never
  * changes whether a solution exists. */
 static void test_search_equivalence(void) {
-    static const char *const hard[][10] = {
+    static const char *const hard[][16] = {
         {"var_order=index", "energy=0", "voices=4", "delay=3", "length=20", "consonance=all",
          "range_low=55", "range_high=79", NULL},
         {"var_order=index", "voices=3", "length=24", "delay=2", "consonance=all",
@@ -211,6 +211,10 @@ static void test_search_equivalence(void) {
         {"voices=3", "delay=2", "max_leap=3", NULL},
         {"harmony=1", "consonance=all", "voices=3", "length=16", "range_low=55",
          "range_high=79", NULL},
+        /* nine fixed rests: every one must be a reason when rests run out */
+        {"voices=2", "delay=1", "length=19", "range_low=60", "range_high=60", "rhythm=1",
+         "max_rests=9", "consonance=all", "cadence=0", "w_rest=0",
+         "pc_weight=5,5,5,5,5,5,5,5,5,5,5,5", "var_order=index", NULL},
     };
     for (size_t h = 0; h < sizeof(hard) / sizeof(hard[0]); h++) {
         PieceConfig c = test_config();
@@ -331,6 +335,20 @@ static void test_optimize(void) {
         test_close(best);
         test_close(again);
     }
+    /* chords of bars where only followers play are searched too */
+    PieceConfig tail = test_config();
+    test_set(&tail, "harmony=1");
+    test_set(&tail, "voices=3");
+    test_set(&tail, "delay=8");
+    test_set(&tail, "length=8");
+    test_set(&tail, "range_low=55");
+    test_set(&tail, "range_high=79");
+    tail.optimize = 20000;
+    TestRun *t = test_solve(&tail);
+    CHECK(t->status == SOLVE_SAT);
+    CHECK(model_energy(&t->model, t->values, NULL) < 22);
+    test_close(t);
+
     /* rhythm example: the optimizer finds a strictly better piece */
     PieceConfig c = test_config();
     test_set(&c, "rhythm=1");

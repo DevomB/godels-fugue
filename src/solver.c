@@ -227,7 +227,9 @@ static bool revise_max_rests(SolverState *s, int ci) {
         if (solver_value(s, v) == PITCH_REST) fixed[nfixed++] = v;
     }
     if (nfixed < limit) return true;
-    int nsrc = nfixed < SCOPE_MAX ? nfixed : SCOPE_MAX;
+    /* every fixed rest is a reason: leaving one out would let a conflict
+     * set miss the decision that fixed it */
+    int nsrc = nfixed;
     if (nfixed > limit) {
         /* too many rests: empty the last one's domain */
         return remove_value(s, fixed[nfixed - 1], PITCH_REST, CID_REST, ci, fixed, nsrc,
@@ -790,16 +792,23 @@ static void restart(SolverState *s, const Snapshot *root) {
     enqueue_all(s);
 }
 
+static bool note_in_window(int length, int i, int start, int width) {
+    return i >= 0 && ((i - start) % length + length) % length < width;
+}
+
 /* Is var part of the window of melody notes [start, start + width),
- * wrapping around the end? Chords of the bars those notes start are
- * free too; keys never are. */
+ * wrapping around the end? A bar's chord is free when any voice plays a
+ * window note in that bar, including bars after the melody ends; keys
+ * are never free. */
 static bool in_window(const Model *m, int var, int start, int width) {
     const ModelVar *v = &m->vars[var];
     int length = m->config.length;
     if (v->kind == VAR_KEY) return false;
-    for (int k = 0; k < width; k++) {
-        int i = (start + k) % length;
-        if (v->kind == VAR_CHORD ? v->index == i / 4 : v->index == i) return true;
+    if (v->kind != VAR_CHORD) return note_in_window(length, v->index, start, width);
+    for (int t = v->index * 4; t < v->index * 4 + 4 && t < m->span; t++) {
+        for (int voice = 0; voice < m->voices; voice++) {
+            if (note_in_window(length, m->source[voice][t], start, width)) return true;
+        }
     }
     return false;
 }
@@ -826,6 +835,7 @@ static int optimize(SolverState *s) {
     int stride = width / 2 > 0 ? width / 2 : 1;
     int passes_needed = (length + stride - 1) / stride;
     int quiet = 0;
+    bool cut = false; /* a window since the last improvement ran out of nodes */
     for (int start = 0; quiet < passes_needed; start = (start + stride) % length) {
         if (s->stats.nodes - s->stats.first.nodes > s->optimize || s->limit_hit) break;
         restart(s, root);
@@ -841,9 +851,12 @@ static int optimize(SolverState *s) {
         search(s, &conflict);
         s->optimizing = false;
         s->stats.windows++;
-        quiet = s->stats.solutions > before ? 0 : quiet + 1;
+        bool improved = s->stats.solutions > before;
+        cut = improved ? false : (cut || s->stats.nodes > s->window_end);
+        quiet = improved ? 0 : quiet + 1;
     }
-    s->stats.converged = quiet >= passes_needed;
+    s->stats.converged = quiet >= passes_needed && !cut;
+    s->stats.windows_cut = quiet >= passes_needed && cut;
 
     s->limit_hit = false;
     restart(s, root);

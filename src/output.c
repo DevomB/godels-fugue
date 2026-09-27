@@ -197,7 +197,9 @@ static void print_optimize_line(FILE *out, const Run *run) {
                  "nodes, %s\n",
             st->first_energy, run->energy, st->solutions - 1, st->windows,
             st->nodes - st->first.nodes,
-            st->converged ? "no window improves it" : "budget spent");
+            st->converged     ? "no window improves it"
+            : st->windows_cut ? "a full pass found nothing cheaper, some windows cut short"
+                              : "budget spent");
 }
 
 static void print_line(FILE *out, const char *label, const int *line, int n) {
@@ -376,7 +378,7 @@ bool output_write_report(const char *path, const Run *run) {
     for (int t = 0; t < TERM_COUNT; t++) {
         if (run->breakdown[t] != 0) fprintf(f, "  %-15s %d\n", term_name(t), run->breakdown[t]);
     }
-    fprintf(f, "rule impact (values removed):\n");
+    fprintf(f, "values removed during the whole search, by rule:\n");
     for (int r = 1; r < CID_MAX; r++) {
         if (st->removals_by_rule[r] != 0)
             fprintf(f, "  %-16s %ld\n", rule_name(r), st->removals_by_rule[r]);

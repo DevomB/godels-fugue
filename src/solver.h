@@ -59,7 +59,8 @@ typedef struct SolverStats {
     int first_energy; /* energy of the first piece found */
     SearchCounts first; /* effort until the first piece */
     long windows;     /* neighbourhoods the optimizer searched */
-    bool converged;   /* a full pass of windows found nothing cheaper */
+    bool converged;   /* a full pass of windows searched and found nothing cheaper */
+    bool windows_cut; /* a full pass found nothing, but some windows ran out of nodes */
     double seconds;
 } SolverStats;
 
