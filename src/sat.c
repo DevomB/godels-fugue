@@ -129,6 +129,7 @@ static int fill_domains(SatState *s, const PieceConfig *c) {
     for (int i = 0; i < c->length; i++) {
         for (int p = c->range_low; p <= c->range_high; p++) {
             if (!pitch_in_scale(p, i, c->modulate_at)) continue;
+            if (c->lock && i == c->lock_index && p != c->lock_pitch) continue;
             int sound = canon_sounding(c, 1, p);
             if (sound < c->range_low || sound > c->range_high) continue;
             if (!pitch_in_scale(sound, i, c->modulate_at)) continue;
