@@ -99,15 +99,15 @@ bool output_write_all(const Run *run, const OutputPaths *paths) {
     ok &= trace_write_entropy(paths->entropy, run);
     ok &= write_beside(paths->proof, "proof.json", trace_save_json, run);
     ok &= write_beside(paths->midi, "report.txt", output_write_report, run);
+    /* the page and explanations also show why a failed run failed */
+    ok &= write_beside(paths->midi, "score.html", page_write, run);
+    ok &= write_beside(paths->midi, "explain.txt", output_write_explanations, run);
     if (run->status != SOLVE_SAT) return ok;
 
-    ensure_parent_dir(paths->midi);
     ok &= write_midi(paths->midi, run);
     ok &= write_beside(paths->midi, "score.musicxml", write_musicxml, run);
     ok &= write_beside(paths->midi, "contour.svg", write_contour, run);
     ok &= write_beside(paths->midi, "voices.wav", write_wav, run);
-    ok &= write_beside(paths->midi, "score.html", page_write, run);
-    ok &= write_beside(paths->midi, "explain.txt", output_write_explanations, run);
     return ok;
 }
 

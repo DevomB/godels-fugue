@@ -1,3 +1,864 @@
 <!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Canon Collapse</title></head>
-<body><script>const PIECE = /*PIECE_DATA*/;</script></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canon Collapse score</title>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #6f6e69;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.10);
+  --accent: #2a78d6;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --ink-1: #ffffff;
+  --ink-2: #ffffff;
+  --ink-3: #0b0b0b;
+  --ink-4: #0b0b0b;
+  --good: #0ca30c;
+  --critical: #d03b3b;
+  --select: #0b0b0b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #222220;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9a998f;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --ink-1: #ffffff;
+    --ink-2: #ffffff;
+    --ink-3: #ffffff;
+    --ink-4: #0b0b0b;
+    --select: #ffffff;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --surface-2: #222220;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #9a998f;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.10);
+  --accent: #3987e5;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --ink-1: #ffffff;
+  --ink-2: #ffffff;
+  --ink-3: #ffffff;
+  --ink-4: #0b0b0b;
+  --select: #ffffff;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-primary);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+h1 { font-size: 22px; margin: 0; font-weight: 650; }
+h2 { font-size: 15px; margin: 0 0 10px; font-weight: 650; }
+h3 { font-size: 13px; margin: 14px 0 6px; font-weight: 600; color: var(--text-secondary); }
+p { margin: 0 0 8px; }
+button, select, input {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 10px;
+}
+button { cursor: pointer; }
+button:hover { background: var(--surface-2); }
+button:focus-visible, select:focus-visible, input:focus-visible, .chip:focus-visible,
+.note:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 14px;
+  min-width: 0;
+}
+.header { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 20px; }
+.header .grow { flex: 1 1 320px; }
+.subtitle { color: var(--text-secondary); margin-top: 2px; }
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.badge .dot { width: 8px; height: 8px; border-radius: 50%; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 14px; }
+.tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.tile .label { font-size: 12px; color: var(--text-secondary); }
+.tile .value { font-size: 20px; font-weight: 600; }
+.tile .note-text { font-size: 12px; color: var(--text-muted); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--text-secondary); margin: 4px 0 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.scroll { overflow-x: auto; overscroll-behavior-x: contain; }
+svg text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
+.lane-label { fill: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.note { cursor: pointer; }
+.note rect.body { stroke: none; }
+.note.dim rect.body { opacity: 0.45; }
+.note rect.ring { fill: none; stroke: none; }
+.note.selected rect.ring { stroke: var(--select); stroke-width: 2; }
+.chord-label { fill: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  display: inline-flex; flex-direction: column; align-items: center; min-width: 44px;
+  padding: 3px 6px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--surface-1); cursor: pointer; font-size: 12px; line-height: 1.25;
+}
+.chip b { font-size: 13px; font-weight: 600; }
+.chip small { color: var(--text-muted); }
+.chip.selected { border-color: var(--select); box-shadow: inset 0 0 0 1px var(--select); }
+.status-mark { font-size: 11px; color: var(--text-secondary); }
+.why { margin: 0; padding: 0; list-style: none; }
+.why li { padding: 5px 0; border-top: 1px solid var(--grid); }
+.why li:first-child { border-top: none; }
+.values { font-weight: 600; margin-right: 6px; }
+.link { color: var(--accent); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; background: none; border: none; padding: 0; font: inherit; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 4px 8px 4px 0; border-bottom: 1px solid var(--grid); vertical-align: top; }
+th { color: var(--text-secondary); font-weight: 600; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.muted { color: var(--text-muted); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.events { max-height: 460px; overflow-y: auto; }
+.events tr.hit td { background: var(--surface-2); }
+.tooltip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface-1); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px;
+  font-size: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18); max-width: 280px;
+}
+.tooltip strong { font-size: 13px; }
+details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px; margin-top: 8px; }
+.bar-row { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px; align-items: center; margin: 4px 0; font-size: 13px; }
+.bar-row .name { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bar-track { display: grid; grid-template-columns: minmax(0, 1fr) 48px; align-items: center; gap: 6px; min-width: 0; }
+.bar-area { min-width: 0; }
+.bar { height: 14px; border-radius: 0 4px 4px 0; background: var(--accent); min-width: 2px; }
+.bar-value { font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.empty { color: var(--text-muted); font-style: italic; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+<main>
+  <div class="header">
+    <div class="grow">
+      <h1 id="title">Canon Collapse</h1>
+      <div class="subtitle" id="subtitle"></div>
+    </div>
+    <span class="badge" id="status"></span>
+    <button id="play" type="button">Play</button>
+    <button id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
+  </div>
+  <div class="tiles" id="tiles"></div>
+
+  <section class="card" id="score-card">
+    <h2>Score</h2>
+    <p class="muted" id="score-help">Each lane is one voice; time runs left to right in quarter-note steps. Pick a note to see why it is there, and every place the canon repeats it.</p>
+    <div class="legend" id="voice-legend"></div>
+    <div class="scroll"><svg id="roll" role="img" aria-label="Piano roll of every voice"></svg></div>
+  </section>
+
+  <div class="cols">
+    <section class="card">
+      <h2>Why is this note here?</h2>
+      <h3>Melody notes</h3>
+      <div class="chips" id="melody-chips"></div>
+      <h3 id="other-title">Other variables</h3>
+      <div class="chips" id="other-chips"></div>
+      <div id="inspector" style="margin-top:14px"></div>
+    </section>
+    <div>
+      <section class="card">
+        <h2>Entropy while solving</h2>
+        <p class="muted">Bits of choice left after each round of propagation.</p>
+        <div class="scroll"><svg id="entropy" role="img" aria-label="Entropy after each propagation"></svg></div>
+        <details><summary>Show as a table</summary><div id="entropy-table"></div></details>
+      </section>
+      <section class="card">
+        <h2 id="energy-title">Energy by rule</h2>
+        <div id="energy"></div>
+      </section>
+      <section class="card">
+        <h2>Values removed by each rule</h2>
+        <p class="muted">Counted in the proof of this piece.</p>
+        <div id="impact"></div>
+      </section>
+      <section class="card" id="delay-card" hidden>
+        <h2>Delays tried</h2>
+        <div id="delays"></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="card">
+    <h2>Proof log</h2>
+    <div class="filters">
+      <label>Variable <select id="f-var"><option value="">all</option></select></label>
+      <label>Rule <select id="f-rule"><option value="">all</option></select></label>
+      <label>Kind <select id="f-type"><option value="">all</option><option>remove</option><option>decide</option><option>forced</option></select></label>
+      <span class="muted" id="f-count"></span>
+    </div>
+    <div class="events"><table><thead><tr><th class="num">#</th><th>Kind</th><th>Variable</th><th>Value</th><th>Why</th><th>Rests on</th></tr></thead><tbody id="events"></tbody></table></div>
+    <button id="more" type="button" hidden>Show more</button>
+  </section>
+
+  <section class="card">
+    <details><summary>Config used</summary><div id="config"></div></details>
+  </section>
+</main>
+<div class="tooltip" id="tooltip" role="tooltip"></div>
+<script>
+const PIECE = /*PIECE_DATA*/;
+</script>
+<script>
+(function () {
+  "use strict";
+  const P = PIECE;
+  const SVG = "http://www.w3.org/2000/svg";
+  const voices = P.voices || 0;
+  const vars = P.variables || [];
+  const events = P.events || [];
+  const score = P.score || [];
+  let selected = -1;
+
+  function el(tag, attrs, text) {
+    const node = document.createElement(tag);
+    for (const k in attrs || {}) node.setAttribute(k, attrs[k]);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+  function svgEl(tag, attrs) {
+    const node = document.createElementNS(SVG, tag);
+    for (const k in attrs || {}) {
+      const value = String(attrs[k]);
+      /* custom properties resolve reliably only through style */
+      if (value.indexOf("var(") === 0) node.style.setProperty(k, value);
+      else node.setAttribute(k, value);
+    }
+    return node;
+  }
+  function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  const tooltip = document.getElementById("tooltip");
+  function showTip(evt, strong, rest) {
+    clear(tooltip);
+    tooltip.appendChild(el("strong", {}, strong));
+    for (const line of rest) tooltip.appendChild(el("div", {}, line));
+    tooltip.style.display = "block";
+    const x = Math.min(evt.clientX + 14, window.innerWidth - tooltip.offsetWidth - 8);
+    const y = Math.min(evt.clientY + 14, window.innerHeight - tooltip.offsetHeight - 8);
+    tooltip.style.left = x + "px";
+    tooltip.style.top = y + "px";
+  }
+  function hideTip() { tooltip.style.display = "none"; }
+
+  /* ---------- theme ---------- */
+  document.getElementById("theme").addEventListener("click", function () {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === "dark"
+      : window.matchMedia("(prefers-color-scheme: dark)").matches;
+    root.dataset.theme = dark ? "light" : "dark";
+    drawAll();
+  });
+
+  /* ---------- header ---------- */
+  const cfg = P.config || {};
+  const keyNames = (P.keys || []).map(function (k, i) { return i === 0 ? k.name : k.name + " from step " + k.from; });
+  document.getElementById("subtitle").textContent = [
+    keyNames.join(", "),
+    voices + " voices",
+    "delay " + cfg.delay,
+    P.length + " notes",
+    P.tempo + " bpm"
+  ].join(" · ");
+  const statusEl = document.getElementById("status");
+  const statusText = { solved: "Solved", unsat: "No solution", limit: "Search limit reached" }[P.status] || P.status;
+  const dot = el("span", { class: "dot" });
+  dot.style.background = P.status === "solved" ? "var(--good)" : "var(--critical)";
+  statusEl.appendChild(dot);
+  statusEl.appendChild(document.createTextNode(statusText));
+
+  const st = P.stats || {};
+  function countStatus(name) {
+    return (P.variables || []).filter(function (v) { return v.status === name; }).length;
+  }
+  const tiles = [
+    ["Energy", P.status === "solved" ? P.energy.total : "-", st.pieces > 1 ? "down from " + st.firstEnergy + " by the optimizer" : "lower is smoother"],
+    ["Chosen", countStatus("chosen"), "values the search picked"],
+    ["Forced", countStatus("forced"), "values the rules left no choice on"],
+    ["Search nodes", st.nodes, P.status === "solved" ? "first piece after " + st.firstNodes : "no piece found"],
+    ["Backtracks", st.backtracks, st.pieces > 1 ? "mostly inside the optimizer's windows" : (st.backjumps || 0) + " backjumps, " + (st.learned || 0) + " conflicts learned"],
+    ["Time", (st.seconds * 1000).toFixed(0) + " ms", st.variables + " variables, " + st.constraints + " rules"]
+  ];
+  const tileBox = document.getElementById("tiles");
+  for (const t of tiles) {
+    const tile = el("div", { class: "tile" });
+    tile.appendChild(el("div", { class: "label" }, t[0]));
+    tile.appendChild(el("div", { class: "value" }, String(t[1])));
+    tile.appendChild(el("div", { class: "note-text" }, t[2]));
+    tileBox.appendChild(tile);
+  }
+  if (P.status !== "solved") {
+    const tile = el("div", { class: "tile" });
+    tile.appendChild(el("div", { class: "label" }, "Unsat core"));
+    tile.appendChild(el("div", { class: "value" }, (P.core || []).join(", ") || "-"));
+    tile.appendChild(el("div", { class: "note-text" }, P.coreApproximate ? "approximate" : "rules that clash"));
+    tileBox.appendChild(tile);
+  }
+
+  /* ---------- lookups ---------- */
+  const byId = {};
+  for (const v of vars) byId[v.id] = v;
+  const melody = vars.filter(function (v) { return v.kind === "pitch"; });
+  function varOfIndex(kind, index) {
+    for (const v of vars) if (v.kind === kind && v.index === index) return v;
+    return null;
+  }
+  const statusWord = { chosen: "chosen", forced: "forced", locked: "locked", config: "set", open: "open" };
+
+  /* ---------- piano roll ---------- */
+  const roll = document.getElementById("roll");
+  const noteNodes = [];
+  function drawRoll() {
+    clear(roll);
+    noteNodes.length = 0;
+    const legend = document.getElementById("voice-legend");
+    clear(legend);
+    if (!score.length) {
+      document.getElementById("score-help").textContent = "No piece was produced, so there is no score to show.";
+      roll.style.display = "none";
+      return;
+    }
+    let low = 127, high = 0;
+    for (const voice of score) for (const n of voice) if (n.pitch >= 0) { low = Math.min(low, n.pitch); high = Math.max(high, n.pitch); }
+    if (low > high) { low = 60; high = 72; }
+    low -= 1; high += 1;
+    const rows = high - low + 1;
+    const rowH = Math.max(7, Math.min(14, Math.floor(260 / rows)));
+    const laneH = rows * rowH;
+    const stepW = Math.max(26, Math.min(56, Math.floor(1040 / Math.max(1, P.span))));
+    const left = 64, top = 40, gap = 18;
+    const width = left + P.span * stepW + 8;
+    const height = top + voices * (laneH + gap);
+    roll.setAttribute("width", width);
+    roll.setAttribute("height", height);
+    roll.setAttribute("viewBox", "0 0 " + width + " " + height);
+
+    const strong = new Set(P.strong || []);
+    const bars = Math.ceil(P.span / 4);
+    for (let b = 0; b < bars; b++) {
+      const x = left + b * 4 * stepW;
+      const t = svgEl("text", { x: x + 3, y: 12 });
+      t.textContent = "bar " + (b + 1);
+      roll.appendChild(t);
+    }
+    (P.chords || []).forEach(function (c) {
+      const t = svgEl("text", { x: left + (c.bar - 1) * 4 * stepW + 3, y: 28, class: "chord-label" });
+      t.textContent = c.label;
+      roll.appendChild(t);
+    });
+    (P.keys || []).forEach(function (k, i) {
+      if (i === 0) return;
+      const x = left + k.from * stepW;
+      roll.appendChild(svgEl("line", { x1: x, x2: x, y1: top - 6, y2: height - gap + 4, stroke: "var(--text-secondary)", "stroke-width": 1 }));
+      const t = svgEl("text", { x: x + 4, y: top - 8 });
+      t.textContent = "to " + k.name;
+      roll.appendChild(t);
+    });
+
+    const names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+    for (let v = 0; v < voices; v++) {
+      const y0 = top + v * (laneH + gap);
+      for (let p = low; p <= high; p++) {
+        const black = [1, 3, 6, 8, 10].indexOf(((p % 12) + 12) % 12) >= 0;
+        if (black) roll.appendChild(svgEl("rect", { x: left, y: y0 + (high - p) * rowH, width: P.span * stepW, height: rowH, fill: "var(--surface-2)" }));
+        if (p % 12 === 0) {
+          const t = svgEl("text", { x: left - 6, y: y0 + (high - p) * rowH + rowH - 1, "text-anchor": "end" });
+          t.textContent = "C" + (Math.floor(p / 12) - 1);
+          roll.appendChild(t);
+        }
+      }
+      for (let s = 0; s <= P.span; s++) {
+        const x = left + s * stepW;
+        const bar = s % 4 === 0;
+        roll.appendChild(svgEl("line", { x1: x, x2: x, y1: y0, y2: y0 + laneH, stroke: bar ? "var(--axis)" : (strong.has(s) ? "var(--grid)" : "none"), "stroke-width": 1 }));
+      }
+      const label = svgEl("text", { x: 4, y: y0 + 12, class: "lane-label" });
+      label.textContent = "Voice " + (v + 1);
+      roll.appendChild(label);
+      const sw = el("span");
+      const box = el("span", { class: "swatch" });
+      box.style.background = "var(--series-" + (v + 1) + ")";
+      sw.appendChild(box);
+      sw.appendChild(document.createTextNode(v === 0 ? "Voice 1 (melody)" : "Voice " + (v + 1)));
+      legend.appendChild(sw);
+
+      for (const n of score[v]) {
+        if (n.pitch < 0) continue;
+        const g = svgEl("g", { class: "note", tabindex: 0, role: "button" });
+        const x = left + n.start * stepW + 1;
+        const y = y0 + (high - n.pitch) * rowH;
+        const w = n.length * stepW - 2;
+        g.appendChild(svgEl("rect", { class: "body", x: x, y: y + 0.5, width: w, height: rowH - 1, rx: 3, fill: "var(--series-" + (v + 1) + ")" }));
+        g.appendChild(svgEl("rect", { class: "ring", x: x - 1, y: y - 0.5, width: w + 2, height: rowH + 1, rx: 4 }));
+        if (w >= 30 && rowH >= 9) {
+          const t = svgEl("text", { x: x + 4, y: y + rowH - 2 });
+          t.style.fill = "var(--ink-" + (v + 1) + ")";
+          t.style.fontSize = (rowH >= 11 ? 10 : 9) + "px";
+          t.textContent = n.label;
+          g.appendChild(t);
+        }
+        const source = n.source;
+        const variable = byId[n.var];
+        g.setAttribute("aria-label", n.label + ", voice " + (v + 1) + ", step " + n.start);
+        g.addEventListener("click", function () { select(n.var); });
+        g.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(n.var); } });
+        g.addEventListener("pointermove", function (e) {
+          showTip(e, n.label, [
+            "Voice " + (v + 1) + ", steps " + n.start + "–" + (n.start + n.length - 1),
+            "melody note " + source + (variable ? " · " + (statusWord[variable.status] || variable.status) : "")
+          ]);
+        });
+        g.addEventListener("pointerleave", hideTip);
+        roll.appendChild(g);
+        noteNodes.push({ node: g, source: source, start: n.start, length: n.length, voice: v });
+      }
+    }
+    const head = svgEl("line", { id: "playhead", x1: left, x2: left, y1: top - 4, y2: height - gap + 4, stroke: "var(--text-primary)", "stroke-width": 2, visibility: "hidden" });
+    roll.appendChild(head);
+    roll.dataset.left = left;
+    roll.dataset.stepW = stepW;
+    markSelection();
+  }
+
+  function markSelection() {
+    const v = byId[selected];
+    let match = function () { return false; };
+    if (v && (v.kind === "pitch" || v.kind === "tie")) match = function (n) { return n.source === v.index || (v.kind === "tie" && n.source === v.index); };
+    if (v && v.kind === "chord") match = function (n) { return Math.floor(n.start / 4) === v.index; };
+    const any = v && v.kind !== "key";
+    for (const n of noteNodes) {
+      const hit = match(n);
+      n.node.classList.toggle("selected", hit);
+      n.node.classList.toggle("dim", any && !hit);
+    }
+    document.querySelectorAll(".chip").forEach(function (c) { c.classList.toggle("selected", Number(c.dataset.id) === selected); });
+  }
+
+  /* ---------- chips ---------- */
+  function chip(v, title) {
+    const c = el("button", { class: "chip", type: "button", "data-id": v.id });
+    c.appendChild(el("b", {}, v.label));
+    c.appendChild(el("small", {}, title + " · " + (statusWord[v.status] || v.status)));
+    c.addEventListener("click", function () { select(v.id); });
+    return c;
+  }
+  const melodyChips = document.getElementById("melody-chips");
+  for (const v of melody) melodyChips.appendChild(chip(v, v.var));
+  const otherChips = document.getElementById("other-chips");
+  for (const v of vars) if (v.kind !== "pitch") otherChips.appendChild(chip(v, v.var));
+  if (!otherChips.firstChild) document.getElementById("other-title").hidden = true;
+
+  /* ---------- inspector ---------- */
+  const inspector = document.getElementById("inspector");
+  function varLink(id, text) {
+    const b = el("button", { class: "link", type: "button" }, text);
+    b.addEventListener("click", function () { select(id); });
+    return b;
+  }
+  function describeStatus(v) {
+    switch (v.status) {
+      case "chosen": return v.optimized ? "Chosen to rebuild the lowest-energy piece the optimizer found." : "Chosen by the search: it was the cheapest value that kept every rule.";
+      case "forced": return v.depth === 0 ? "Forced before any decision: the rules alone removed every other value." : "Forced by propagation at search depth " + v.depth + ": every other value broke a rule.";
+      case "locked": return "Locked by the user.";
+      case "config": return "Set by the config: no other value was ever possible.";
+      default: return "Still open: the search did not finish.";
+    }
+  }
+  function select(id) {
+    selected = id;
+    markSelection();
+    const v = byId[id];
+    clear(inspector);
+    if (!v) return;
+    inspector.appendChild(el("h2", {}, v.var + " = " + v.label));
+    inspector.appendChild(el("p", {}, describeStatus(v)));
+    if (v.kind === "pitch" && score.length) {
+      const heard = [];
+      score.forEach(function (voice, i) {
+        for (const n of voice) if (n.source === v.index) heard.push("voice " + (i + 1) + " at step " + n.start);
+      });
+      if (heard.length) inspector.appendChild(el("p", { class: "muted" }, "Heard: " + heard.join(", ") + "."));
+    }
+    if (v.candidates && v.candidates.length) {
+      inspector.appendChild(el("h3", {}, "Candidates by cost"));
+      const table = el("table");
+      const head = el("tr");
+      head.appendChild(el("th", {}, "Value"));
+      head.appendChild(el("th", { class: "num" }, "Cost"));
+      head.appendChild(el("th", {}, "Where the cost comes from"));
+      table.appendChild(head);
+      for (const c of v.candidates) {
+        const row = el("tr");
+        row.appendChild(el("td", {}, c.label + (c.value === v.value ? " (chosen)" : "")));
+        row.appendChild(el("td", { class: "num" }, String(c.cost)));
+        const parts = Object.keys(c.parts || {}).map(function (k) { return k + " " + c.parts[k]; });
+        row.appendChild(el("td", { class: "muted" }, parts.join(", ")));
+        table.appendChild(row);
+      }
+      inspector.appendChild(table);
+    }
+    if (v.rejected && v.rejected.length) {
+      inspector.appendChild(el("h3", {}, v.status === "chosen" ? "Removed before the choice" : "Removed"));
+      const groups = [];
+      for (const r of v.rejected) {
+        const g = groups.find(function (x) { return x.why === r.why; });
+        if (g) g.values.push(r); else groups.push({ why: r.why, values: [r] });
+      }
+      const list = el("ul", { class: "why" });
+      for (const g of groups) {
+        const li = el("li");
+        li.appendChild(el("span", { class: "values" }, g.values.map(function (r) { return r.label; }).join(" ")));
+        li.appendChild(document.createTextNode(g.why + " "));
+        const ev = events[g.values[0].event];
+        if (ev) {
+          for (const p of ev.parents) {
+            if (p.value < 0 || p.varId === v.id) continue;
+            li.appendChild(varLink(p.varId, p.var));
+            li.appendChild(document.createTextNode(" "));
+          }
+        }
+        list.appendChild(li);
+      }
+      inspector.appendChild(list);
+    }
+    if (v.depends && v.depends.length && v.status === "forced") {
+      inspector.appendChild(el("h3", {}, "Rests on these decisions"));
+      const p = el("p");
+      v.depends.forEach(function (d, i) {
+        if (i) p.appendChild(document.createTextNode(", "));
+        p.appendChild(varLink(d.id, d.var + " = " + d.label));
+      });
+      inspector.appendChild(p);
+    }
+    const all = el("button", { type: "button" }, "Show its proof events");
+    all.addEventListener("click", function () {
+      document.getElementById("f-var").value = v.var;
+      renderEvents(true);
+      document.getElementById("events").scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    inspector.appendChild(all);
+  }
+
+  /* ---------- entropy chart ---------- */
+  function drawEntropy() {
+    const svg = document.getElementById("entropy");
+    clear(svg);
+    const data = P.entropy || [];
+    const box = document.getElementById("entropy-table");
+    clear(box);
+    if (data.length < 2) { svg.style.display = "none"; box.appendChild(el("p", { class: "empty" }, "Not enough samples.")); return; }
+    const width = 420, height = 190, left = 40, right = 12, top = 12, bottom = 30;
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    const minX = data[0][0];
+    const maxX = Math.max(minX + 1, data[data.length - 1][0]);
+    let maxY = 0;
+    for (const d of data) maxY = Math.max(maxY, d[1]);
+    maxY = Math.max(1, Math.ceil(maxY / 10) * 10);
+    const sx = function (x) { return left + ((x - minX) / (maxX - minX)) * (width - left - right); };
+    const sy = function (y) { return top + (1 - y / maxY) * (height - top - bottom); };
+    for (let i = 0; i <= 4; i++) {
+      const y = maxY * i / 4;
+      svg.appendChild(svgEl("line", { x1: left, x2: width - right, y1: sy(y), y2: sy(y), stroke: i === 0 ? "var(--axis)" : "var(--grid)", "stroke-width": 1 }));
+      const t = svgEl("text", { x: left - 6, y: sy(y) + 4, "text-anchor": "end" });
+      t.textContent = Math.round(y);
+      svg.appendChild(t);
+    }
+    const xl = svgEl("text", { x: width - right, y: height - 8, "text-anchor": "end" });
+    xl.textContent = "proof events →";
+    svg.appendChild(xl);
+    const x0 = svgEl("text", { x: left, y: height - 8 });
+    x0.textContent = String(minX);
+    svg.appendChild(x0);
+    let path = "", area = "M" + sx(data[0][0]) + "," + sy(0);
+    data.forEach(function (d, i) {
+      path += (i ? "L" : "M") + sx(d[0]).toFixed(1) + "," + sy(d[1]).toFixed(1);
+      area += "L" + sx(d[0]).toFixed(1) + "," + sy(d[1]).toFixed(1);
+    });
+    area += "L" + sx(data[data.length - 1][0]) + "," + sy(0) + "Z";
+    svg.appendChild(svgEl("path", { d: area, fill: "var(--series-1)", "fill-opacity": 0.1, stroke: "none" }));
+    svg.appendChild(svgEl("path", { d: path, fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    const cross = svgEl("line", { y1: top, y2: height - bottom, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" });
+    const marker = svgEl("circle", { r: 4, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" });
+    svg.appendChild(cross);
+    svg.appendChild(marker);
+    const hit = svgEl("rect", { x: left, y: top, width: width - left - right, height: height - top - bottom, fill: "transparent" });
+    hit.addEventListener("pointermove", function (e) {
+      const r = svg.getBoundingClientRect();
+      const px = (e.clientX - r.left) * (width / r.width);
+      const target = minX + (px - left) / (width - left - right) * (maxX - minX);
+      let best = data[0];
+      for (const d of data) if (Math.abs(d[0] - target) < Math.abs(best[0] - target)) best = d;
+      cross.setAttribute("x1", sx(best[0]));
+      cross.setAttribute("x2", sx(best[0]));
+      marker.setAttribute("cx", sx(best[0]));
+      marker.setAttribute("cy", sy(best[1]));
+      cross.setAttribute("visibility", "visible");
+      marker.setAttribute("visibility", "visible");
+      showTip(e, best[1].toFixed(2) + " bits", ["after " + best[0] + " proof events"]);
+    });
+    hit.addEventListener("pointerleave", function () { cross.setAttribute("visibility", "hidden"); marker.setAttribute("visibility", "hidden"); hideTip(); });
+    svg.appendChild(hit);
+
+    const table = el("table");
+    const head = el("tr");
+    head.appendChild(el("th", { class: "num" }, "After event"));
+    head.appendChild(el("th", { class: "num" }, "Bits"));
+    table.appendChild(head);
+    const step = Math.max(1, Math.floor(data.length / 60));
+    for (let i = 0; i < data.length; i += step) {
+      const row = el("tr");
+      row.appendChild(el("td", { class: "num" }, String(data[i][0])));
+      row.appendChild(el("td", { class: "num" }, data[i][1].toFixed(2)));
+      table.appendChild(row);
+    }
+    box.appendChild(table);
+  }
+
+  /* ---------- bar lists ---------- */
+  function barList(boxId, entries, emptyText) {
+    const box = document.getElementById(boxId);
+    clear(box);
+    entries = entries.filter(function (e) { return e[1] > 0; }).sort(function (a, b) { return b[1] - a[1]; });
+    if (!entries.length) { box.appendChild(el("p", { class: "empty" }, emptyText)); return; }
+    const max = entries[0][1];
+    for (const e of entries) {
+      const row = el("div", { class: "bar-row" });
+      row.appendChild(el("span", { class: "name", title: e[0] }, e[0]));
+      const track = el("span", { class: "bar-track" });
+      const area = el("span", { class: "bar-area" });
+      const bar = el("span", { class: "bar" });
+      bar.style.display = "block";
+      bar.style.width = Math.max(1, Math.round(e[1] / max * 100)) + "%";
+      area.appendChild(bar);
+      track.appendChild(area);
+      track.appendChild(el("span", { class: "bar-value" }, String(e[1])));
+      row.appendChild(track);
+      box.appendChild(row);
+    }
+  }
+  function drawBars() {
+    const parts = (P.energy && P.energy.parts) || {};
+    document.getElementById("energy-title").textContent = "Energy by rule" + (P.status === "solved" ? " (total " + P.energy.total + ")" : "");
+    barList("energy", Object.keys(parts).map(function (k) { return [k, parts[k]]; }), "No soft costs.");
+    const rules = {};
+    for (const e of events) if (e.type === "remove") rules[e.rule] = (rules[e.rule] || 0) + 1;
+    barList("impact", Object.keys(rules).map(function (k) { return [k, rules[k]]; }), "No values were removed.");
+  }
+
+  /* ---------- delays ---------- */
+  if (P.delays && P.delays.length) {
+    document.getElementById("delay-card").hidden = false;
+    const table = el("table");
+    const head = el("tr");
+    ["Delay", "Result", "Energy", "Nodes"].forEach(function (h, i) { head.appendChild(el("th", { class: i ? "num" : "" }, h)); });
+    table.appendChild(head);
+    for (const d of P.delays) {
+      const row = el("tr");
+      row.appendChild(el("td", {}, d.delay + (String(d.delay) === String(cfg.delay) ? " (kept)" : "")));
+      row.appendChild(el("td", { class: "num" }, d.status));
+      row.appendChild(el("td", { class: "num" }, d.status === "solved" ? String(d.energy) : "-"));
+      row.appendChild(el("td", { class: "num" }, String(d.nodes)));
+      table.appendChild(row);
+    }
+    document.getElementById("delays").appendChild(table);
+  }
+
+  /* ---------- proof log ---------- */
+  const fVar = document.getElementById("f-var"), fRule = document.getElementById("f-rule"), fType = document.getElementById("f-type");
+  const seenVars = new Set(), seenRules = new Set();
+  for (const e of events) { seenVars.add(e.var); seenRules.add(e.rule); }
+  for (const v of vars) if (seenVars.has(v.var)) fVar.appendChild(el("option", { value: v.var }, v.var));
+  Array.from(seenRules).sort().forEach(function (r) { fRule.appendChild(el("option", { value: r }, r)); });
+  const tbody = document.getElementById("events");
+  const more = document.getElementById("more");
+  let shown = 0, matches = [];
+  function jumpToEvent(id) {
+    fVar.value = ""; fRule.value = ""; fType.value = "";
+    renderEvents(true, id);
+  }
+  function eventRow(e, highlight) {
+    const row = el("tr", { id: "ev-" + e.id });
+    if (highlight) row.className = "hit";
+    row.appendChild(el("td", { class: "num" }, String(e.id)));
+    row.appendChild(el("td", {}, e.type));
+    const vcell = el("td");
+    vcell.appendChild(varLink(e.varId, e.var));
+    row.appendChild(vcell);
+    row.appendChild(el("td", {}, e.label));
+    row.appendChild(el("td", {}, e.type === "decide" ? "decision at depth " + e.depth : (e.why || e.rule)));
+    const pcell = el("td");
+    e.parents.forEach(function (p, i) {
+      if (i) pcell.appendChild(document.createTextNode(" "));
+      if (p.event >= 0) {
+        const b = el("button", { class: "link", type: "button" }, "#" + p.event);
+        b.addEventListener("click", function () { jumpToEvent(p.event); });
+        pcell.appendChild(b);
+      } else if (p.value >= 0) {
+        pcell.appendChild(el("span", { class: "muted" }, p.var));
+      }
+    });
+    row.appendChild(pcell);
+    return row;
+  }
+  function renderEvents(reset, focusId) {
+    if (reset) {
+      clear(tbody);
+      shown = 0;
+      matches = events.filter(function (e) {
+        return (!fVar.value || e.var === fVar.value) && (!fRule.value || e.rule === fRule.value) && (!fType.value || e.type === fType.value);
+      });
+      if (focusId !== undefined) {
+        const idx = matches.findIndex(function (e) { return e.id === focusId; });
+        shown = Math.max(0, idx - 20);
+      }
+    }
+    const end = Math.min(matches.length, shown + 300);
+    for (let i = shown; i < end; i++) tbody.appendChild(eventRow(matches[i], matches[i].id === focusId));
+    shown = end;
+    more.hidden = shown >= matches.length;
+    document.getElementById("f-count").textContent = matches.length + " of " + events.length + " events";
+    if (focusId !== undefined) {
+      const row = document.getElementById("ev-" + focusId);
+      if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }
+  [fVar, fRule, fType].forEach(function (s) { s.addEventListener("change", function () { renderEvents(true); }); });
+  more.addEventListener("click", function () { renderEvents(false); });
+
+  /* ---------- config ---------- */
+  const ctable = el("table");
+  for (const k of Object.keys(cfg)) {
+    const row = el("tr");
+    row.appendChild(el("td", {}, k));
+    row.appendChild(el("td", {}, cfg[k]));
+    ctable.appendChild(row);
+  }
+  document.getElementById("config").appendChild(ctable);
+
+  /* ---------- playback ---------- */
+  const play = document.getElementById("play");
+  let audio = null, playing = [], raf = 0;
+  function stop() {
+    for (const o of playing) { try { o.stop(); } catch (err) { /* already stopped */ } }
+    playing = [];
+    cancelAnimationFrame(raf);
+    const head = document.getElementById("playhead");
+    if (head) head.setAttribute("visibility", "hidden");
+    play.textContent = "Play";
+  }
+  play.addEventListener("click", function () {
+    if (playing.length) { stop(); return; }
+    if (!score.length) return;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) { play.textContent = "No audio"; return; }
+    audio = audio || new Ctx();
+    const beat = 60 / (P.tempo || 120);
+    const t0 = audio.currentTime + 0.1;
+    const master = audio.createGain();
+    master.gain.value = 0.18 / Math.max(1, voices);
+    master.connect(audio.destination);
+    const waves = ["triangle", "sine", "triangle", "sine"];
+    score.forEach(function (voice, v) {
+      for (const n of voice) {
+        if (n.pitch < 0) continue;
+        const osc = audio.createOscillator();
+        const env = audio.createGain();
+        osc.type = waves[v % 4];
+        osc.frequency.value = 440 * Math.pow(2, (n.pitch - 69) / 12);
+        const on = t0 + n.start * beat, off = on + n.length * beat;
+        env.gain.setValueAtTime(0, on);
+        env.gain.linearRampToValueAtTime(1, on + 0.01);
+        env.gain.setValueAtTime(1, off - 0.04);
+        env.gain.linearRampToValueAtTime(0, off);
+        osc.connect(env);
+        env.connect(master);
+        osc.start(on);
+        osc.stop(off + 0.02);
+        playing.push(osc);
+      }
+    });
+    play.textContent = "Stop";
+    const head = document.getElementById("playhead");
+    const left = Number(roll.dataset.left), stepW = Number(roll.dataset.stepW);
+    const total = P.span * beat;
+    function tick() {
+      const t = audio.currentTime - t0;
+      if (t > total + 0.2) { stop(); return; }
+      if (head && t >= 0) {
+        const x = left + (t / beat) * stepW;
+        head.setAttribute("x1", x);
+        head.setAttribute("x2", x);
+        head.setAttribute("visibility", "visible");
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+  });
+  if (!score.length) play.disabled = true;
+
+  function drawAll() {
+    drawRoll();
+    drawEntropy();
+    drawBars();
+  }
+  drawAll();
+  renderEvents(true);
+  const firstForced = melody.find(function (v) { return v.status === "forced"; }) || melody[0];
+  if (P.failed >= 0 && byId[P.failed]) select(P.failed);
+  else if (firstForced) select(firstForced.id);
+})();
+</script>
+</body>
+</html>
