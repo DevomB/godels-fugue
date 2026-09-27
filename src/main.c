@@ -433,6 +433,42 @@ static void print_unsat(const SolverState *state)
     }
 }
 
+/* Compare the locked run against the same rules with the lock lifted. */
+static void print_counterfactual(const PieceConfig *config,
+                                 const SolverState *locked, bool locked_ok,
+                                 const int *melody)
+{
+    PieceConfig unlocked_config = *config;
+    unlocked_config.lock = 0;
+    SolverState unlocked = {0};
+    int unlocked_melody[MELODY_MAX];
+    solver_init(&unlocked, &unlocked_config);
+    bool unlocked_ok = solve(&unlocked, unlocked_melody, NULL);
+
+    printf("counterfactual: index %d pitch %d\n", config->lock_index,
+           config->lock_pitch);
+    if (!unlocked_ok) {
+        printf("unsat without the lock\n");
+    } else if (!locked_ok) {
+        const char *msg = "unsat";
+        if (locked->proof.event_count > 0) {
+            msg = locked->proof.events[locked->proof.event_count - 1].message;
+        }
+        printf("killed: %s\n", msg);
+    } else {
+        int changed = 0;
+        printf("changed:");
+        for (int i = 0; i < config->length; i++) {
+            if (melody[i] != unlocked_melody[i]) {
+                printf(" %d", i);
+                changed++;
+            }
+        }
+        printf(changed == 0 ? " none\n" : "\n");
+    }
+    solver_free(&unlocked);
+}
+
 int main(int argc, char **argv)
 {
     PieceConfig config = {
@@ -491,6 +527,9 @@ int main(int argc, char **argv)
     const char *corpus_dir = NULL;
     int apply_weights = 0;
     int sat_mode = 0;
+    int cli_lock = 0;
+    int cli_lock_index = 0;
+    int cli_lock_pitch = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--config") == 0) {
@@ -532,17 +571,22 @@ int main(int argc, char **argv)
                 fprintf(stderr, "missing value\n");
                 return 1;
             }
-            config.lock = 1;
-            config.lock_index = atoi(argv[++i]);
-            config.lock_pitch = atoi(argv[++i]);
+            cli_lock = 1;
+            cli_lock_index = atoi(argv[++i]);
+            cli_lock_pitch = atoi(argv[++i]);
         } else {
-            fprintf(stderr, "unknown argument\n");
+            fprintf(stderr, "unknown argument: %s\n", argv[i]);
             return 1;
         }
     }
 
     if (config_path != NULL && !load_config(config_path, &config)) {
         return 1;
+    }
+    if (cli_lock) {
+        config.lock = 1;
+        config.lock_index = cli_lock_index;
+        config.lock_pitch = cli_lock_pitch;
     }
     if (!validate_config(&config)) {
         return 1;
@@ -622,6 +666,16 @@ int main(int argc, char **argv)
     }
 
     if (ok) {
+        int energy = 0;
+        if (config.energy == 1) {
+            energy = melody_energy_full(
+                melody, config.length, config.delay, config.w_gravity,
+                config.w_leap, config.w_curve, config.w_dissonance,
+                config.w_parallel, config.w_motif, config.motif_a,
+                config.motif_b, config.motif_c, config.motif_d, config.invert,
+                config.axis, config.transpose, config.w_modulate,
+                config.modulate_at, config.pc_weight);
+        }
         int lines[VOICE_MAX][SPAN_MAX];
         const int *line_ptrs[VOICE_MAX];
         int starts[VOICE_MAX];
@@ -677,17 +731,6 @@ int main(int argc, char **argv)
             char html_path[512];
             if (sibling_path(html_path, sizeof(html_path), out_path,
                              "score.html")) {
-                int energy = 0;
-                if (config.energy == 1) {
-                    energy = melody_energy_full(
-                        melody, config.length, config.delay, config.w_gravity,
-                        config.w_leap, config.w_curve, config.w_dissonance,
-                        config.w_parallel, config.w_motif, config.motif_a,
-                        config.motif_b, config.motif_c, config.motif_d,
-                        config.invert, config.axis,
-                        config.transpose, config.w_modulate, config.modulate_at,
-                        config.pc_weight);
-                }
                 ensure_parent_dir(html_path);
                 if (!export_score_page(html_path, melody, &config, &state,
                                        backtracks, energy)) {
@@ -697,52 +740,13 @@ int main(int argc, char **argv)
         }
         print_success(melody, &config, backtracks, &state);
         if (config.energy == 1) {
-            printf("energy: %d\n",
-                   melody_energy_full(melody, config.length, config.delay,
-                                      config.w_gravity, config.w_leap,
-                                      config.w_curve, config.w_dissonance,
-                                      config.w_parallel, config.w_motif,
-                                      config.motif_a, config.motif_b,
-                                      config.motif_c, config.motif_d,
-                                      config.invert, config.axis,
-                                      config.transpose, config.w_modulate,
-                                      config.modulate_at, config.pc_weight));
+            printf("energy: %d\n", energy);
         }
         if (config.lock == 1) {
-            SolverState alt = {0};
-            int alt_melody[MELODY_MAX];
-            int alt_bt = 0;
-            solver_init(&alt, &config);
-            solver_lock(&alt, config.lock_index, config.lock_pitch);
-            bool alt_ok = solve(&alt, alt_melody, &alt_bt);
-            printf("counterfactual: index %d pitch %d\n", config.lock_index,
-                   config.lock_pitch);
-            if (!alt_ok) {
-                const char *msg = "unsat";
-                if (alt.proof.event_count > 0) {
-                    msg = alt.proof.events[alt.proof.event_count - 1].message;
-                }
-                printf("killed: %s\n", msg);
-            } else if (melody[config.lock_index] == config.lock_pitch) {
-                printf("forced\n");
-            } else {
-                printf("legal\n");
-            }
-            solver_free(&alt);
+            print_counterfactual(&config, &state, true, melody);
         }
         {
             char report_path[512];
-            int energy = 0;
-            if (config.energy == 1) {
-                energy = melody_energy_full(
-                    melody, config.length, config.delay, config.w_gravity,
-                    config.w_leap, config.w_curve, config.w_dissonance,
-                    config.w_parallel, config.w_motif, config.motif_a,
-                    config.motif_b, config.motif_c, config.motif_d,
-                    config.invert, config.axis,
-                    config.transpose, config.w_modulate, config.modulate_at,
-                    config.pc_weight);
-            }
             if (sibling_path(report_path, sizeof(report_path), out_path,
                              "report.txt")) {
                 ensure_parent_dir(report_path);
@@ -789,24 +793,7 @@ int main(int argc, char **argv)
     }
     print_unsat(&state);
     if (config.lock == 1) {
-        SolverState alt = {0};
-        int alt_melody[MELODY_MAX];
-        int alt_bt = 0;
-        solver_init(&alt, &config);
-        solver_lock(&alt, config.lock_index, config.lock_pitch);
-        bool alt_ok = solve(&alt, alt_melody, &alt_bt);
-        printf("counterfactual: index %d pitch %d\n", config.lock_index,
-               config.lock_pitch);
-        if (!alt_ok) {
-            const char *msg = "unsat";
-            if (alt.proof.event_count > 0) {
-                msg = alt.proof.events[alt.proof.event_count - 1].message;
-            }
-            printf("killed: %s\n", msg);
-        } else {
-            printf("legal\n");
-        }
-        solver_free(&alt);
+        print_counterfactual(&config, &state, false, melody);
     }
     solver_free(&state);
     return 1;
