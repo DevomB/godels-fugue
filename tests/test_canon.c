@@ -110,6 +110,7 @@ int main(void) {
         CHECK(canon_map_source(&c, 1, 0) == 8);
         CHECK(canon_map_source(&c, 1, 3) == 11);
         CHECK(canon_map_source(&c, 1, 4) == 0);
+        CHECK(canon_span_config(&c) == 12);
     }
 
     printf("ok\n");

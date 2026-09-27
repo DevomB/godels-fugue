@@ -62,6 +62,7 @@ int canon_map_source(const PieceConfig *config, int voice, int time) {
 
 int canon_span_config(const PieceConfig *config) {
     if (config == NULL) return 0;
+    if (config->cyclic) return config->length;
     int voices = config->voices;
     if (voices < 1) voices = 1;
     if (voices > VOICE_MAX) voices = VOICE_MAX;
