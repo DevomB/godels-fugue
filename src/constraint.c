@@ -189,15 +189,22 @@ static bool revise_second(SolverState *s) {
     return true;
 }
 
-static bool indexes_distinct(int a, int b, int c, int d) {
-    return a != b && a != c && a != d && b != c && b != d && c != d;
+/* Slots that name the same melody variable must carry the same pitch. */
+static bool tuple_consistent(const int idx[4], const int values[4]) {
+    for (int i = 0; i < 4; i++) {
+        for (int j = i + 1; j < 4; j++) {
+            if (idx[i] == idx[j] && values[i] != values[j]) return false;
+        }
+    }
+    return true;
 }
 
 /* Ceiling: 128^3 support walk if a domain is full MIDI. Default C4–C5
  * C major stays 8^3. Stop as soon as one legal tuple exists. */
-static bool parallel_supported(const MidiDomain *domains[4], int fixed_slot,
-                               int fixed_pitch, bool fifth, int voice_lead,
-                               int voice_follow, const PieceConfig *config) {
+static bool parallel_supported(const MidiDomain *domains[4], const int idx[4],
+                               int fixed_slot, int fixed_pitch, bool fifth,
+                               int voice_lead, int voice_follow,
+                               const PieceConfig *config) {
     int pitches[4][128];
     int counts[4];
     for (int i = 0; i < 4; i++) {
@@ -221,6 +228,7 @@ static bool parallel_supported(const MidiDomain *domains[4], int fixed_slot,
                 values[s0] = pitches[s0][a];
                 values[s1] = pitches[s1][b];
                 values[s2] = pitches[s2][c];
+                if (!tuple_consistent(idx, values)) continue;
                 int v0_prev = canon_sounding(config, voice_lead, values[0]);
                 int v1_prev = canon_sounding(config, voice_follow, values[2]);
                 int v0_now = canon_sounding(config, voice_lead, values[1]);
@@ -251,8 +259,8 @@ static bool revise_parallel_tuple(SolverState *s, int idx[4], bool fifth,
         int n = domain_collect(&s->domains[variable], candidates);
         for (int k = 0; k < n; k++) {
             int pitch = candidates[k];
-            if (parallel_supported(domains, slot, pitch, fifth, voice_lead,
-                                  voice_follow, &s->config))
+            if (parallel_supported(domains, idx, slot, pitch, fifth,
+                                   voice_lead, voice_follow, &s->config))
                 continue;
             int related[3];
             int nrel = 0;
@@ -283,8 +291,6 @@ static bool revise_parallel(SolverState *s, bool fifth, int constraint_id,
                 idx[2] = canon_map_source(&s->config, vb, t);
                 idx[3] = canon_map_source(&s->config, vb, t + 1);
                 if (idx[0] < 0 || idx[1] < 0 || idx[2] < 0 || idx[3] < 0)
-                    continue;
-                if (!indexes_distinct(idx[0], idx[1], idx[2], idx[3]))
                     continue;
                 if (!revise_parallel_tuple(s, idx, fifth, va, vb, constraint_id,
                                           message))
@@ -388,8 +394,6 @@ static bool revise_parallel_touching(SolverState *s, int variable, bool fifth,
                 idx[2] = canon_map_source(&s->config, follow, t);
                 idx[3] = canon_map_source(&s->config, follow, t + 1);
                 if (idx[0] < 0 || idx[1] < 0 || idx[2] < 0 || idx[3] < 0)
-                    continue;
-                if (!indexes_distinct(idx[0], idx[1], idx[2], idx[3]))
                     continue;
                 if (!revise_parallel_tuple(s, idx, fifth, lead, follow,
                                           constraint_id, message))

@@ -352,5 +352,22 @@ int main(void) {
     CHECK(!s.failed);
     proof_free(&s.proof);
 
+    /* G. delay 1 shares x1 between both voices: D-A-E rises in fifths */
+    setup_state(&s);
+    s.config.length = 3;
+    s.config.delay = 1;
+    s.config.range_low = 48;
+    s.config.range_high = 84;
+    for (int i = 0; i < 3; i++) fill_c_major_range(&s.domains[i], 48, 84);
+    domain_clear(&s.domains[0]);
+    domain_add(&s.domains[0], 50);
+    domain_clear(&s.domains[1]);
+    domain_add(&s.domains[1], 57);
+    CHECK(constraints_revise(&s) == true);
+    CHECK(!domain_contains(&s.domains[2], 64));
+    CHECK(domain_contains(&s.domains[2], 62));
+    CHECK(proof_has(&s.proof, "parallel fifth", 64));
+    proof_free(&s.proof);
+
     return 0;
 }

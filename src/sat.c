@@ -215,9 +215,7 @@ static int encode_parallel(SatState *s, const PieceConfig *c) {
                 int i2 = canon_map_source(c, vb, t);
                 int i3 = canon_map_source(c, vb, t + 1);
                 if (i0 < 0 || i1 < 0 || i2 < 0 || i3 < 0) continue;
-                if (i0 == i1 || i0 == i2 || i0 == i3 || i1 == i2 || i1 == i3 ||
-                    i2 == i3)
-                    continue;
+                const int idx[4] = {i0, i1, i2, i3};
                 for (int a = 0; a < s->n_pitches[i0]; a++) {
                     int p0 = s->pitches[i0][a];
                     int s0 = canon_sounding(c, va, p0);
@@ -230,14 +228,24 @@ static int encode_parallel(SatState *s, const PieceConfig *c) {
                             for (int e = 0; e < s->n_pitches[i3]; e++) {
                                 int p3 = s->pitches[i3][e];
                                 int s3 = canon_sounding(c, vb, p3);
+                                const int values[4] = {p0, p1, p2, p3};
+                                int lits[4];
+                                int n = 0;
+                                int consistent = 1;
+                                for (int k = 0; k < 4 && consistent; k++) {
+                                    int dup = 0;
+                                    for (int j = 0; j < k; j++) {
+                                        if (idx[j] != idx[k]) continue;
+                                        if (values[j] != values[k]) consistent = 0;
+                                        dup = 1;
+                                    }
+                                    if (!dup) lits[n++] = -s->var_of[idx[k]][values[k]];
+                                }
+                                if (!consistent) continue;
                                 if (!is_parallel_fifth(s0, s2, s1, s3) &&
                                     !is_parallel_octave(s0, s2, s1, s3))
                                     continue;
-                                int lits[4] = {-s->var_of[i0][p0],
-                                               -s->var_of[i1][p1],
-                                               -s->var_of[i2][p2],
-                                               -s->var_of[i3][p3]};
-                                if (!add_clause(s, lits, 4)) return 0;
+                                if (!add_clause(s, lits, n)) return 0;
                             }
                         }
                     }
