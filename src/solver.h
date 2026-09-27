@@ -15,7 +15,6 @@ typedef struct SolverSnapshot {
     int failed_variable;
     uint32_t rng;
     int anneal_step;
-    int trail_n;
 } SolverSnapshot;
 
 void solver_init(SolverState *s, const PieceConfig *config);

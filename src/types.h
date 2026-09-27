@@ -7,7 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-enum { MELODY_MAX = 32, VOICE_MAX = 4, TRAIL_MAX = 512, SPAN_MAX = 128 };
+enum { MELODY_MAX = 32, VOICE_MAX = 4, SPAN_MAX = 128 };
 
 typedef struct PieceConfig {
     int length;
@@ -70,9 +70,6 @@ typedef struct SolverState {
     int ac3_q[MELODY_MAX];
     int ac3_n;
     unsigned char ac3_in[MELODY_MAX];
-    int trail_var[TRAIL_MAX];
-    MidiDomain trail_dom[TRAIL_MAX];
-    int trail_n;
     unsigned char rhythm_mask[MELODY_MAX]; /* bit0 rest, bit1 quarter, bit2 half */
     int duration[MELODY_MAX];              /* 0 rest, 1 quarter, 2 half */
     unsigned char skip_cid[16];            /* unsat-core search mutes */
@@ -86,15 +83,6 @@ static inline void solver_enqueue(SolverState *s, int var) {
     }
     s->ac3_in[var] = 1;
     s->ac3_q[s->ac3_n++] = var;
-}
-
-static inline void solver_trail_push(SolverState *s, int var) {
-    if (s->trail_n >= TRAIL_MAX || var < 0 || var >= s->config.length) {
-        return;
-    }
-    s->trail_var[s->trail_n] = var;
-    s->trail_dom[s->trail_n] = s->domains[var];
-    s->trail_n++;
 }
 
 #endif

@@ -40,7 +40,6 @@ static bool remove_unsupported(SolverState *s, int variable, int pitch,
         deps = &self;
         dep_n = 1;
     }
-    solver_trail_push(s, variable);
     domain_remove(&s->domains[variable], pitch);
     proof_append_removal_deps(&s->proof, variable, pitch, constraint_id, message,
                               deps, dep_n, s->domains);
