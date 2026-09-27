@@ -217,9 +217,13 @@ static void sample_without_replacement(int *pitches, const int *costs, int n,
     double weights[128];
     int left = n;
 
+    int min_cost = n > 0 ? costs[0] : 0;
+    for (int i = 1; i < n; i++) {
+        if (costs[i] < min_cost) min_cost = costs[i];
+    }
     memcpy(remaining, pitches, (size_t)n * sizeof(int));
     for (int i = 0; i < n; i++) {
-        weights[i] = exp((double)-costs[i] / (double)temperature);
+        weights[i] = exp((double)(min_cost - costs[i]) / (double)temperature);
     }
 
     for (int out = 0; out < n; out++) {
