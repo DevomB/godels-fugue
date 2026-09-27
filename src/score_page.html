@@ -325,8 +325,8 @@ const PIECE = /*PIECE_DATA*/;
     ["Energy", P.status === "solved" ? P.energy.total : "-", st.pieces > 1 ? "down from " + st.firstEnergy + " by the optimizer" : "lower is smoother"],
     ["Chosen", countStatus("chosen"), "values the search picked"],
     ["Forced", countStatus("forced"), "values the rules left no choice on"],
-    ["Search nodes", st.nodes, P.status === "solved" ? "first piece after " + st.firstNodes : "no piece found"],
-    ["Backtracks", st.backtracks, st.pieces > 1 ? "mostly inside the optimizer's windows" : (st.backjumps || 0) + " backjumps, " + (st.learned || 0) + " conflicts learned"],
+    ["Search nodes", P.status === "solved" ? st.firstNodes : st.nodes, P.status !== "solved" ? "no piece found" : st.pieces > 1 ? "to the first piece, then " + (st.nodes - st.firstNodes) + " optimizing" : "to the first piece"],
+    ["Backtracks", P.status === "solved" ? st.firstBacktracks : st.backtracks, (st.backjumps || 0) + " backjumps, " + (st.learned || 0) + " conflicts learned in all"],
     ["Time", (st.seconds * 1000).toFixed(0) + " ms", st.variables + " variables, " + st.constraints + " rules"]
   ];
   const tileBox = document.getElementById("tiles");

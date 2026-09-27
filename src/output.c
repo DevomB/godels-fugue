@@ -142,8 +142,10 @@ static void print_key_lines(FILE *out, const Run *run) {
 static void print_optimize_line(FILE *out, const Run *run) {
     const SolverStats *st = &run->state.stats;
     if (run->status != SOLVE_SAT || run->config.optimize <= 0) return;
-    fprintf(out, "optimize: energy %d -> %d, %ld improvements in %ld windows, %s\n",
+    fprintf(out, "optimize: energy %d -> %d, %ld improvements in %ld windows and %ld more "
+                 "nodes, %s\n",
             st->first_energy, run->energy, st->solutions - 1, st->windows,
+            st->nodes - st->first.nodes,
             st->converged ? "no window improves it" : "budget spent");
 }
 
@@ -203,9 +205,10 @@ void output_print_summary(FILE *out, const Run *run) {
         fprintf(out, "\n");
     }
     if (c->delay_search) fprintf(out, "delay: %d\n", c->delay);
-    fprintf(out, "backtracks: %ld\n", st->backtracks);
-    fprintf(out, "search: %ld nodes, %ld decisions, %ld backjumps, %ld learned\n", st->nodes,
-            st->decisions, st->backjumps, st->learned);
+    /* effort to the first piece; the optimizer's share is on its own line */
+    fprintf(out, "backtracks: %ld\n", st->first.backtracks);
+    fprintf(out, "search: %ld nodes, %ld decisions, %ld backjumps, %ld learned\n",
+            st->first.nodes, st->first.decisions, st->first.backjumps, st->first.learned);
     print_optimize_line(out, run);
     fprintf(out, "entropy: %.6f\n", solver_entropy(&run->state));
     fprintf(out, "energy: %d", run->energy);
@@ -294,7 +297,12 @@ bool output_write_report(const char *path, const Run *run) {
     fprintf(f, "voices: %d  delay: %d  length: %d  span: %d steps\n", m->voices,
             run->config.delay, run->config.length, m->span);
     fprintf(f, "variables: %d  constraints: %d  soft terms: %d\n", m->nvars, m->ncons, m->nterms);
-    fprintf(f, "nodes: %ld  decisions: %ld  backtracks: %ld  backjumps: %ld  learned: %ld\n",
+    fprintf(f, "to the first piece: nodes: %ld  decisions: %ld  backtracks: %ld  "
+               "backjumps: %ld  learned: %ld\n",
+            st->first.nodes, st->first.decisions, st->first.backtracks, st->first.backjumps,
+            st->first.learned);
+    fprintf(f, "whole search: nodes: %ld  decisions: %ld  backtracks: %ld  backjumps: %ld  "
+               "learned: %ld\n",
             st->nodes, st->decisions, st->backtracks, st->backjumps, st->learned);
     long forced = 0;
     double peak = 0.0;

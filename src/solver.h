@@ -37,6 +37,15 @@ typedef struct Nogood {
     int values[NOGOOD_LITS];
 } Nogood;
 
+/* Search effort, counted over the whole solve or up to the first piece. */
+typedef struct SearchCounts {
+    long nodes;
+    long decisions;
+    long backtracks;
+    long backjumps;
+    long learned;
+} SearchCounts;
+
 typedef struct SolverStats {
     long nodes;
     long decisions;
@@ -48,6 +57,7 @@ typedef struct SolverStats {
     long removals_by_rule[CID_MAX];
     long solutions;   /* pieces found: the first, then each improvement */
     int first_energy; /* energy of the first piece found */
+    SearchCounts first; /* effort until the first piece */
     long windows;     /* neighbourhoods the optimizer searched */
     bool converged;   /* a full pass of windows found nothing cheaper */
     double seconds;
@@ -100,7 +110,6 @@ typedef struct SolverState {
     bool optimizing;
     int bound;           /* energy of the best piece so far */
     int best[VAR_MAX];   /* the best piece so far */
-    long first_found_at; /* node count when the first piece appeared */
     long window_end;     /* node count at which the current window stops */
     bool guided;         /* try best[var] first: replaying the best piece */
     bool failed;

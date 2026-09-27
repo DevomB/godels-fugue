@@ -697,6 +697,15 @@ static void every_level(const SolverState *s, LevelSet *conflict) {
     for (int l = 1; l <= s->level; l++) levelset_add(conflict, l);
 }
 
+static void note_first_piece(SolverState *s) {
+    SearchCounts *f = &s->stats.first;
+    f->nodes = s->stats.nodes;
+    f->decisions = s->stats.decisions;
+    f->backtracks = s->stats.backtracks;
+    f->backjumps = s->stats.backjumps;
+    f->learned = s->stats.learned;
+}
+
 static void record_piece(SolverState *s) {
     const Model *m = model_of(s);
     int values[VAR_MAX];
@@ -704,7 +713,7 @@ static void record_piece(SolverState *s) {
     int energy = model_energy(m, values, NULL);
     if (s->stats.solutions == 0) {
         s->stats.first_energy = energy;
-        s->first_found_at = s->stats.nodes;
+        note_first_piece(s);
     }
     s->stats.solutions++;
     s->bound = energy;
@@ -813,7 +822,7 @@ static int optimize(SolverState *s) {
     int passes_needed = (length + stride - 1) / stride;
     int quiet = 0;
     for (int start = 0; quiet < passes_needed; start = (start + stride) % length) {
-        if (s->stats.nodes - s->first_found_at > s->optimize || s->limit_hit) break;
+        if (s->stats.nodes - s->stats.first.nodes > s->optimize || s->limit_hit) break;
         restart(s, root);
         for (int v = 0; v < m->nvars; v++) {
             if (in_window(m, v, start, width) || !domain_contains(&s->domains[v], s->best[v]))
@@ -855,6 +864,13 @@ SolveStatus solver_solve(SolverState *s) {
         r = optimize(s);
     } else {
         r = search(s, &conflict);
+        if (r == R_SAT) {
+            int values[VAR_MAX];
+            solver_values(s, values);
+            s->stats.first_energy = model_energy(model_of(s), values, NULL);
+            s->stats.solutions = 1;
+            note_first_piece(s);
+        }
     }
     s->stats.seconds = (double)(clock() - s->start) / CLOCKS_PER_SEC;
     if (r == R_SAT) return SOLVE_SAT;

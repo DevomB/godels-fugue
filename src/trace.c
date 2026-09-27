@@ -195,12 +195,12 @@ static void write_stats(FILE *f, const Run *run) {
             "\"learned\":%ld,\"propagations\":%ld,\"removals\":%ld,\"forced\":%ld,"
             "\"seconds\":%.4f,\"entropy\":%.6f,\"variables\":%d,\"constraints\":%d,"
             "\"terms\":%d,\"pieces\":%ld,\"firstEnergy\":%d,\"firstNodes\":%ld,"
-            "\"windows\":%ld,\"converged\":%s,\"rules\":{",
+            "\"firstBacktracks\":%ld,\"windows\":%ld,\"converged\":%s,\"rules\":{",
             st->nodes, st->decisions, st->backtracks, st->backjumps, st->learned,
             st->propagations, st->removals, forced_count(&run->state.proof), st->seconds,
             solver_entropy(&run->state), run->model.nvars, run->model.ncons, run->model.nterms,
             st->solutions, st->first_energy,
-            st->solutions > 0 ? run->state.first_found_at : st->nodes, st->windows,
+            st->first.nodes, st->first.backtracks, st->windows,
             st->converged ? "true" : "false");
     bool first = true;
     for (int r = 1; r < CID_MAX; r++) {
