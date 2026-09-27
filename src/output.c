@@ -139,6 +139,14 @@ static void print_key_lines(FILE *out, const Run *run) {
     }
 }
 
+static void print_optimize_line(FILE *out, const Run *run) {
+    const SolverStats *st = &run->state.stats;
+    if (run->status != SOLVE_SAT || run->config.optimize <= 0) return;
+    fprintf(out, "optimize: energy %d -> %d, %ld improvements in %ld windows, %s\n",
+            st->first_energy, run->energy, st->solutions - 1, st->windows,
+            st->converged ? "no window improves it" : "budget spent");
+}
+
 static void print_line(FILE *out, const char *label, const int *line, int n) {
     fprintf(out, "%s:", label);
     for (int t = 0; t < n; t++) {
@@ -198,6 +206,7 @@ void output_print_summary(FILE *out, const Run *run) {
     fprintf(out, "backtracks: %ld\n", st->backtracks);
     fprintf(out, "search: %ld nodes, %ld decisions, %ld backjumps, %ld learned\n", st->nodes,
             st->decisions, st->backjumps, st->learned);
+    print_optimize_line(out, run);
     fprintf(out, "entropy: %.6f\n", solver_entropy(&run->state));
     fprintf(out, "energy: %d", run->energy);
     bool first = true;
@@ -297,6 +306,7 @@ bool output_write_report(const char *path, const Run *run) {
     }
     fprintf(f, "forced collapses: %ld  propagations: %ld  removals: %ld  time: %.4f s\n",
             forced, st->propagations, st->removals, st->seconds);
+    print_optimize_line(f, run);
     fprintf(f, "entropy: %.6f (peak after propagation %.6f)\n", solver_entropy(&run->state),
             peak);
     fprintf(f, "energy: %d\n", run->energy);

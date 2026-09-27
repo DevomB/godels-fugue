@@ -31,6 +31,7 @@ static inline PieceConfig test_config(void) {
     PieceConfig c;
     config_defaults(&c);
     c.time_limit = 0;
+    c.optimize = 0;
     return c;
 }
 

@@ -99,7 +99,7 @@ style preset first, so every other key in the file overrides it.
 | `motif_c` | off | see meaning | Third interval (off = pattern ends). |
 | `motif_d` | off | see meaning | Fourth interval (off = pattern ends). |
 | `w_modulate` | 1 | 0..100 | Cost per fifth between the two keys, and per accidental of a searched key. |
-| `w_harmony` | 1 | 0..100 | Cost of weaker chords (iii, vii) and of non-chord tones on weak beats. |
+| `w_harmony` | 1 | 0..100 | Cost of weaker chords (ii, vi, and twice for iii, vii), twice this for a chord repeated from the bar before, and of non-chord tones on weak beats. |
 | `w_rest` | 4 | 0..100 | Cost of each rest. |
 | `w_hold` | 1 | 0..100 | Cost of each tie. |
 | `w_syncopation` | 3 | 0..100 | Cost of a tie that carries a note over beat 1 or 3. |
@@ -116,6 +116,7 @@ style preset first, so every other key in the file overrides it.
 | `hierarchy` | 1 | 0..1 | Decide keys, then chords, then notes. |
 | `backjump` | 1 | 0..1 | Jump back to the latest decision a conflict depends on. |
 | `learn` | 1 | 0..1 | Remember failed decision sets and prune them elsewhere. |
+| `optimize` | 10000 | 0 or more | After the first solution, spend up to this many more nodes improving it: windows of six notes are re-solved in turn for a lower energy (0 = keep the first solution). |
 | `max_nodes` | 200000 | 0 or more | Give up after this many search nodes (0 = no limit). |
 | `time_limit` | 10000 | 0 or more | Give up after this many milliseconds (0 = no limit). |
 | `delay_search` | 0 | 0..1 | Try every delay from delay_min to delay_max and keep the lowest energy. |

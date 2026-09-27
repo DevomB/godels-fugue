@@ -300,6 +300,47 @@ static void test_sat_backend(void) {
     test_close(d);
 }
 
+/* The optimizer starts from the plain search's piece, never ends worse,
+ * keeps every rule, and replays its best piece as guided decisions. */
+static void test_optimize(void) {
+    static const char *const cases[][6] = {
+        {"voices=2", NULL},
+        {"harmony=1", "voices=3", "length=16", "range_low=55", "range_high=79", NULL},
+        {"rhythm=1", "length=16", NULL},
+    };
+    for (size_t k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {
+        PieceConfig c = test_config();
+        for (int j = 0; cases[k][j] != NULL; j++) test_set(&c, cases[k][j]);
+        TestRun *plain = test_solve(&c);
+        CHECK(plain->status == SOLVE_SAT);
+        int first = model_energy(&plain->model, plain->values, NULL);
+
+        c.optimize = 20000;
+        TestRun *best = test_solve(&c);
+        TestRun *again = test_solve(&c);
+        CHECK(best->status == SOLVE_SAT);
+        CHECK(satisfies_model(&best->model, best->values));
+        CHECK(best->state.stats.first_energy == first);
+        CHECK(best->state.stats.solutions >= 1);
+        CHECK(best->state.stats.windows >= 1);
+        int energy = model_energy(&best->model, best->values, NULL);
+        CHECK(energy <= first);
+        CHECK(memcmp(best->values, again->values, sizeof(int) * (size_t)best->model.nvars) == 0);
+        for (int l = 1; l <= best->state.level; l++) CHECK(best->state.decisions[l].guided);
+        test_close(plain);
+        test_close(best);
+        test_close(again);
+    }
+    /* rhythm example: the optimizer finds a strictly better piece */
+    PieceConfig c = test_config();
+    test_set(&c, "rhythm=1");
+    test_set(&c, "length=16");
+    c.optimize = 20000;
+    TestRun *r = test_solve(&c);
+    CHECK(model_energy(&r->model, r->values, NULL) < r->state.stats.first_energy);
+    test_close(r);
+}
+
 static void test_run_pipeline(void) {
     Run *run = malloc(sizeof(Run));
     CHECK(run != NULL);
@@ -347,6 +388,7 @@ int main(void) {
     test_search_equivalence();
     test_unsat_core();
     test_sat_backend();
+    test_optimize();
     test_run_pipeline();
     printf("ok\n");
     return 0;

@@ -59,6 +59,12 @@ int dissonance_grade(int a, int b);
 
 int invert_pitch(int axis, int pitch);
 int invert_pitch_mod12(int axis, int pitch);
+/* How many scale notes of key stay in the key after inversion around
+ * axis and transposition by shift; and the axis nearest to `near` that
+ * keeps all of them, or -1. */
+int inversion_kept(int key, int axis, int shift);
+int inversion_nearest_axis(int key, int near, int shift);
+int key_scale_size(int key);
 
 int pitch_gravity(int pitch, int key);
 int tension_target(int index, int length);

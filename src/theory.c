@@ -309,6 +309,35 @@ int invert_pitch_mod12(int axis, int pitch) {
     return result;
 }
 
+int key_scale_size(int key) {
+    int n = 0;
+    for (int mask = key_scale_mask(key); mask != 0; mask &= mask - 1) n++;
+    return n;
+}
+
+int inversion_kept(int key, int axis, int shift) {
+    int mask = key_scale_mask(key);
+    int kept = 0;
+    for (int pc = 0; pc < 12; pc++) {
+        if (!((mask >> pc) & 1)) continue;
+        if ((mask >> pitch_class(2 * axis - pc + shift)) & 1) kept++;
+    }
+    return kept;
+}
+
+int inversion_nearest_axis(int key, int near, int shift) {
+    int size = key_scale_size(key);
+    for (int d = 0; d < 128; d++) {
+        for (int sign = -1; sign <= 1; sign += 2) {
+            int axis = near + sign * d;
+            if (axis < 0 || axis > 127) continue;
+            if (inversion_kept(key, axis, shift) == size) return axis;
+            if (d == 0) break;
+        }
+    }
+    return -1;
+}
+
 /* Tonal potential of a pitch in a key: tonic and mediant are stable,
  * the dominant nearly so, the leading tone and anything outside the
  * scale pull hardest. */

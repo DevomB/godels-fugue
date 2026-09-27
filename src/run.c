@@ -33,7 +33,7 @@ static SolveStatus trial(const PieceConfig *config, int *energy, long *nodes,
 }
 
 /* The delay is the outermost variable: every value is solved and the
- * lowest-energy success wins, ties going to the shorter delay. */
+ * lowest-energy first solution wins, ties going to the shorter delay. */
 static void search_delay(Run *run) {
     PieceConfig c = run->config;
     int best = -1;
@@ -42,6 +42,7 @@ static void search_delay(Run *run) {
         PieceConfig t = c;
         t.delay = d;
         t.delay_search = 0;
+        t.optimize = 0; /* compare first solutions; only the winner is optimized */
         if (canon_span_config(&t) > SPAN_MAX) continue;
         if (t.modulate_at >= canon_span_config(&t)) continue;
         DelayTrial *dt = &run->delays[run->ndelays++];

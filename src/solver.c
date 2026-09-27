@@ -51,6 +51,7 @@ bool solver_init(SolverState *s, const Model *m) {
         s->queue[s->qlen++] = c;
         s->queued[c] = 1;
     }
+    s->optimize = m->config.optimize;
     for (int v = 0; v < m->nvars; v++) {
         if (domain_count(&s->domains[v]) == 0) {
             s->failed = true;
@@ -444,12 +445,26 @@ static int order_values(SolverState *s, int var, int *values, int *costs, int *n
     }
     solver_choice_costs(s, var, values, n, costs, NULL);
     *n_out = n;
-    if (!m->config.energy) return 0;
-    int temp = current_temperature(s);
-    if (temp > 0) {
-        sample_order(values, costs, n, temp, &s->rng);
-    } else {
-        sort_by_cost(values, costs, n);
+    int temp = 0;
+    if (m->config.energy) {
+        temp = current_temperature(s);
+        if (temp > 0) {
+            sample_order(values, costs, n, temp, &s->rng);
+        } else {
+            sort_by_cost(values, costs, n);
+        }
+    }
+    if (s->guided) {
+        /* replaying the best piece: its value goes first */
+        for (int k = 1; k < n; k++) {
+            if (values[k] != s->best[var]) continue;
+            int value = values[k];
+            int cost = costs[k];
+            memmove(values + 1, values, (size_t)k * sizeof(int));
+            memmove(costs + 1, costs, (size_t)k * sizeof(int));
+            values[0] = value;
+            costs[0] = cost;
+        }
     }
     return temp;
 }
@@ -582,10 +597,18 @@ static int pick_variable(SolverState *s) {
 
 static bool limit_reached(SolverState *s) {
     const PieceConfig *c = &model_of(s)->config;
-    if (c->max_nodes > 0 && s->stats.nodes > c->max_nodes) return true;
+    if (s->guided) return false; /* a replay walks straight to a known piece */
+    if (s->optimizing && s->stats.nodes > s->window_end) return true;
+    if (c->max_nodes > 0 && s->stats.nodes > c->max_nodes) {
+        s->limit_hit = true;
+        return true;
+    }
     if (c->time_limit > 0 && (s->stats.nodes & 63) == 0) {
         double ms = 1000.0 * (double)(clock() - s->start) / CLOCKS_PER_SEC;
-        if (ms > c->time_limit) return true;
+        if (ms > c->time_limit) {
+            s->limit_hit = true;
+            return true;
+        }
     }
     return false;
 }
@@ -596,6 +619,7 @@ static void decide(SolverState *s, int var, int value, int level, const Frame *f
     d->var = var;
     d->value = value;
     d->temperature = temp;
+    d->guided = s->guided;
     d->ncand = f->n < CAND_MAX ? f->n : CAND_MAX;
     memcpy(d->cand_values, f->values, (size_t)d->ncand * sizeof(int));
     memcpy(d->cand_costs, f->costs, (size_t)d->ncand * sizeof(int));
@@ -650,20 +674,63 @@ static void learn(SolverState *s, const LevelSet *conflict, int var, int value) 
     s->stats.learned++;
 }
 
+/* Cost of the soft terms whose variables are all collapsed. Costs are
+ * never negative, so no completion can cost less. */
+static int partial_energy(const SolverState *s) {
+    const Model *m = model_of(s);
+    int total = 0;
+    for (int k = 0; k < m->nterms; k++) {
+        const Constraint *t = &m->terms[k];
+        int vals[SCOPE_MAX];
+        bool ready = true;
+        for (int i = 0; i < t->n && ready; i++) {
+            vals[i] = solver_value(s, t->vars[i]);
+            ready = vals[i] >= 0;
+        }
+        if (ready) total += term_cost(m, t, vals);
+    }
+    return total;
+}
+
+static void every_level(const SolverState *s, LevelSet *conflict) {
+    levelset_clear(conflict);
+    for (int l = 1; l <= s->level; l++) levelset_add(conflict, l);
+}
+
+static void record_piece(SolverState *s) {
+    const Model *m = model_of(s);
+    int values[VAR_MAX];
+    solver_values(s, values);
+    int energy = model_energy(m, values, NULL);
+    if (s->stats.solutions == 0) {
+        s->stats.first_energy = energy;
+        s->first_found_at = s->stats.nodes;
+    }
+    s->stats.solutions++;
+    s->bound = energy;
+    memcpy(s->best, values, (size_t)m->nvars * sizeof(int));
+}
+
 /* Depth-first search with conflict-directed backjumping. On failure,
  * *conflict holds the decision levels the failure depends on. */
 static int search(SolverState *s, LevelSet *conflict) {
     s->stats.nodes++;
-    if (limit_reached(s)) {
-        s->limit_hit = true;
-        return R_LIMIT;
-    }
+    if (limit_reached(s)) return R_LIMIT;
     if (!solver_propagate(s)) {
         *conflict = s->reason[s->failed_variable];
         return R_FAIL;
     }
+    if (s->optimizing && partial_energy(s) >= s->bound) {
+        every_level(s, conflict); /* the bound rests on every decision */
+        return R_FAIL;
+    }
     int var = pick_variable(s);
-    if (var < 0) return R_SAT;
+    if (var < 0) {
+        if (!s->optimizing) return R_SAT;
+        record_piece(s);
+        every_level(s, conflict);
+        return R_FAIL;
+    }
 
     int level = s->level + 1;
     Frame *f = &s->frames[level];
@@ -698,6 +765,80 @@ static int search(SolverState *s, LevelSet *conflict) {
     return R_FAIL;
 }
 
+static void enqueue_all(SolverState *s) {
+    for (int c = 0; c < model_of(s)->ncons; c++) enqueue(s, c);
+}
+
+static void restart(SolverState *s, const Snapshot *root) {
+    solver_restore(s, root);
+    s->nnogoods = 0; /* some were learned under fixings or a bound */
+    for (int v = 0; v < model_of(s)->nvars; v++) s->watch_n[v] = 0;
+    enqueue_all(s);
+}
+
+/* Is var part of the window of melody notes [start, start + width),
+ * wrapping around the end? Chords of the bars those notes start are
+ * free too; keys never are. */
+static bool in_window(const Model *m, int var, int start, int width) {
+    const ModelVar *v = &m->vars[var];
+    int length = m->config.length;
+    if (v->kind == VAR_KEY) return false;
+    for (int k = 0; k < width; k++) {
+        int i = (start + k) % length;
+        if (v->kind == VAR_CHORD ? v->index == i / 4 : v->index == i) return true;
+    }
+    return false;
+}
+
+/* Large neighbourhood search. The first piece becomes the best; then a
+ * window of notes slides along the melody, everything outside it is
+ * fixed to the best piece, and branch and bound looks for a strictly
+ * cheaper piece inside. It stops when a full pass of windows finds
+ * nothing or the budget runs out, then replays the best piece from the
+ * root so the proof log and the decisions describe it. */
+static int optimize(SolverState *s) {
+    enum { WINDOW = 6, WINDOW_NODES = 1500 };
+    const Model *m = model_of(s);
+    Snapshot *root = &s->frames[0].snap;
+    solver_save(s, root);
+    LevelSet conflict;
+    levelset_clear(&conflict);
+    int r = search(s, &conflict);
+    if (r != R_SAT) return r;
+    record_piece(s);
+
+    int length = m->config.length;
+    int width = length < WINDOW ? length : WINDOW;
+    int stride = width / 2 > 0 ? width / 2 : 1;
+    int passes_needed = (length + stride - 1) / stride;
+    int quiet = 0;
+    for (int start = 0; quiet < passes_needed; start = (start + stride) % length) {
+        if (s->stats.nodes - s->first_found_at > s->optimize || s->limit_hit) break;
+        restart(s, root);
+        for (int v = 0; v < m->nvars; v++) {
+            if (in_window(m, v, start, width) || !domain_contains(&s->domains[v], s->best[v]))
+                continue;
+            domain_clear(&s->domains[v]);
+            domain_add(&s->domains[v], s->best[v]);
+        }
+        long before = s->stats.solutions;
+        s->optimizing = true;
+        s->window_end = s->stats.nodes + WINDOW_NODES;
+        search(s, &conflict);
+        s->optimizing = false;
+        s->stats.windows++;
+        quiet = s->stats.solutions > before ? 0 : quiet + 1;
+    }
+    s->stats.converged = quiet >= passes_needed;
+
+    s->limit_hit = false;
+    restart(s, root);
+    s->guided = true;
+    r = search(s, &conflict);
+    s->guided = false;
+    return r;
+}
+
 SolveStatus solver_solve(SolverState *s) {
     const PieceConfig *c = &model_of(s)->config;
     s->start = clock();
@@ -707,7 +848,14 @@ SolveStatus solver_solve(SolverState *s) {
     s->limit_hit = false;
     LevelSet conflict;
     levelset_clear(&conflict);
-    int r = s->failed ? R_FAIL : search(s, &conflict);
+    int r;
+    if (s->failed) {
+        r = R_FAIL;
+    } else if (s->optimize > 0) {
+        r = optimize(s);
+    } else {
+        r = search(s, &conflict);
+    }
     s->stats.seconds = (double)(clock() - s->start) / CLOCKS_PER_SEC;
     if (r == R_SAT) return SOLVE_SAT;
     return r == R_LIMIT ? SOLVE_LIMIT : SOLVE_UNSAT;
@@ -719,6 +867,7 @@ bool solver_unsat_core(const Model *m, int *rules, int max_rules, int *n,
     *approximate = false;
     SolverState s;
     if (!solver_init(&s, m)) return false;
+    s.optimize = 0;
     SolveStatus first = solver_solve(&s);
     solver_free(&s);
     if (first != SOLVE_UNSAT) return false;
@@ -736,6 +885,7 @@ bool solver_unsat_core(const Model *m, int *rules, int max_rules, int *n,
     memset(drop, 0, sizeof(drop));
     for (int i = 0; i < nc; i++) {
         if (!solver_init(&s, m)) return false;
+        s.optimize = 0; /* only satisfiability matters here */
         memcpy(s.skip, drop, sizeof(drop));
         s.skip[cand[i]] = 1;
         SolveStatus st = solver_solve(&s);

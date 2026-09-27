@@ -3,6 +3,7 @@
 #include "canon.h"
 #include "theory.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 const char *explain_status_name(int status) {
@@ -230,7 +231,13 @@ void explain_print(FILE *f, const SolverState *s, const Explanation *e) {
         fprintf(f, "  locked by the user\n");
         break;
     case WHY_DECIDED:
-        fprintf(f, "  chosen by the search as decision %d\n", e->decision);
+        if (s->decisions[e->decision].guided) {
+            fprintf(f, "  chosen as decision %d to rebuild the lowest-energy piece the "
+                       "optimizer found\n",
+                    e->decision);
+        } else {
+            fprintf(f, "  chosen by the search as decision %d\n", e->decision);
+        }
         print_candidates(f, s, e);
         break;
     case WHY_FORCED:
@@ -242,14 +249,28 @@ void explain_print(FILE *f, const SolverState *s, const Explanation *e) {
         break;
     }
     if (e->nrejected > 0) {
+        /* values removed for the same reason share one line */
+        char(*why)[320] = malloc((size_t)e->nrejected * sizeof(*why));
+        bool printed[128] = {false};
+        if (why == NULL) return;
         fprintf(f, "  %s:\n", e->status == WHY_DECIDED ? "removed before the choice" : "removed");
+        for (int k = 0; k < e->nrejected; k++)
+            explain_removal(s, &s->proof.events[e->rejected[k].event], why[k], sizeof(why[k]));
         for (int k = 0; k < e->nrejected; k++) {
-            char why[320];
-            char rv[32];
-            label(s, e->var, e->rejected[k].value, rv, sizeof(rv));
-            explain_removal(s, &s->proof.events[e->rejected[k].event], why, sizeof(why));
-            fprintf(f, "    %-6s %s\n", rv, why);
+            if (printed[k]) continue;
+            char values[256] = "";
+            size_t used = 0;
+            for (int j = k; j < e->nrejected; j++) {
+                if (printed[j] || strcmp(why[j], why[k]) != 0) continue;
+                char rv[32];
+                label(s, e->var, e->rejected[j].value, rv, sizeof(rv));
+                used = append(values, sizeof(values), used, used ? " " : "");
+                used = append(values, sizeof(values), used, rv);
+                printed[j] = true;
+            }
+            fprintf(f, "    %-6s %s\n", values, why[k]);
         }
+        free(why);
     }
     if (e->status == WHY_FORCED) {
         char deps[512];
@@ -272,8 +293,9 @@ void explain_json(FILE *f, const SolverState *s, const Explanation *e) {
         snprintf(buf, sizeof(buf), "?");
     }
     json_string(f, buf);
-    fprintf(f, ",\"status\":\"%s\",\"event\":%d,\"depth\":%d", explain_status_name(e->status),
-            e->event, e->level);
+    fprintf(f, ",\"status\":\"%s\",\"event\":%d,\"depth\":%d,\"optimized\":%s",
+            explain_status_name(e->status), e->event, e->level,
+            e->status == WHY_DECIDED && s->decisions[e->decision].guided ? "true" : "false");
 
     fprintf(f, ",\"rejected\":[");
     for (int k = 0; k < e->nrejected; k++) {

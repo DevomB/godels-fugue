@@ -260,8 +260,8 @@ bool export_wav(const char *path, const Score *score, int sample) {
             double step = midi_hz(n->pitch) / rate;
             for (long i = 0; i < len && start + i < total; i++) {
                 double env = 1.0;
-                if (i < attack) env = (double)i / attack;
-                if (len - i < release) env *= (double)(len - i) / release;
+                if (i < attack) env = (double)i / (double)attack;
+                if (len - i < release) env *= (double)(len - i) / (double)release;
                 double wave = sample ? wavetable(phase) : sin(2.0 * M_PI * phase);
                 mix[start + i] += (float)(wave * env);
                 phase += step;

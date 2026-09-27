@@ -91,6 +91,23 @@ static int run_sat(const PieceConfig *config) {
     return exit_code;
 }
 
+/* An inversion axis that maps the key onto other notes leaves the
+ * scale rule few pitches to choose from; say so and suggest one. */
+static void warn_about_axis(const PieceConfig *c) {
+    if (!c->invert || c->key < 0 || c->mode < 0) return;
+    int key = key_id(c->key, c->mode);
+    int size = key_scale_size(key);
+    int kept = inversion_kept(key, c->axis, c->transpose);
+    if (kept == size) return;
+    char name[32];
+    key_name(key, name, sizeof(name));
+    fprintf(stderr, "note: inverting around axis %d keeps %d of %d notes of %s in the key",
+            c->axis, kept, size, name);
+    int better = inversion_nearest_axis(key, c->axis, c->transpose);
+    if (better >= 0) fprintf(stderr, "; axis %d keeps them all", better);
+    fprintf(stderr, "\n");
+}
+
 static bool need_value(int i, int argc, int count, const char *flag) {
     if (i + count < argc) return true;
     fprintf(stderr, "missing value for %s\n", flag);
@@ -203,6 +220,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s\n", err);
         return EXIT_UNSAT;
     }
+    warn_about_axis(&config);
 
     if (corpus_dir != NULL) {
         int counts[12] = {0};

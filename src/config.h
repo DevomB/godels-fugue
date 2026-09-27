@@ -90,6 +90,7 @@ typedef struct PieceConfig {
     int hierarchy;
     int backjump;
     int learn;
+    int optimize;
     int max_nodes;
     int time_limit;
     int delay_search;

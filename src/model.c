@@ -22,7 +22,7 @@ const char *term_name(int term) {
     static const char *const names[TERM_COUNT] = {
         "gravity",   "curve",       "corpus", "rest",  "leap",       "repeat",
         "recovery",  "motif",       "dissonance", "direct perfect", "hold",
-        "syncopation", "rhythm",    "final",  "chord", "non-chord tone", "key",
+        "syncopation", "rhythm",    "final",  "chord", "chord motion", "non-chord tone", "key",
         "key distance"};
     if (term < 0 || term >= TERM_COUNT) return "unknown";
     return names[term];
@@ -523,6 +523,11 @@ static void build_terms(Builder *b) {
             Constraint *t = add_term(b, TERM_CHORD, c->w_harmony);
             add_slot(t, m->chord[bar], -1);
             if (t != NULL) t->time = bar * 4;
+            if (bar == 0) continue;
+            t = add_term(b, TERM_CHORD_MOTION, c->w_harmony);
+            add_slot(t, m->chord[bar - 1], -1);
+            add_slot(t, m->chord[bar], -1);
+            if (t != NULL) t->time = bar * 4;
         }
         for (int t = 0; t < m->span; t++) {
             if (is_strong_time(t, c->poly_meter)) continue;
@@ -854,6 +859,15 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
         static const int cost[DEGREE_COUNT] = {0, 1, 2, 0, 0, 1, 2};
         int d = slot_value(t, vals, 0);
         return d >= 0 && d < DEGREE_COUNT ? w * cost[d] : 0;
+    }
+    case TERM_CHORD_MOTION: {
+        /* strongest: the root falls a fifth (V-I, ii-V) or rises a step
+         * (IV-V); repeating a chord is weakest */
+        int from = slot_value(t, vals, 0);
+        int to = slot_value(t, vals, 1);
+        int step = ((to - from) % DEGREE_COUNT + DEGREE_COUNT) % DEGREE_COUNT;
+        if (from == to) return 2 * w;
+        return step == 3 || step == 1 ? 0 : w;
     }
     case TERM_NONCHORD: {
         int s = slot_sound(m, t, vals, 0);

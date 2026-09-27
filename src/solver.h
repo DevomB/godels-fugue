@@ -23,6 +23,7 @@ typedef struct Decision {
     int value;
     int event;
     int temperature;
+    bool guided; /* replayed from the best piece the optimizer found */
     int ncand;
     int cand_values[CAND_MAX];
     int cand_costs[CAND_MAX];
@@ -45,6 +46,10 @@ typedef struct SolverStats {
     long propagations;
     long removals;
     long removals_by_rule[CID_MAX];
+    long solutions;   /* pieces found: the first, then each improvement */
+    int first_energy; /* energy of the first piece found */
+    long windows;     /* neighbourhoods the optimizer searched */
+    bool converged;   /* a full pass of windows found nothing cheaper */
     double seconds;
 } SolverStats;
 
@@ -91,6 +96,13 @@ typedef struct SolverState {
     int watch_n[VAR_MAX];
     int watch_cap[VAR_MAX];
     SolverStats stats;
+    long optimize; /* node budget for improving on the first piece */
+    bool optimizing;
+    int bound;           /* energy of the best piece so far */
+    int best[VAR_MAX];   /* the best piece so far */
+    long first_found_at; /* node count when the first piece appeared */
+    long window_end;     /* node count at which the current window stops */
+    bool guided;         /* try best[var] first: replaying the best piece */
     bool failed;
     int failed_variable;
     bool limit_hit;
