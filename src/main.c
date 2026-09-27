@@ -221,6 +221,10 @@ int main(int argc, char **argv) {
         return EXIT_UNSAT;
     }
     warn_about_axis(&config);
+    if (!sat_mode && !output_paths_distinct(&paths, err, sizeof(err))) {
+        fprintf(stderr, "%s\n", err);
+        return EXIT_UNSAT;
+    }
 
     if (corpus_dir != NULL) {
         int counts[12] = {0};
@@ -262,7 +266,7 @@ int main(int argc, char **argv) {
         int var = find_var(&run->model, explain);
         if (var < 0) {
             fprintf(stderr, "no variable named %s\n", explain);
-            exit_code = EXIT_UNSAT;
+            if (exit_code == 0) exit_code = EXIT_UNSAT;
         } else {
             Explanation e;
             explain_var(&run->state, var, &e);

@@ -32,7 +32,7 @@ static void event_line(FILE *f, const Run *run, const ProofEvent *ev) {
     char name[16];
     char value[32];
     var_label(&run->model, ev->variable_id, name, sizeof(name));
-    value_label(&run->model, ev->variable_id, ev->value, value, sizeof(value));
+    explain_label(&run->state, ev->variable_id, ev->value, value, sizeof(value));
     fprintf(f, "%s %s %s", event_type_name(ev->type), name, value);
     if (ev->type == PROOF_REMOVE) fprintf(f, " %s", rule_name(ev->rule));
     if (ev->type != PROOF_REMOVE || ev->level > 0) fprintf(f, " depth %d", ev->level);
@@ -71,8 +71,8 @@ bool trace_write_dag(const char *path, const Run *run) {
             if (ev->parent_events[p] >= 0) fprintf(f, "  parent event %d\n", ev->parent_events[p]);
             if (ev->parent_values[p] >= 0) {
                 char value[32];
-                value_label(&run->model, ev->parent_vars[p], ev->parent_values[p], value,
-                            sizeof(value));
+                explain_label(&run->state, ev->parent_vars[p], ev->parent_values[p], value,
+                              sizeof(value));
                 fprintf(f, "  parent assign %s = %s\n", name, value);
             }
         }
@@ -156,9 +156,9 @@ static void write_events(FILE *f, const Run *run) {
         const ProofEvent *ev = &log->events[i];
         char name[16];
         char value[32];
-        char why[320] = "";
+        char why[EXPLAIN_TEXT_MAX] = "";
         var_label(&run->model, ev->variable_id, name, sizeof(name));
-        value_label(&run->model, ev->variable_id, ev->value, value, sizeof(value));
+        explain_label(s, ev->variable_id, ev->value, value, sizeof(value));
         if (ev->type == PROOF_REMOVE) explain_removal(s, ev, why, sizeof(why));
         fprintf(f, "%s{\"id\":%d,\"type\":\"%s\",\"var\":", i ? "," : "", i,
                 event_type_name(ev->type));

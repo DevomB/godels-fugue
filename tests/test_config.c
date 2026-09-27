@@ -289,14 +289,15 @@ static void test_validation_edges(void) {
     c.diminish = 2;
     CHECK(!config_validate(&c, err, sizeof(err)));
 
-    /* with delay_search, modulate_at must fit the shortest delay tried */
+    /* with delay_search, modulate_at must fit the longest delay tried;
+     * shorter delays are skipped */
     config_defaults(&c);
     c.delay_search = 1;
-    c.delay_min = 10;
+    c.delay_min = 1;
     c.delay_max = 12;
     c.modulate_at = 20;
     CHECK(config_validate(&c, err, sizeof(err)));
-    c.delay_min = 1;
+    c.delay_max = 2;
     CHECK(!config_validate(&c, err, sizeof(err)));
 }
 

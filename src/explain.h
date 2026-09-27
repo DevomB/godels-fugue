@@ -5,6 +5,9 @@
 
 #include <stdio.h>
 
+/* Room for any removal reason: a refutation can list every decision. */
+enum { EXPLAIN_TEXT_MAX = 4096 };
+
 /* How a variable reached its final value. */
 enum {
     WHY_CONFIG,  /* the config left one value from the start */
@@ -32,6 +35,8 @@ typedef struct Explanation {
 } Explanation;
 
 void explain_var(const SolverState *s, int var, Explanation *e);
+/* A value's name, spelled and numbered in the key the solver settled on. */
+void explain_label(const SolverState *s, int var, int value, char *buf, size_t cap);
 const char *explain_status_name(int status);
 /* Short text for why a removal happened, e.g. "consonance: voices 1,2 ...". */
 void explain_removal(const SolverState *s, const ProofEvent *ev, char *buf, size_t cap);

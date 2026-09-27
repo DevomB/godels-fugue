@@ -38,6 +38,7 @@ static void search_delay(Run *run) {
     PieceConfig c = run->config;
     int best = -1;
     int best_energy = 0;
+    int first_tried = -1;
     for (int d = c.delay_min; d <= c.delay_max; d++) {
         PieceConfig t = c;
         t.delay = d;
@@ -47,6 +48,7 @@ static void search_delay(Run *run) {
         if (t.modulate_at >= canon_span_config(&t)) continue;
         DelayTrial *dt = &run->delays[run->ndelays++];
         dt->delay = d;
+        if (first_tried < 0) first_tried = d;
         dt->status = trial(&t, &dt->energy, &dt->nodes, NULL);
         if (dt->status == SOLVE_SAT && (best < 0 || dt->energy < best_energy)) {
             best = d;
@@ -54,7 +56,7 @@ static void search_delay(Run *run) {
         }
     }
     /* nothing solved: report on a searched delay, not the unsearched one */
-    run->config.delay = best >= 0 ? best : c.delay_min;
+    run->config.delay = best >= 0 ? best : first_tried;
 }
 
 bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap) {

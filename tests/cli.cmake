@@ -119,6 +119,28 @@ run(bad_preset 1 ERROR "unknown preset" ARGS --preset romantic)
 run(no_config 1 ERROR "cannot read config" ARGS --config "${SRC}/examples/none.txt")
 run(bad_corpus 1 ERROR "cannot read corpus" ARGS --corpus "${SRC}/nothing-here")
 
+run(collide 1 ERROR "both be written" ARGS --proof "${OUT}/collide/score.html")
+run(lock_limit 3 MATCH "inconclusive" ERROR "search limit"
+    ARGS --set optimize=0 --set length=16 --set voices=3 --set delay=2 --set range_low=55
+         --set range_high=74 --set consonance=all --set harmony=1 --set rhythm=1
+         --set backjump=0 --max-nodes 11 --lock 4 55)
+
+# A failed run clears the score files an earlier run left in the same place.
+set(dir "${OUT}/stale")
+file(REMOVE_RECURSE "${dir}")
+execute_process(COMMAND "${EXE}" --out "${dir}/canon.mid" --proof "${dir}/proof.txt"
+                        --entropy "${dir}/entropy.txt" WORKING_DIRECTORY "${SRC}"
+                RESULT_VARIABLE rc OUTPUT_QUIET ERROR_QUIET)
+execute_process(COMMAND "${EXE}" --out "${dir}/canon.mid" --proof "${dir}/proof.txt"
+                        --entropy "${dir}/entropy.txt" --config "${SRC}/examples/unsat.txt"
+                WORKING_DIRECTORY "${SRC}" RESULT_VARIABLE rc OUTPUT_QUIET ERROR_QUIET)
+foreach(name IN ITEMS canon.mid score.musicxml contour.svg voices.wav)
+  if(EXISTS "${dir}/${name}")
+    fail("stale ${name} left beside a failed run")
+  endif()
+endforeach()
+expect_file("${dir}/score.html" "<!DOCTYPE html>")
+
 file(WRITE "${OUT}/bad_key.txt" "length 12\nstrong_chord 1\n")
 run(bad_key 1 ERROR "unknown config key: strong_chord" ARGS --config "${OUT}/bad_key.txt")
 

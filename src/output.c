@@ -8,6 +8,7 @@
 #include "theory.h"
 #include "trace.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <string.h>
 
@@ -94,6 +95,8 @@ bool output_write_all(const Run *run, const OutputPaths *paths) {
                 memcpy(dag + n, ".dag", 5);
             }
             ok &= trace_write_dag(dag, run);
+        } else {
+            ok = false;
         }
     }
     ok &= trace_write_entropy(paths->entropy, run);
@@ -102,13 +105,61 @@ bool output_write_all(const Run *run, const OutputPaths *paths) {
     /* the page and explanations also show why a failed run failed */
     ok &= write_beside(paths->midi, "score.html", page_write, run);
     ok &= write_beside(paths->midi, "explain.txt", output_write_explanations, run);
-    if (run->status != SOLVE_SAT) return ok;
+    if (run->status != SOLVE_SAT) {
+        static const char *const stale[] = {"score.musicxml", "contour.svg", "voices.wav"};
+        remove(paths->midi);
+        for (size_t i = 0; i < sizeof(stale) / sizeof(stale[0]); i++) {
+            char path[512];
+            if (sibling_path(path, sizeof(path), paths->midi, stale[i])) remove(path);
+        }
+        return ok;
+    }
 
     ok &= write_midi(paths->midi, run);
     ok &= write_beside(paths->midi, "score.musicxml", write_musicxml, run);
     ok &= write_beside(paths->midi, "contour.svg", write_contour, run);
     ok &= write_beside(paths->midi, "voices.wav", write_wav, run);
     return ok;
+}
+
+static void normalize_path(const char *in, char *out, size_t cap) {
+    size_t i = 0;
+    for (; in[i] != '\0' && i + 1 < cap; i++) {
+        char ch = in[i] == '\\' ? '/' : in[i];
+#ifdef _WIN32
+        ch = (char)tolower((unsigned char)ch); /* Windows paths ignore case */
+#endif
+        out[i] = ch;
+    }
+    out[i] = '\0';
+}
+
+bool output_paths_distinct(const OutputPaths *paths, char *err, size_t cap) {
+    static const char *const beside_midi[] = {"score.musicxml", "contour.svg", "voices.wav",
+                                              "score.html",     "explain.txt", "report.txt"};
+    char all[10][512];
+    int n = 0;
+    snprintf(all[n++], sizeof(all[0]), "%s", paths->midi);
+    snprintf(all[n++], sizeof(all[0]), "%s", paths->proof);
+    snprintf(all[n++], sizeof(all[0]), "%s", paths->entropy);
+    for (size_t i = 0; i < sizeof(beside_midi) / sizeof(beside_midi[0]); i++) {
+        if (!sibling_path(all[n], sizeof(all[0]), paths->midi, beside_midi[i])) return true;
+        n++;
+    }
+    if (sibling_path(all[n], sizeof(all[0]), paths->proof, "proof.json")) n++;
+    for (int i = 0; i < n; i++) {
+        char a[512];
+        normalize_path(all[i], a, sizeof(a));
+        for (int j = i + 1; j < n; j++) {
+            char b[512];
+            normalize_path(all[j], b, sizeof(b));
+            if (strcmp(a, b) == 0) {
+                snprintf(err, cap, "two output files would both be written to %s", all[i]);
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 const char *output_length_name(int steps) {
@@ -242,14 +293,16 @@ void output_print_failure(FILE *err, const Run *run) {
         fprintf(err, "; %s has no value left", name);
     }
     fprintf(err, "\n");
-    for (int i = s->proof.event_count - 1; i >= 0; i--) {
+    /* the last removal emptied the failed variable; after a search that
+     * backed out to the root there is no such removal to show */
+    for (int i = s->proof.event_count - 1; s->failed && i >= 0; i--) {
         const ProofEvent *e = &s->proof.events[i];
         if (e->type != PROOF_REMOVE) continue;
-        char why[320];
+        char why[EXPLAIN_TEXT_MAX];
         char name[16];
         char value[32];
         var_label(&run->model, e->variable_id, name, sizeof(name));
-        value_label(&run->model, e->variable_id, e->value, value, sizeof(value));
+        explain_label(s, e->variable_id, e->value, value, sizeof(value));
         explain_removal(s, e, why, sizeof(why));
         fprintf(err, "last removal: %s %s by %s\n", name, value, why);
         break;
@@ -259,12 +312,14 @@ void output_print_failure(FILE *err, const Run *run) {
 void output_print_counterfactual(FILE *out, const Run *run) {
     const PieceConfig *c = &run->config;
     char value[32];
-    value_label(&run->model, run->model.pitch[c->lock_index], c->lock_pitch, value,
-                sizeof(value));
+    explain_label(&run->state, run->model.pitch[c->lock_index], c->lock_pitch, value,
+                  sizeof(value));
     fprintf(out, "counterfactual: lock x%d = %s\n", c->lock_index, value);
     if (run->unlocked_status != SOLVE_SAT) {
         fprintf(out, "%s without the lock\n",
                 run->unlocked_status == SOLVE_UNSAT ? "unsat" : "search limit");
+    } else if (run->status == SOLVE_LIMIT) {
+        fprintf(out, "inconclusive: the search hit its limit with the lock\n");
     } else if (run->status != SOLVE_SAT) {
         fprintf(out, "killed:");
         int shown = 0;

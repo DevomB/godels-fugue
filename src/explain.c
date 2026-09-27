@@ -37,7 +37,7 @@ static int final_key(const SolverState *s, int section) {
 
 /* Like value_label, but spells pitches and names chords in the key the
  * solver settled on. */
-static void label(const SolverState *s, int var, int value, char *buf, size_t cap) {
+void explain_label(const SolverState *s, int var, int value, char *buf, size_t cap) {
     const Model *m = s->model;
     const ModelVar *v = &m->vars[var];
     if (v->kind == VAR_PITCH && value != PITCH_REST) {
@@ -81,6 +81,7 @@ void explain_var(const SolverState *s, int var, Explanation *e) {
     }
     if (e->value < 0) {
         e->status = WHY_OPEN;
+        e->event = -1; /* earlier events describe values it no longer has */
     } else if (e->event < 0) {
         e->status = WHY_CONFIG;
     } else {
@@ -127,7 +128,7 @@ static size_t append_decisions(const SolverState *s, const LevelSet *reason, cha
         char value[32];
         char part[64];
         var_label(s->model, s->decisions[l].var, name, sizeof(name));
-        label(s, s->decisions[l].var, s->decisions[l].value, value, sizeof(value));
+        explain_label(s, s->decisions[l].var, s->decisions[l].value, value, sizeof(value));
         snprintf(part, sizeof(part), "%s%s = %s", first ? "" : ", ", name, value);
         used = append(buf, cap, used, part);
         first = false;
@@ -163,7 +164,7 @@ void explain_removal(const SolverState *s, const ProofEvent *ev, char *buf, size
         char value[32];
         char part[64];
         var_label(m, ev->parent_vars[p], name, sizeof(name));
-        label(s, ev->parent_vars[p], ev->parent_values[p], value, sizeof(value));
+        explain_label(s, ev->parent_vars[p], ev->parent_values[p], value, sizeof(value));
         snprintf(part, sizeof(part), "%s%s = %s", first ? " (with " : ", ", name, value);
         used = append(buf, cap, used, part);
         first = false;
@@ -190,7 +191,7 @@ static void print_candidates(FILE *f, const SolverState *s, const Explanation *e
             d->temperature > 0 ? " (sampled at a temperature above 0)" : "");
     for (int k = 0; k < d->ncand; k++) {
         char value[32];
-        label(s, e->var, d->cand_values[k], value, sizeof(value));
+        explain_label(s, e->var, d->cand_values[k], value, sizeof(value));
         fprintf(f, "    %-6s %3d%s", value, d->cand_costs[k],
                 d->cand_values[k] == e->value ? "  <- chosen" : "");
         if (k < CAND_BREAKDOWN && d->cand_costs[k] > 0) {
@@ -213,7 +214,7 @@ void explain_print(FILE *f, const SolverState *s, const Explanation *e) {
     char value[32];
     var_label(m, e->var, name, sizeof(name));
     if (e->value >= 0) {
-        label(s, e->var, e->value, value, sizeof(value));
+        explain_label(s, e->var, e->value, value, sizeof(value));
     } else {
         snprintf(value, sizeof(value), "?");
     }
@@ -245,12 +246,18 @@ void explain_print(FILE *f, const SolverState *s, const Explanation *e) {
                 e->level == 0 ? "before any decision" : "by propagation");
         break;
     default:
-        fprintf(f, "  undecided: the search did not finish\n");
+        if (s->result == SOLVE_UNSAT) {
+            fprintf(f, "  no value: the rules admit no piece at all\n");
+        } else if (s->result == SOLVE_LIMIT) {
+            fprintf(f, "  undecided: the search stopped at its limit\n");
+        } else {
+            fprintf(f, "  undecided\n");
+        }
         break;
     }
     if (e->nrejected > 0) {
         /* values removed for the same reason share one line */
-        char(*why)[320] = malloc((size_t)e->nrejected * sizeof(*why));
+        char(*why)[EXPLAIN_TEXT_MAX] = malloc((size_t)e->nrejected * sizeof(*why));
         bool printed[128] = {false};
         if (why == NULL) return;
         fprintf(f, "  %s:\n", e->status == WHY_DECIDED ? "removed before the choice" : "removed");
@@ -258,22 +265,21 @@ void explain_print(FILE *f, const SolverState *s, const Explanation *e) {
             explain_removal(s, &s->proof.events[e->rejected[k].event], why[k], sizeof(why[k]));
         for (int k = 0; k < e->nrejected; k++) {
             if (printed[k]) continue;
-            char values[256] = "";
-            size_t used = 0;
+            int width = 0;
+            fprintf(f, "    ");
             for (int j = k; j < e->nrejected; j++) {
                 if (printed[j] || strcmp(why[j], why[k]) != 0) continue;
                 char rv[32];
-                label(s, e->var, e->rejected[j].value, rv, sizeof(rv));
-                used = append(values, sizeof(values), used, used ? " " : "");
-                used = append(values, sizeof(values), used, rv);
+                explain_label(s, e->var, e->rejected[j].value, rv, sizeof(rv));
+                width += fprintf(f, "%s%s", width ? " " : "", rv);
                 printed[j] = true;
             }
-            fprintf(f, "    %-6s %s\n", values, why[k]);
+            fprintf(f, "%*s %s\n", width < 6 ? 6 - width : 0, "", why[k]);
         }
         free(why);
     }
     if (e->status == WHY_FORCED) {
-        char deps[512];
+        char deps[EXPLAIN_TEXT_MAX];
         append_decisions(s, &e->reason, deps, sizeof(deps), 0);
         fprintf(f, "  depends on: %s\n", deps);
     }
@@ -281,14 +287,14 @@ void explain_print(FILE *f, const SolverState *s, const Explanation *e) {
 
 void explain_json(FILE *f, const SolverState *s, const Explanation *e) {
     const Model *m = s->model;
-    char buf[320];
+    char buf[EXPLAIN_TEXT_MAX];
     var_label(m, e->var, buf, sizeof(buf));
     fprintf(f, "{\"var\":");
     json_string(f, buf);
     fprintf(f, ",\"id\":%d,\"kind\":\"%s\",\"index\":%d,\"value\":%d,\"label\":", e->var,
             var_kind_name(m->vars[e->var].kind), m->vars[e->var].index, e->value);
     if (e->value >= 0) {
-        label(s, e->var, e->value, buf, sizeof(buf));
+        explain_label(s, e->var, e->value, buf, sizeof(buf));
     } else {
         snprintf(buf, sizeof(buf), "?");
     }
@@ -300,7 +306,7 @@ void explain_json(FILE *f, const SolverState *s, const Explanation *e) {
     fprintf(f, ",\"rejected\":[");
     for (int k = 0; k < e->nrejected; k++) {
         const ProofEvent *ev = &s->proof.events[e->rejected[k].event];
-        label(s, e->var, e->rejected[k].value, buf, sizeof(buf));
+        explain_label(s, e->var, e->rejected[k].value, buf, sizeof(buf));
         fprintf(f, "%s{\"value\":%d,\"label\":", k ? "," : "", e->rejected[k].value);
         json_string(f, buf);
         fprintf(f, ",\"rule\":");
@@ -317,9 +323,10 @@ void explain_json(FILE *f, const SolverState *s, const Explanation *e) {
     if (e->status == WHY_FORCED || e->status == WHY_DECIDED) {
         for (int l = 1; l <= s->level; l++) {
             if (!levelset_has(&e->reason, l)) continue;
+            if (e->status == WHY_DECIDED && l == e->decision) continue; /* itself */
             char name[16];
             var_label(m, s->decisions[l].var, name, sizeof(name));
-            label(s, s->decisions[l].var, s->decisions[l].value, buf, sizeof(buf));
+            explain_label(s, s->decisions[l].var, s->decisions[l].value, buf, sizeof(buf));
             fprintf(f, "%s{\"decision\":%d,\"var\":", first ? "" : ",", l);
             json_string(f, name);
             fprintf(f, ",\"id\":%d,\"label\":", s->decisions[l].var);
@@ -334,7 +341,7 @@ void explain_json(FILE *f, const SolverState *s, const Explanation *e) {
     if (e->status == WHY_DECIDED) {
         const Decision *d = &s->decisions[e->decision];
         for (int k = 0; k < d->ncand; k++) {
-            label(s, e->var, d->cand_values[k], buf, sizeof(buf));
+            explain_label(s, e->var, d->cand_values[k], buf, sizeof(buf));
             fprintf(f, "%s{\"value\":%d,\"label\":", k ? "," : "", d->cand_values[k]);
             json_string(f, buf);
             fprintf(f, ",\"cost\":%d,\"parts\":{", d->cand_costs[k]);

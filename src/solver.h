@@ -80,6 +80,7 @@ typedef struct Frame {
     int n;
     int values[128];
     int costs[128];
+    int breakdown[CAND_BREAKDOWN][TERM_COUNT]; /* of the first few values, when ranked */
 } Frame;
 
 typedef struct SolverState {
@@ -112,6 +113,7 @@ typedef struct SolverState {
     int best[VAR_MAX];   /* the best piece so far */
     long window_end;     /* node count at which the current window stops */
     bool guided;         /* try best[var] first: replaying the best piece */
+    int result; /* SolveStatus of the last solve, or -1 before one */
     bool failed;
     int failed_variable;
     bool limit_hit;

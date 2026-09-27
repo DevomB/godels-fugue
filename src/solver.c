@@ -52,6 +52,7 @@ bool solver_init(SolverState *s, const Model *m) {
         s->queued[c] = 1;
     }
     s->optimize = m->config.optimize;
+    s->result = -1;
     for (int v = 0; v < m->nvars; v++) {
         if (domain_count(&s->domains[v]) == 0) {
             s->failed = true;
@@ -436,7 +437,9 @@ static int current_temperature(SolverState *s) {
 
 /* Values in ascending order with a rest last, then by cost when energy
  * ordering is on. Returns the temperature used. */
-static int order_values(SolverState *s, int var, int *values, int *costs, int *n_out) {
+static int order_values(SolverState *s, int var, Frame *f) {
+    int *values = f->values;
+    int *costs = f->costs;
     const Model *m = model_of(s);
     int n = domain_collect(&s->domains[var], values);
     if (m->vars[var].kind == VAR_PITCH && n > 0 && values[0] == PITCH_REST) {
@@ -444,7 +447,7 @@ static int order_values(SolverState *s, int var, int *values, int *costs, int *n
         values[n - 1] = PITCH_REST;
     }
     solver_choice_costs(s, var, values, n, costs, NULL);
-    *n_out = n;
+    f->n = n;
     int temp = 0;
     if (m->config.energy) {
         temp = current_temperature(s);
@@ -466,6 +469,10 @@ static int order_values(SolverState *s, int var, int *values, int *costs, int *n
             costs[0] = cost;
         }
     }
+    /* the explanation shows these parts next to the costs they add up to */
+    int top = n < CAND_BREAKDOWN ? n : CAND_BREAKDOWN;
+    int check[CAND_BREAKDOWN];
+    solver_choice_costs(s, var, values, top, check, &f->breakdown[0][0]);
     return temp;
 }
 
@@ -615,7 +622,6 @@ static bool limit_reached(SolverState *s) {
 
 static void decide(SolverState *s, int var, int value, int level, const Frame *f, int temp) {
     Decision *d = &s->decisions[level];
-    int costs[CAND_BREAKDOWN];
     d->var = var;
     d->value = value;
     d->temperature = temp;
@@ -623,8 +629,7 @@ static void decide(SolverState *s, int var, int value, int level, const Frame *f
     d->ncand = f->n < CAND_MAX ? f->n : CAND_MAX;
     memcpy(d->cand_values, f->values, (size_t)d->ncand * sizeof(int));
     memcpy(d->cand_costs, f->costs, (size_t)d->ncand * sizeof(int));
-    solver_choice_costs(s, var, f->values, d->ncand < CAND_BREAKDOWN ? d->ncand : CAND_BREAKDOWN,
-                        costs, &d->cand_breakdown[0][0]);
+    memcpy(d->cand_breakdown, f->breakdown, sizeof(d->cand_breakdown));
     d->event = -1;
 
     domain_clear(&s->domains[var]);
@@ -743,7 +748,7 @@ static int search(SolverState *s, LevelSet *conflict) {
 
     int level = s->level + 1;
     Frame *f = &s->frames[level];
-    int temp = order_values(s, var, f->values, f->costs, &f->n);
+    int temp = order_values(s, var, f);
     for (int k = 0; k < f->n; k++) {
         int value = f->values[k];
         if (!domain_contains(&s->domains[var], value)) continue;
@@ -873,8 +878,8 @@ SolveStatus solver_solve(SolverState *s) {
         }
     }
     s->stats.seconds = (double)(clock() - s->start) / CLOCKS_PER_SEC;
-    if (r == R_SAT) return SOLVE_SAT;
-    return r == R_LIMIT ? SOLVE_LIMIT : SOLVE_UNSAT;
+    s->result = r == R_SAT ? SOLVE_SAT : (r == R_LIMIT ? SOLVE_LIMIT : SOLVE_UNSAT);
+    return (SolveStatus)s->result;
 }
 
 bool solver_unsat_core(const Model *m, int *rules, int max_rules, int *n,

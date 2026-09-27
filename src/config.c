@@ -785,10 +785,9 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap) {
         snprintf(err, cap, "piece too long: canon spans more than %d steps", SPAN_MAX);
         return false;
     }
-    /* the shortest piece is the one at the smallest delay tried */
-    PieceConfig shortest = *config;
-    if (config->delay_search) shortest.delay = config->delay_min;
-    if (config->modulate_at >= 0 && config->modulate_at >= canon_span_config(&shortest)) {
+    /* delay_search skips delays too short to reach modulate_at, so only
+     * the longest one tried has to */
+    if (config->modulate_at >= 0 && config->modulate_at >= canon_span_config(&widest)) {
         snprintf(err, cap, "invalid modulate_at: past the end of the piece");
         return false;
     }

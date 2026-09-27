@@ -169,6 +169,55 @@ static void test_explanations(void) {
     test_close(r);
 }
 
+/* Every listed candidate's cost is the sum of its parts, even when the
+ * value was chosen only after others were refuted. */
+static void check_breakdowns(const TestRun *r) {
+    for (int l = 1; l <= r->state.level; l++) {
+        const Decision *d = &r->state.decisions[l];
+        for (int k = 0; k < d->ncand && k < CAND_BREAKDOWN; k++) {
+            int sum = 0;
+            for (int t = 0; t < TERM_COUNT; t++) sum += d->cand_breakdown[k][t];
+            CHECK(sum == d->cand_costs[k]);
+        }
+    }
+}
+
+static void test_breakdowns(void) {
+    PieceConfig c = test_config();
+    TestRun *r = test_solve(&c);
+    check_breakdowns(r);
+    test_close(r);
+    test_set(&c, "length=32");
+    test_set(&c, "voices=4");
+    test_set(&c, "delay=5");
+    test_set(&c, "range_low=48");
+    test_set(&c, "range_high=72");
+    test_set(&c, "consonance=all");
+    test_set(&c, "harmony=1");
+    test_set(&c, "rhythm=1");
+    test_set(&c, "backjump=0");
+    c.max_nodes = 20000;
+    r = test_solve(&c);
+    if (r->status == SOLVE_SAT) check_breakdowns(r);
+    test_close(r);
+}
+
+/* After an unsat run no open variable points at an earlier event. */
+static void test_open_variables(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "range_low=60");
+    test_set(&c, "range_high=60");
+    TestRun *r = test_solve(&c);
+    CHECK(r->status == SOLVE_UNSAT);
+    CHECK(r->state.result == SOLVE_UNSAT);
+    for (int v = 0; v < r->model.nvars; v++) {
+        Explanation e;
+        explain_var(&r->state, v, &e);
+        if (e.status == WHY_OPEN) CHECK(e.event == -1);
+    }
+    test_close(r);
+}
+
 /* A refuted value names the decisions that doomed it. */
 static void test_refutation(void) {
     PieceConfig c = test_config();
@@ -201,6 +250,8 @@ int main(void) {
     test_restore();
     test_explanations();
     test_refutation();
+    test_breakdowns();
+    test_open_variables();
     printf("ok\n");
     return 0;
 }
