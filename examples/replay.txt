@@ -1,0 +1,9 @@
+# For the Collapse card in score.html: a rhythmic canon with rests and
+# one given note. Step through the proof to watch each melody note's
+# candidates (rests included) fall away, and see what the given G4 at
+# x5 changed in the "Without the given notes" panel.
+length 12
+voices 2
+delay 4
+rhythm 1
+melody ? ? ? ? ? 67 ? ? ? ? ? ?

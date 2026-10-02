@@ -169,6 +169,17 @@ static void test_documents(void) {
         chosen += strcmp(status->string, "chosen") == 0;
     }
     CHECK(chosen > 0);
+    /* each variable carries its initial domain, sorted, for the collapse replay */
+    for (int v = 0; v < vars->count; v++) {
+        const JsonValue *initial = json_get(&vars->items[v], "initial");
+        CHECK(initial != NULL && initial->type == JSON_ARRAY);
+        CHECK(initial->count == domain_count(&run->model.initial[v]));
+        for (int k = 0; k < initial->count; k++) {
+            CHECK(domain_contains(&run->model.initial[v], (int)initial->items[k].number));
+            if (k > 0) CHECK(initial->items[k].number > initial->items[k - 1].number);
+        }
+    }
+    CHECK(json_get(&doc, "counterfactual") == NULL);
     const JsonValue *score = json_get(&doc, "score");
     CHECK(score != NULL && score->count == run->model.voices);
     CHECK(json_get(&doc, "chords")->count == run->model.nbars);
@@ -180,6 +191,8 @@ static void test_documents(void) {
     CHECK(strncmp(html, "<!DOCTYPE html>", 15) == 0);
     CHECK(strstr(html, "/*PIECE_DATA*/") == NULL);
     CHECK(strstr(html, "\"events\":[") != NULL);
+    CHECK(strstr(html, "\"initial\":[") != NULL);
+    CHECK(strstr(html, "id=\"cx-grid\"") != NULL);
     /* a template checked out with CRLF line endings must not double them */
     CHECK(strstr(html, "\r\r") == NULL);
     free(html);
@@ -195,6 +208,38 @@ static void test_documents(void) {
     CHECK(strstr(text, "parent event") != NULL);
     CHECK(strstr(text, "parent assign key = C major") != NULL);
     free(text);
+    run_free(run);
+
+    /* a given note adds the piece solved without it */
+    test_set(&c, "lock=1");
+    test_set(&c, "lock_index=3");
+    test_set(&c, "lock_pitch=67");
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->status == SOLVE_SAT && run->counterfactual);
+    CHECK(trace_save_json("output/tests/locked.json", run));
+    text = test_slurp("output/tests/locked.json", NULL);
+    CHECK(json_parse(text, &doc, why, sizeof(why)));
+    free(text);
+    const JsonValue *cf = json_get(&doc, "counterfactual");
+    CHECK(cf != NULL && cf->type == JSON_OBJECT);
+    CHECK(strcmp(json_get(cf, "unlockedStatus")->string,
+                 solve_status_name(run->unlocked_status)) == 0);
+    const JsonValue *pitch = json_get(cf, "unlockedPitch");
+    const JsonValue *changed = json_get(cf, "changed");
+    CHECK(pitch != NULL && changed != NULL && changed->type == JSON_ARRAY);
+    if (run->unlocked_status == SOLVE_SAT) {
+        CHECK(pitch->count == c.length);
+        CHECK(json_get(cf, "unlockedLabel")->count == c.length);
+        int differ = 0;
+        for (int i = 0; i < c.length; i++)
+            differ += run->values[run->model.pitch[i]] != run->unlocked_pitch[i];
+        CHECK(changed->count == differ);
+        for (int k = 0; k < changed->count; k++) {
+            int i = (int)changed->items[k].number;
+            CHECK(run->values[run->model.pitch[i]] != (int)pitch->items[i].number);
+        }
+    }
+    json_free(&doc);
     run_free(run);
     free(run);
 }

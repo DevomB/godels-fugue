@@ -187,7 +187,7 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 | `score.musicxml` | MusicXML 3.1 for notation software, with ties across barlines and key changes |
 | `voices.wav` | All voices mixed to mono, 16-bit, 44.1 kHz |
 | `contour.svg` | Pitch over time for every voice |
-| `score.html` | Interactive score: piano roll per voice, playback, why each note is there, entropy and energy charts, and the proof log |
+| `score.html` | Interactive score: piano roll per voice, playback, why each note is there, a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart), what the given notes changed, entropy and energy charts, and the proof log |
 | `explain.txt` | The explanation for every variable, as `--explain` prints it |
 | `report.txt` | Keys, search statistics, energy by rule, values removed by each rule, the unsat core, and every config key used |
 | `proof.txt` | Every proof event in order: removals, decisions, forced collapses, and entropy after each round of propagation |

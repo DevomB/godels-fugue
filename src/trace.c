@@ -214,6 +214,31 @@ static void write_stats(FILE *f, const Run *run) {
     fprintf(f, "}}");
 }
 
+/* The piece solved again without the given notes; pitches only when it solved. */
+static void write_counterfactual(FILE *f, const Run *run) {
+    const Model *m = &run->model;
+    bool solved = run->unlocked_status == SOLVE_SAT;
+    fprintf(f, ",\"counterfactual\":{\"unlockedStatus\":\"%s\",\"unlockedPitch\":[",
+            solve_status_name(run->unlocked_status));
+    for (int i = 0; solved && i < run->config.length; i++)
+        fprintf(f, "%s%d", i ? "," : "", run->unlocked_pitch[i]);
+    fprintf(f, "],\"changed\":[");
+    bool first = true;
+    for (int i = 0; solved && run->status == SOLVE_SAT && i < run->config.length; i++) {
+        if (run->values[m->pitch[i]] == run->unlocked_pitch[i]) continue;
+        fprintf(f, "%s%d", first ? "" : ",", i);
+        first = false;
+    }
+    fprintf(f, "],\"unlockedLabel\":[");
+    for (int i = 0; solved && i < run->config.length; i++) {
+        char name[32];
+        explain_label(&run->state, m->pitch[i], run->unlocked_pitch[i], name, sizeof(name));
+        fprintf(f, "%s", i ? "," : "");
+        json_string(f, name);
+    }
+    fprintf(f, "]}");
+}
+
 void trace_write_json(FILE *f, const Run *run) {
     const Model *m = &run->model;
     const SolverState *s = &run->state;
@@ -282,7 +307,9 @@ void trace_write_json(FILE *f, const Run *run) {
         fprintf(f, "%s{\"delay\":%d,\"status\":\"%s\",\"energy\":%d,\"nodes\":%ld}", i ? "," : "",
                 d->delay, solve_status_name(d->status), d->energy, d->nodes);
     }
-    fprintf(f, "]}\n");
+    fprintf(f, "]");
+    if (run->counterfactual) write_counterfactual(f, run);
+    fprintf(f, "}\n");
 }
 
 bool trace_save_json(const char *path, const Run *run) {

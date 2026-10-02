@@ -173,6 +173,22 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
 .bar { height: 14px; border-radius: 0 4px 4px 0; background: var(--accent); min-width: 2px; }
 .bar-value { font-variant-numeric: tabular-nums; color: var(--text-primary); }
 .empty { color: var(--text-muted); font-style: italic; }
+.replay-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.replay-controls input[type=range] { flex: 1 1 240px; padding: 0; min-width: 0; }
+.replay-pos { font-variant-numeric: tabular-nums; color: var(--text-secondary); font-size: 13px; }
+.cgrid { border-collapse: separate; border-spacing: 1px; width: auto; font-size: 11px; }
+.cgrid th, .cgrid td { padding: 0; border: none; text-align: center; vertical-align: middle; }
+.cgrid th.row { color: var(--text-muted); font-weight: 500; padding-right: 6px; text-align: right; white-space: nowrap; }
+.cgrid th.col button { font-size: 10px; padding: 1px 2px; min-width: 18px; border-radius: 4px; color: var(--text-secondary); }
+.cgrid th.col.now button { border-color: var(--select); color: var(--text-primary); }
+.cgrid th.col.picked button { box-shadow: inset 0 0 0 1px var(--select); }
+.cgrid td { width: 18px; height: 12px; min-width: 18px; background: var(--surface-2); cursor: pointer; line-height: 12px; }
+.cgrid td.on { background: var(--series-1); }
+.cgrid td.fixed { background: var(--series-2); }
+.cgrid td.gone { background: transparent; box-shadow: inset 0 0 0 2px var(--critical); color: var(--critical); font-weight: 700; }
+.cgrid td.out { background: transparent; }
+.cx-event { margin-top: 10px; font-size: 13px; min-height: 2.9em; }
+.cx-event b { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 </head>
@@ -194,6 +210,28 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
     <p class="muted" id="score-help">Each lane is one voice; time runs left to right in quarter-note steps. Pick a note to see why it is there, and every place the canon repeats it.</p>
     <div class="legend" id="voice-legend"></div>
     <div class="scroll"><svg id="roll" role="img" aria-label="Piano roll of every voice"></svg></div>
+  </section>
+
+  <section class="card" id="collapse-card">
+    <h2>Collapse</h2>
+    <p class="muted">Replay the proof one event at a time: each column is a melody note, each row a pitch it could still take. Filled cells are still possible; the value a note was decided or forced to is highlighted, and the cell the current event removed is marked with a cross. Pick a column to inspect that note.</p>
+    <div class="replay-controls">
+      <button id="cx-back" type="button" aria-label="Back one event">&#9664;&#9664;</button>
+      <button id="cx-play" type="button">Play</button>
+      <button id="cx-fwd" type="button" aria-label="Forward one event">&#9654;&#9654;</button>
+      <label for="cx-pos" class="muted">Event</label>
+      <input id="cx-pos" type="range" min="0" max="0" step="1" value="0">
+      <span class="replay-pos" id="cx-count"></span>
+      <label>Speed <select id="cx-speed"><option value="5">5 events/s</option><option value="20" selected>20 events/s</option><option value="80">80 events/s</option><option value="400">400 events/s</option></select></label>
+    </div>
+    <div class="legend"><span><span class="swatch" style="background:var(--series-1)"></span>still possible</span><span><span class="swatch" style="background:var(--series-2)"></span>only value left</span><span><span class="swatch" style="box-shadow:inset 0 0 0 2px var(--critical)"></span>removed by this event</span></div>
+    <div class="scroll"><table class="cgrid" id="cx-grid" aria-label="Candidate pitches of each melody note at the selected event"></table></div>
+    <div class="cx-event" id="cx-event"></div>
+  </section>
+
+  <section class="card" id="cf-card" hidden>
+    <h2>Without the given notes</h2>
+    <div id="cf"></div>
   </section>
 
   <div class="cols">
@@ -492,6 +530,7 @@ const PIECE = /*PIECE_DATA*/;
       n.node.classList.toggle("dim", any && !hit);
     }
     document.querySelectorAll(".chip").forEach(function (c) { c.classList.toggle("selected", Number(c.dataset.id) === selected); });
+    cxMark();
   }
 
   /* ---------- chips ---------- */
@@ -610,6 +649,7 @@ const PIECE = /*PIECE_DATA*/;
     const data = P.entropy || [];
     const box = document.getElementById("entropy-table");
     clear(box);
+    entropyCursor = null;
     if (data.length < 2) { svg.style.display = "none"; box.appendChild(el("p", { class: "empty" }, "Not enough samples.")); return; }
     const width = 420, height = 190, left = 40, right = 12, top = 12, bottom = 30;
     svg.setAttribute("width", width);
@@ -647,6 +687,13 @@ const PIECE = /*PIECE_DATA*/;
     const marker = svgEl("circle", { r: 4, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" });
     svg.appendChild(cross);
     svg.appendChild(marker);
+    const cursor = svgEl("line", { y1: top, y2: height - bottom, stroke: "var(--series-2)", "stroke-width": 1.5, "stroke-dasharray": "4 3" });
+    svg.appendChild(cursor);
+    entropyCursor = function (after) {
+      const x = sx(Math.max(minX, Math.min(maxX, after)));
+      cursor.setAttribute("x1", x);
+      cursor.setAttribute("x2", x);
+    };
     const hit = svgEl("rect", { x: left, y: top, width: width - left - right, height: height - top - bottom, fill: "transparent" });
     hit.addEventListener("pointermove", function (e) {
       const r = svg.getBoundingClientRect();
@@ -678,6 +725,7 @@ const PIECE = /*PIECE_DATA*/;
       table.appendChild(row);
     }
     box.appendChild(table);
+    entropyCursor(cxPos);
   }
 
   /* ---------- bar lists ---------- */
@@ -791,6 +839,198 @@ const PIECE = /*PIECE_DATA*/;
   [fVar, fRule, fType].forEach(function (s) { s.addEventListener("change", function () { renderEvents(true); }); });
   more.addEventListener("click", function () { renderEvents(false); });
 
+  /* ---------- collapse replay ---------- */
+  /* cxPos counts the events applied: 0 shows the initial domains, events.length the end */
+  let cxPos = 0, cxTimer = 0, cxLast = 0, cxCarry = 0, entropyCursor = null;
+  const cxCols = melody.slice().sort(function (a, b) { return a.index - b.index; });
+  const cxColOf = {};
+  cxCols.forEach(function (v, c) { cxColOf[v.id] = c; });
+  function cxInitial() { return cxCols.map(function (v) { return new Set(v.initial || []); }); }
+  let cxDom = cxInitial();
+  /* what each event took from a melody note, so stepping either way is exact */
+  const cxRemoved = events.map(function (e) {
+    const c = cxColOf[e.varId];
+    if (c === undefined) return [];
+    const dom = cxDom[c];
+    const gone = e.type === "remove" ? (dom.has(e.value) ? [e.value] : [])
+      : Array.from(dom).filter(function (x) { return x !== e.value; });
+    for (const x of gone) dom.delete(x);
+    return gone;
+  });
+  cxDom = cxInitial();
+  const cxNames = {};
+  function cxName(p) {
+    if (p === 0) return "rest";
+    if (cxNames[p]) return cxNames[p];
+    return ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][p % 12] + (Math.floor(p / 12) - 1);
+  }
+  for (const v of cxCols) {
+    if (v.value > 0) cxNames[v.value] = cxNames[v.value] || v.label;
+    for (const r of v.rejected || []) if (r.value > 0) cxNames[r.value] = cxNames[r.value] || r.label;
+  }
+  for (const e of events) if (cxColOf[e.varId] !== undefined && e.value > 0) cxNames[e.value] = cxNames[e.value] || e.label;
+  let cxLow = 128, cxHigh = -1, cxRest = false;
+  for (const v of cxCols) for (const x of v.initial || []) {
+    if (x === 0) { cxRest = true; continue; }
+    cxLow = Math.min(cxLow, x); cxHigh = Math.max(cxHigh, x);
+  }
+  const cxRows = [];
+  for (let p = cxHigh; p >= cxLow; p--) cxRows.push(p);
+  if (cxRest) cxRows.push(0);
+
+  const cxGrid = document.getElementById("cx-grid");
+  const cxSlider = document.getElementById("cx-pos");
+  const cxPlay = document.getElementById("cx-play");
+  const cxHeads = [], cxCells = [];
+  (function buildGrid() {
+    const head = el("tr");
+    head.appendChild(el("th", { class: "row" }, ""));
+    cxCols.forEach(function (v) {
+      const th = el("th", { class: "col", scope: "col" });
+      const b = el("button", { type: "button", "aria-label": "Inspect " + v.var }, String(v.index));
+      b.addEventListener("click", function () { select(v.id); });
+      th.appendChild(b);
+      head.appendChild(th);
+      cxHeads.push(th);
+      cxCells.push({});
+    });
+    cxGrid.appendChild(head);
+    for (const p of cxRows) {
+      const row = el("tr");
+      row.appendChild(el("th", { class: "row", scope: "row" }, cxName(p)));
+      cxCols.forEach(function (v, c) {
+        const td = el("td");
+        td.addEventListener("click", function () { select(v.id); });
+        row.appendChild(td);
+        cxCells[c][p] = td;
+      });
+      cxGrid.appendChild(row);
+    }
+  })();
+
+  function cxMark() {
+    cxCols.forEach(function (v, c) { cxHeads[c].classList.toggle("picked", v.id === selected); });
+  }
+  function cxGo(target) {
+    target = Math.max(0, Math.min(events.length, target));
+    while (cxPos < target) {
+      const c = cxColOf[events[cxPos].varId];
+      for (const x of cxRemoved[cxPos]) cxDom[c].delete(x);
+      cxPos++;
+    }
+    while (cxPos > target) {
+      cxPos--;
+      const c = cxColOf[events[cxPos].varId];
+      for (const x of cxRemoved[cxPos]) cxDom[c].add(x);
+    }
+    cxRender();
+  }
+  function cxRender() {
+    const e = cxPos > 0 ? events[cxPos - 1] : null;
+    const nowCol = e ? cxColOf[e.varId] : undefined;
+    const gone = new Set(e ? cxRemoved[cxPos - 1] : []);
+    cxCols.forEach(function (v, c) {
+      const dom = cxDom[c];
+      const one = dom.size === 1;
+      for (const p of cxRows) {
+        const td = cxCells[c][p];
+        const removedNow = c === nowCol && gone.has(p);
+        td.className = removedNow ? "gone" : dom.has(p) ? (one ? "fixed" : "on") : "out";
+        td.textContent = removedNow ? "×" : "";
+      }
+      cxHeads[c].classList.toggle("now", c === nowCol);
+    });
+    cxSlider.value = cxPos;
+    const where = cxPos + " of " + events.length + " events";
+    cxSlider.setAttribute("aria-valuetext", "after " + where);
+    document.getElementById("cx-count").textContent = where;
+    const box = document.getElementById("cx-event");
+    clear(box);
+    if (!e) {
+      box.appendChild(el("p", { class: "muted" }, events.length
+        ? "Before the first event: every melody note still has all of its starting candidates."
+        : "The solver logged no events, so the candidates never changed."));
+    } else {
+      const p = el("p");
+      p.appendChild(el("b", {}, "#" + e.id + " " + e.type + " "));
+      p.appendChild(varLink(e.varId, e.var));
+      p.appendChild(document.createTextNode(" " + (e.type === "remove" ? "loses " : "= ") + e.label + ": "
+        + (e.type === "decide" ? "decision at depth " + e.depth : (e.why || e.rule)) + " "));
+      const log = el("button", { class: "link", type: "button" }, "show in the proof log");
+      log.addEventListener("click", function () { jumpToEvent(e.id); });
+      p.appendChild(log);
+      box.appendChild(p);
+    }
+    cxMark();
+    if (entropyCursor) entropyCursor(cxPos);
+  }
+  function cxStop() {
+    cancelAnimationFrame(cxTimer);
+    cxTimer = 0;
+    cxPlay.textContent = "Play";
+  }
+  function cxTick(now) {
+    const speed = Number(document.getElementById("cx-speed").value);
+    cxCarry += (now - cxLast) * speed / 1000;
+    cxLast = now;
+    const steps = Math.floor(cxCarry);
+    cxCarry -= steps;
+    if (steps) cxGo(cxPos + steps);
+    if (cxPos >= events.length) { cxStop(); return; }
+    cxTimer = requestAnimationFrame(cxTick);
+  }
+  cxPlay.addEventListener("click", function () {
+    if (cxTimer) { cxStop(); return; }
+    if (cxPos >= events.length) cxGo(0);
+    cxPlay.textContent = "Pause";
+    cxLast = performance.now();
+    cxCarry = 1; /* show the next event at once */
+    cxTimer = requestAnimationFrame(cxTick);
+  });
+  document.getElementById("cx-back").addEventListener("click", function () { cxStop(); cxGo(cxPos - 1); });
+  document.getElementById("cx-fwd").addEventListener("click", function () { cxStop(); cxGo(cxPos + 1); });
+  cxSlider.addEventListener("input", function () { cxGo(Number(cxSlider.value)); });
+  cxSlider.max = events.length;
+  if (!events.length) {
+    [cxPlay, cxSlider, document.getElementById("cx-back"), document.getElementById("cx-fwd")].forEach(function (b) { b.disabled = true; });
+  }
+  if (!cxCols.length) document.getElementById("collapse-card").hidden = true;
+
+  /* ---------- counterfactual ---------- */
+  if (P.counterfactual) {
+    const cf = P.counterfactual;
+    const box = document.getElementById("cf");
+    document.getElementById("cf-card").hidden = false;
+    const words = { solved: "a piece was found", unsat: "there is no piece", limit: "the search hit its limit" };
+    box.appendChild(el("p", {}, "Solved again with the given notes left free: " + (words[cf.unlockedStatus] || cf.unlockedStatus) + "."));
+    if (P.status === "unsat" && cf.unlockedStatus === "solved") {
+      box.appendChild(el("p", { class: "muted" }, "With the given notes there is no piece, so they are what rules it out."));
+    } else if (P.status === "limit") {
+      box.appendChild(el("p", { class: "muted" }, "With the given notes the search hit its limit, so the comparison is inconclusive."));
+    } else if (P.status === "solved" && cf.unlockedStatus === "solved") {
+      if (!cf.changed.length) {
+        box.appendChild(el("p", { class: "muted" }, "Every melody note came out the same."));
+      } else {
+        const table = el("table");
+        const head = el("tr");
+        ["Note", "With the given notes", "Without them"].forEach(function (h) { head.appendChild(el("th", {}, h)); });
+        table.appendChild(head);
+        for (const i of cf.changed) {
+          const v = varOfIndex("pitch", i);
+          const row = el("tr");
+          const cell = el("td");
+          if (v) cell.appendChild(varLink(v.id, v.var)); else cell.textContent = "x" + i;
+          row.appendChild(cell);
+          row.appendChild(el("td", {}, v ? v.label : "?"));
+          row.appendChild(el("td", {}, cf.unlockedLabel[i] || String(cf.unlockedPitch[i])));
+          table.appendChild(row);
+        }
+        box.appendChild(el("p", { class: "muted" }, cf.changed.length + " of " + cxCols.length + " melody notes changed."));
+        box.appendChild(table);
+      }
+    }
+  }
+
   /* ---------- config ---------- */
   const ctable = el("table");
   for (const k of Object.keys(cfg)) {
@@ -869,6 +1109,7 @@ const PIECE = /*PIECE_DATA*/;
   }
   drawAll();
   renderEvents(true);
+  cxRender();
   const firstForced = melody.find(function (v) { return v.status === "forced"; }) || melody[0];
   if (P.failed >= 0 && byId[P.failed]) select(P.failed);
   else if (firstForced) select(firstForced.id);

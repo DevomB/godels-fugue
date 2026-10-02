@@ -364,5 +364,11 @@ void explain_json(FILE *f, const SolverState *s, const Explanation *e) {
             fprintf(f, "}}");
         }
     }
+    fprintf(f, "]");
+
+    int initial[128];
+    int n = domain_collect(&m->initial[e->var], initial);
+    fprintf(f, ",\"initial\":[");
+    for (int k = 0; k < n; k++) fprintf(f, "%s%d", k ? "," : "", initial[k]);
     fprintf(f, "]}");
 }

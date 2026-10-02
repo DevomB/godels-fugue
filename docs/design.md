@@ -251,9 +251,18 @@ chord symbols and the key change, Web Audio playback, an inspector that explains
 note and links to the variables it depends on, the entropy curve, energy and
 rule-impact charts, and a filterable proof log with links to each event's parents.
 
-**Built.** **Not built**: animating the collapse step by step, a constraint-graph
-view, editing a note in the browser and re-solving, a counterfactual inspector, and
-weight sliders.
+The Collapse card replays the proof: a slider and play, pause and step buttons move
+through the events, and a grid shows every melody note's remaining candidate pitches
+(rests in their own row) at the chosen event, with the value removed by that event
+marked and the entropy chart's cursor at the same place. Each variable's JSON carries
+its initial domain; the domain at event k is that minus every value removed by events
+0..k, and a decision or forced event leaves only its value. The proof log holds exactly
+the final search path, so the replay is exact, and it works for unsolved runs too.
+When the config gives notes, a panel shows the piece solved without them and which
+notes changed.
+
+**Built.** **Not built**: a constraint-graph view, editing a note in the browser and
+re-solving, a counterfactual inspector that tries other values, and weight sliders.
 
 ## 13. Presets and modes
 
