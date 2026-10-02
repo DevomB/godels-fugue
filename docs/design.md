@@ -232,11 +232,17 @@ changes which steps are strong for every voice), and form as a state machine.
   the problem becomes solvable without it.
 - **Counterfactual**: with a lock or given notes, the same rules are solved without
   them and the notes that change are listed.
+- **Counting completions** (`--count N`): the search counts each piece and fails on
+  every decision level, so learned conflicts exclude only counted pieces. The count is
+  exact unless N, `max_nodes` or `time_limit` stopped it, and then a lower bound.
+- **Sensitivity and bifurcation points** (`--sensitivity`): each melody note is fixed
+  to each value left by root propagation and solved. One viable value makes the note
+  frozen, several make it a bifurcation point.
 
 **Built.** **Partly built**: the decisions a forced value "depends on" are an
 over-approximation, not a minimal explanation, and contradiction certificates are the
-unsat core plus the last removal. **Not built**: structural sensitivity (perturb each
-note and measure the change), bifurcation points, and counting completions.
+unsat core plus the last removal. **Not built**: measuring how much the rest of the
+piece changes when a note is perturbed (sensitivity lists only the viable values).
 
 ## 12. Interface
 
@@ -268,12 +274,14 @@ already expose the research data: entropy, statistics, and removals by rule.
 
 ## 15. Research directions
 
-None of these are built; the proof log and statistics provide the data for them.
+Most of these are not built; the proof log and statistics provide the data for them.
 
 - How do delay and voice count affect the number of solutions, the propagation
-  graph, and how fast entropy falls?
+  graph, and how fast entropy falls? **Partly built**: `--count` counts the solutions
+  of one config.
 - Which rules remove the most values (the rule-impact table is a start)?
-- Which melody positions are most structurally sensitive?
+- Which melody positions are most structurally sensitive? **Built**: `--sensitivity`
+  lists each note's viable values and marks it frozen or a bifurcation point.
 - How does temperature trade novelty against cost over many samples?
 - Analysis mode: measure an existing score against the rules, estimate weights, and
   find recurring structures ("style fingerprints"). **Partly built**: `melody` checks a

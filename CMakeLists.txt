@@ -33,6 +33,7 @@ add_custom_command(
   VERBATIM)
 
 add_library(canon STATIC
+  src/analyze.c
   src/canon.c
   src/config.c
   src/corpus.c
@@ -72,6 +73,7 @@ foreach(name IN ITEMS
     test_model
     test_constraints
     test_solver
+    test_analyze
     test_properties
     test_proof
     test_export

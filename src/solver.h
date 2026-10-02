@@ -114,6 +114,9 @@ typedef struct SolverState {
     int best[VAR_MAX];   /* the best piece so far */
     long window_end;     /* node count at which the current window stops */
     bool guided;         /* try best[var] first: replaying the best piece */
+    bool counting;       /* count every piece instead of stopping at the first */
+    long count;          /* pieces counted so far */
+    long count_max;      /* stop counting here */
     int result; /* SolveStatus of the last solve, or -1 before one */
     bool failed;
     int failed_variable;
@@ -130,6 +133,10 @@ bool solver_init(SolverState *s, const Model *m);
 void solver_free(SolverState *s);
 bool solver_propagate(SolverState *s);
 SolveStatus solver_solve(SolverState *s);
+/* Counts the pieces, stopping at max. *exact when the search ran to the
+ * end; otherwise the count is a lower bound, and limit_hit says whether
+ * max_nodes or time_limit stopped it rather than max. */
+long solver_count(SolverState *s, long max, bool *exact);
 
 /* Queue the constraints on a variable after changing its domain by hand. */
 void solver_touch(SolverState *s, int var);

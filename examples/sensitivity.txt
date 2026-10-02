@@ -1,0 +1,9 @@
+# A short canon to study with --count N and --sensitivity: how many pieces
+# the rules allow, and which melody notes are frozen (one viable pitch) and
+# which are bifurcation points (several).
+length 8
+voices 2
+delay 3
+range_low 60
+range_high 67
+consonance all

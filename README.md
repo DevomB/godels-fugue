@@ -101,6 +101,8 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   `experimental`.
 - **A SAT cross-check** (`--sat`) that encodes the same rules for a separate DPLL
   solver.
+- **Counting and sensitivity** (`--count`, `--sensitivity`): how many pieces the
+  rules allow, and which melody notes are frozen or open.
 
 ## Configuring a piece
 
@@ -212,6 +214,8 @@ canon-collapse [options]
   --corpus DIR         suggest pitch-class weights from files of MIDI pitches
   --apply-weights      use the suggested corpus weights
   --sat                check the rules with the SAT backend instead
+  --count N            count the pieces the rules allow, up to N
+  --sensitivity        for each melody note, the values a piece can give it
   --max-nodes N        give up after N search nodes (0 = no limit)
   --time-limit MS      give up after MS milliseconds (0 = no limit)
   --list-config        print every config key (--markdown for a table)
@@ -220,7 +224,8 @@ canon-collapse [options]
 ```
 
 Exit status: 0 solved, 1 unsatisfiable or bad input, 2 too large for `--sat`, 3 search
-limit reached.
+limit reached. `--count` and `--sensitivity` exit 0 with an answer, even "no pieces",
+and 3 when the search limit cut them short.
 
 ## How it works
 
@@ -244,6 +249,33 @@ lower total energy, then replays the best piece so the proof describes it.
 
 [docs/design.md](docs/design.md) covers the ideas behind the project and which of
 them are built.
+
+### Counting and sensitivity
+
+`--count N` enumerates pieces with the same search: each complete piece is counted and
+then treated as a dead end on every decision, so backjumping and learned conflicts
+stay sound and only exclude pieces already counted. It prints `count: 160 (exact)`,
+or `count: at least 1000 (stopped at 1000)` when it reached N, or `(stopped at the
+search limit)` when `max_nodes` or `time_limit` ran out first.
+
+`--sensitivity` takes every melody note's values after the first propagation and
+solves once with the note fixed to each. A note with one viable value is **frozen**,
+one with several is a **bifurcation point**, and one with none means the rules have
+no piece at all; a value whose solve hits the search limit is listed as unknown.
+
+```text
+$ canon-collapse --config examples/sensitivity.txt --count 1000 --sensitivity
+count: 160 (exact)
+nodes: 259
+note  verdict            viable values
+x0    bifurcation point  4/4: C4 D4 E4 G4
+...
+x6    bifurcation point  2/2: D4 G4
+x7    frozen             1/1: C4
+```
+
+Both use the config's fixed delay (not `delay_search`), skip the optimizer and write
+no files.
 
 ## Building and testing
 
@@ -280,6 +312,7 @@ src/
   canon.c     which melody note each voice plays at each step
   model.c     variables, constraints and soft terms built from a config
   solver.c    propagation, search, backjumping, learning, optimization, unsat core
+  analyze.c   counting pieces and each note's viable values
   proof.c     the proof log
   explain.c   why each variable has its value
   score.c     notes with durations for every voice

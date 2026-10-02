@@ -742,6 +742,13 @@ static int search(SolverState *s, LevelSet *conflict) {
     }
     int var = pick_variable(s);
     if (var < 0) {
+        if (s->counting) {
+            /* count the piece, then fail on every level so the learned
+             * conflict excludes only this piece */
+            if (++s->count >= s->count_max) return R_LIMIT;
+            every_level(s, conflict);
+            return R_FAIL;
+        }
         if (!s->optimizing) return R_SAT;
         record_piece(s);
         every_level(s, conflict);
@@ -893,6 +900,26 @@ SolveStatus solver_solve(SolverState *s) {
     s->stats.seconds = (double)(clock() - s->start) / CLOCKS_PER_SEC;
     s->result = r == R_SAT ? SOLVE_SAT : (r == R_LIMIT ? SOLVE_LIMIT : SOLVE_UNSAT);
     return (SolveStatus)s->result;
+}
+
+long solver_count(SolverState *s, long max, bool *exact) {
+    const PieceConfig *c = &model_of(s)->config;
+    s->start = clock();
+    s->rng = (uint32_t)c->seed;
+    if (s->rng == 0) s->rng = 1;
+    s->anneal_step = 0;
+    s->limit_hit = false;
+    s->count = 0;
+    s->count_max = max;
+    s->counting = true;
+    LevelSet conflict;
+    levelset_clear(&conflict);
+    int r = s->failed || max <= 0 ? R_FAIL : search(s, &conflict);
+    s->counting = false;
+    s->stats.solutions = s->count;
+    s->stats.seconds = (double)(clock() - s->start) / CLOCKS_PER_SEC;
+    *exact = r != R_LIMIT;
+    return s->count;
 }
 
 bool solver_unsat_core(const Model *m, int *rules, int max_rules, int *n,

@@ -1,3 +1,4 @@
+#include "analyze.h"
 #include "config.h"
 #include "corpus.h"
 #include "explain.h"
@@ -32,6 +33,8 @@ static void usage(FILE *f) {
             "  --corpus DIR         suggest pitch-class weights from files of MIDI pitches\n"
             "  --apply-weights      use the suggested corpus weights\n"
             "  --sat                check the rules with the SAT backend instead\n"
+            "  --count N            count the pieces the rules allow, up to N\n"
+            "  --sensitivity        for each melody note, the values a piece can give it\n"
             "  --max-nodes N        give up after N search nodes (0 = no limit)\n"
             "  --time-limit MS      give up after MS milliseconds (0 = no limit)\n"
             "  --list-config        print every config key (--markdown for a table)\n"
@@ -39,7 +42,8 @@ static void usage(FILE *f) {
             "  --version            print the version\n"
             "\n"
             "Exit status: 0 solved, 1 unsatisfiable or bad input, 2 too large for\n"
-            "--sat, 3 search limit reached.\n");
+            "--sat, 3 search limit reached. --count and --sensitivity exit 0 with\n"
+            "an answer, even none, and 3 when the search limit cut them short.\n");
 }
 
 static int find_var(const Model *m, const char *name) {
@@ -91,6 +95,41 @@ static int run_sat(const PieceConfig *config) {
     return exit_code;
 }
 
+static int run_analysis(const PieceConfig *config, long count_max, bool sensitivity) {
+    Model m;
+    char err[200];
+    if (!model_build(&m, config, err, sizeof(err))) {
+        fprintf(stderr, "%s\n", err);
+        return EXIT_UNSAT;
+    }
+    int exit_code = 0;
+    if (count_max > 0) {
+        Count c;
+        if (!analyze_count(&m, count_max, &c)) {
+            fprintf(stderr, "out of memory\n");
+            exit_code = EXIT_UNSAT;
+        } else {
+            analyze_print_count(stdout, &c);
+            if (c.limit_hit) exit_code = EXIT_LIMIT;
+        }
+    }
+    if (sensitivity && exit_code != EXIT_UNSAT) {
+        NoteSensitivity *notes = malloc(sizeof(NoteSensitivity) * MELODY_MAX);
+        if (notes == NULL || !analyze_sensitivity(&m, notes)) {
+            fprintf(stderr, "out of memory\n");
+            exit_code = EXIT_UNSAT;
+        } else {
+            analyze_print_sensitivity(stdout, &m, notes);
+            for (int i = 0; i < config->length; i++) {
+                if (notes[i].unknown > 0) exit_code = EXIT_LIMIT;
+            }
+        }
+        free(notes);
+    }
+    model_free(&m);
+    return exit_code;
+}
+
 /* An inversion axis that maps the key onto other notes leaves the
  * scale rule few pitches to choose from; say so and suggest one. */
 static void warn_about_axis(const PieceConfig *c) {
@@ -130,6 +169,8 @@ int main(int argc, char **argv) {
     const char *time_limit = NULL;
     bool apply_weights = false;
     bool sat_mode = false;
+    const char *count_text = NULL;
+    bool sensitivity = false;
     bool markdown = false;
     bool list_config = false;
 
@@ -152,6 +193,8 @@ int main(int argc, char **argv) {
             apply_weights = true;
         } else if (strcmp(a, "--sat") == 0) {
             sat_mode = true;
+        } else if (strcmp(a, "--sensitivity") == 0) {
+            sensitivity = true;
         } else if (strcmp(a, "--lock") == 0) {
             if (!need_value(i, argc, 2, a)) return EXIT_UNSAT;
             lock_index = argv[++i];
@@ -167,6 +210,7 @@ int main(int argc, char **argv) {
             if (strcmp(a, "--explain") == 0) slot = &explain;
             if (strcmp(a, "--max-nodes") == 0) slot = &max_nodes;
             if (strcmp(a, "--time-limit") == 0) slot = &time_limit;
+            if (strcmp(a, "--count") == 0) slot = &count_text;
             if (strcmp(a, "--set") == 0) {
                 if (nsets >= SETS_MAX) {
                     fprintf(stderr, "too many --set options\n");
@@ -220,6 +264,21 @@ int main(int argc, char **argv) {
         fprintf(stderr, "%s\n", err);
         return EXIT_UNSAT;
     }
+    long count_max = 0;
+    if (count_text != NULL) {
+        char *end = NULL;
+        count_max = strtol(count_text, &end, 10);
+        if (end == count_text || *end != '\0' || count_max < 1) {
+            fprintf(stderr, "--count needs a positive number, not %s\n", count_text);
+            return EXIT_UNSAT;
+        }
+    }
+    bool analysis = count_text != NULL || sensitivity;
+    if (analysis && (sat_mode || config.delay_search)) {
+        fprintf(stderr, "--count and --sensitivity need the solver and a fixed delay "
+                        "(no --sat, delay_search=0)\n");
+        return EXIT_UNSAT;
+    }
     warn_about_axis(&config);
     if (!sat_mode && !output_paths_distinct(&paths, err, sizeof(err))) {
         fprintf(stderr, "%s\n", err);
@@ -241,6 +300,7 @@ int main(int argc, char **argv) {
     }
 
     if (sat_mode) return run_sat(&config);
+    if (analysis) return run_analysis(&config, count_max, sensitivity);
 
     Run *run = malloc(sizeof(Run));
     if (run == NULL) {
