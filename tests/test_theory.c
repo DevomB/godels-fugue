@@ -195,6 +195,21 @@ static void test_transforms_and_costs(void) {
     CHECK(invert_pitch_mod12(62, invert_pitch_mod12(62, 64)) % 12 == 4);
     CHECK(invert_pitch_mod12(67, 72) != invert_pitch(67, 72));
 
+    /* diatonic steps: thirds stay in the key, chromatic notes keep their offset */
+    int cmaj = key_id(0, MODE_MAJOR);
+    CHECK(diatonic_shift(cmaj, 60, 2) == 64);
+    CHECK(diatonic_shift(cmaj, 62, 2) == 65);
+    CHECK(diatonic_shift(cmaj, 71, 1) == 72);
+    CHECK(diatonic_shift(cmaj, 60, 7) == 72);
+    CHECK(diatonic_shift(cmaj, 60, -1) == 59);
+    CHECK(diatonic_shift(cmaj, 48, -8) == 35);
+    CHECK(diatonic_shift(cmaj, 61, 2) == 65); /* C# moves with C */
+    CHECK(diatonic_shift(cmaj, 64, 0) == 64);
+    int aminor = key_id(9, MODE_MINOR);
+    CHECK(diatonic_shift(aminor, 68, 1) == 70); /* G# moves with G */
+    CHECK(diatonic_shift(aminor, 57, 2) == 60);
+    CHECK(diatonic_shift(key_id(2, MODE_DORIAN), 62, 2) == 65);
+
     int c = key_id(0, MODE_MAJOR);
     int g = key_id(7, MODE_MAJOR);
     CHECK(pitch_gravity(60, c) == 0);

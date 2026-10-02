@@ -71,6 +71,10 @@ int invert_pitch_mod12(int axis, int pitch);
 int inversion_kept(int key, int axis, int shift);
 int inversion_nearest_axis(int key, int near, int shift);
 int key_scale_size(int key);
+/* Moves a pitch `steps` notes along the key's seven-note scale (natural
+ * minor for minor). A note outside it moves with the scale note below
+ * it and keeps its distance from that note. */
+int diatonic_shift(int key, int pitch, int steps);
 
 int pitch_gravity(int pitch, int key);
 int tension_target(int index, int length);

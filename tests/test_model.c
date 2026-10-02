@@ -243,8 +243,50 @@ static void test_energy(void) {
     }
 }
 
+/* Leaps and double leaps are checked once per line shape, and range
+ * once per transposition: diatonic transposition changes interval
+ * sizes, chromatic transposition does not. */
+static void test_voice_transpose(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "voices=3");
+    test_set(&c, "double_leaps=0");
+    TestRun *r = test_open(&c);
+    int leaps = count_rule(&r->model, CID_LEAP);
+    int doubles = count_rule(&r->model, CID_DOUBLE_LEAP);
+    test_close(r);
+    CHECK(leaps == 11);
+    CHECK(doubles == 10);
+
+    test_set(&c, "transpose_1=7");
+    test_set(&c, "transpose_2=12");
+    r = test_open(&c);
+    CHECK(count_rule(&r->model, CID_LEAP) == leaps);
+    CHECK(count_rule(&r->model, CID_DOUBLE_LEAP) == doubles);
+    const Constraint *range = NULL;
+    for (int i = 0; i < r->model.ncons && range == NULL; i++) {
+        if (r->model.cons[i].rule == CID_RANGE) range = &r->model.cons[i];
+    }
+    CHECK(range != NULL && range->nslots == 3);
+    test_close(r);
+
+    test_set(&c, "diatonic=1");
+    test_set(&c, "transpose_1=2");
+    test_set(&c, "transpose_2=4");
+    r = test_open(&c);
+    CHECK(count_rule(&r->model, CID_LEAP) == 3 * leaps);
+    CHECK(count_rule(&r->model, CID_DOUBLE_LEAP) == 3 * doubles);
+    test_close(r);
+
+    test_set(&c, "transpose_2=9"); /* an octave above voice 2: same shape */
+    r = test_open(&c);
+    CHECK(count_rule(&r->model, CID_LEAP) == 2 * leaps);
+    CHECK(count_rule(&r->model, CID_DOUBLE_LEAP) == 2 * doubles);
+    test_close(r);
+}
+
 int main(void) {
     test_variables();
+    test_voice_transpose();
     test_predicates();
     test_energy();
     printf("ok\n");

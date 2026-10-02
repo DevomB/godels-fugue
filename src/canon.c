@@ -53,6 +53,12 @@ int canon_span_config(const PieceConfig *config) {
     return end;
 }
 
+int canon_transpose(const PieceConfig *config, int voice) {
+    if (config == NULL || voice <= 0 || voice >= VOICE_MAX) return 0;
+    int t = config->voice_transpose[voice];
+    return t == TRANSPOSE_SAME ? config->transpose : t;
+}
+
 int canon_sounding(const PieceConfig *config, int voice, int source_pitch) {
     if (source_pitch == PITCH_REST) return SOUND_REST;
     int pitch = source_pitch;
@@ -61,5 +67,8 @@ int canon_sounding(const PieceConfig *config, int voice, int source_pitch) {
         pitch = config->invert_mod12 ? invert_pitch_mod12(config->axis, pitch)
                                      : invert_pitch(config->axis, pitch);
     }
-    return pitch + config->transpose;
+    int shift = canon_transpose(config, voice);
+    if (config->diatonic && config->key >= 0 && config->mode >= 0)
+        return diatonic_shift(key_id(config->key, config->mode), pitch, shift);
+    return pitch + shift;
 }

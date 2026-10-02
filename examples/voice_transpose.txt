@@ -1,0 +1,9 @@
+# Each follower at its own interval: voice 2 enters a fifth above the
+# melody and voice 3 an octave above, as in many real canons.
+length 12
+voices 3
+delay 4
+range_low 48
+range_high 79
+transpose_1 7
+transpose_2 12

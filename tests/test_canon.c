@@ -1,4 +1,5 @@
 #include "canon.h"
+#include "theory.h"
 #include "test_util.h"
 
 int main(void) {
@@ -46,6 +47,33 @@ int main(void) {
     CHECK(canon_sounding(&c, 1, 60) == 64);
     c.invert = 0;
     c.invert_mod12 = 0;
+
+    /* each follower may take its own transposition; same falls back */
+    c.voices = 4;
+    c.transpose = 5;
+    c.voice_transpose[1] = 7;
+    c.voice_transpose[2] = 0;
+    CHECK(canon_transpose(&c, 0) == 0);
+    CHECK(canon_sounding(&c, 1, 60) == 67);
+    CHECK(canon_sounding(&c, 2, 60) == 60);
+    CHECK(canon_sounding(&c, 3, 60) == 65);
+    /* diatonic counts scale steps of the key, after inversion */
+    c.diatonic = 1;
+    c.key = 0;
+    c.mode = MODE_MAJOR;
+    c.voice_transpose[1] = 2;
+    CHECK(canon_sounding(&c, 1, 60) == 64);
+    CHECK(canon_sounding(&c, 1, 62) == 65);
+    CHECK(canon_sounding(&c, 2, 62) == 62);
+    CHECK(canon_sounding(&c, 1, PITCH_REST) == SOUND_REST);
+    c.invert = 1;
+    c.axis = 62;
+    CHECK(canon_sounding(&c, 1, 67) == 60); /* G mirrors to A around D, then up to C */
+    c.invert = 0;
+    c.diatonic = 0;
+    c.transpose = 0;
+    c.voices = 2;
+    for (int v = 1; v < VOICE_MAX; v++) c.voice_transpose[v] = TRANSPOSE_SAME;
 
     /* augmentation holds each note; diminution skips notes */
     c.augment = 2;

@@ -73,9 +73,10 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
 
 ## What it can do
 
-- **Canons of 2 to 4 voices**, each with its own entry point, optionally transposed,
-  inverted (mirrored), retrograde (backwards), augmented, diminished, phase-shifted, or
-  cyclic (a round that loops).
+- **Canons of 2 to 4 voices**, each with its own entry point, optionally transposed
+  (by one amount or by a different one per voice, in semitones or in scale steps of the
+  key so a canon at the third stays in the key), inverted (mirrored), retrograde
+  (backwards), augmented, diminished, phase-shifted, or cyclic (a round that loops).
 - **Keys and modes**: major, minor, and the church modes. The key can be fixed or left
   to the solver, and the piece can modulate to a named key or to any closely related
   key. The modulation happens at the same step in every voice.

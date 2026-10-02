@@ -21,7 +21,13 @@ static void test_defaults_and_set(void) {
     CHECK(c.consonance == CONSONANCE_STRONG);
     CHECK(c.modulate_at == -1);
     CHECK(c.motif_c == -128);
+    CHECK(c.voice_transpose[1] == TRANSPOSE_SAME);
     CHECK(config_validate(&c, err, sizeof(err)));
+    CHECK(config_set(&c, "transpose_1", "0", err, sizeof(err)));
+    CHECK(c.voice_transpose[1] == 0);
+    CHECK(config_set(&c, "transpose_1", "same", err, sizeof(err)));
+    CHECK(c.voice_transpose[1] == TRANSPOSE_SAME);
+    CHECK(!config_set(&c, "transpose_2", "25", err, sizeof(err)));
 
     CHECK(config_set(&c, "voices", "3", err, sizeof(err)));
     CHECK(c.voices == 3);
@@ -137,6 +143,25 @@ static void test_validation(void) {
     CHECK(!config_validate(&c, err, sizeof(err)));
 
     config_defaults(&c);
+    c.voice_transpose[3] = -60;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "transpose_3") != NULL);
+
+    config_defaults(&c);
+    c.diatonic = 1;
+    CHECK(config_validate(&c, err, sizeof(err)));
+    c.key = KEY_SEARCH;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "diatonic") != NULL);
+    c.key = 0;
+    c.mode = -1;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    c.mode = MODE_MAJOR;
+    c.modulate_at = 8;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "modulate_at") != NULL);
+
+    config_defaults(&c);
     c.delay_search = 1;
     c.delay_min = 5;
     c.delay_max = 3;
@@ -226,6 +251,8 @@ static void test_round_trip(void) {
     test_set(&a, "key_second=related");
     test_set(&a, "pc_weight=3,0,0,0,0,0,0,0,0,0,0,1");
     test_set(&a, "melody=62,?,rest,66");
+    test_set(&a, "transpose_1=0");
+    test_set(&a, "transpose_2=-5");
     FILE *f = fopen("output/tests/round.txt", "w");
     CHECK(f != NULL);
     config_write(f, &a);

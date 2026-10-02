@@ -25,7 +25,11 @@ style preset first, so every other key in the file overrides it.
 
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
-| `transpose` | 0 | -24..24 | Semitones added to every follower. |
+| `transpose` | 0 | -24..24 | Semitones added to every follower (scale steps when diatonic). |
+| `transpose_1` | same | see meaning | Transposition of voice 2 like transpose, or same to use transpose. |
+| `transpose_2` | same | see meaning | Transposition of voice 3 like transpose, or same to use transpose. |
+| `transpose_3` | same | see meaning | Transposition of voice 4 like transpose, or same to use transpose. |
+| `diatonic` | 0 | 0..1 | Transpositions count scale steps of the key instead of semitones (7 = an octave), so a canon at the third stays in the key. A note outside the seven-note scale, such as minor's raised 7th, moves with the scale note below it and keeps its distance. Needs a fixed key and mode and no modulation. |
 | `invert` | 0 | 0..1 | Followers play the melody upside down around `axis`. |
 | `axis` | 67 | 0..127 | Inversion axis as a MIDI pitch: follower pitch = 2 * axis - pitch. |
 | `invert_mod12` | 0 | 0..1 | Invert pitch classes and keep each note's octave, instead of mirroring MIDI pitch. |

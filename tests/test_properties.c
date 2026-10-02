@@ -51,6 +51,19 @@ static PieceConfig random_config(void) {
         c.phase = 1;
         break;
     default:
+        /* no draws here, so the configs after this one stay the same */
+        if (c.length % 3 == 1) {
+            c.voice_transpose[1] = c.delay % 2 ? 7 : 0;
+            c.voice_transpose[2] = 12;
+        } else if (c.length % 3 == 2) {
+            c.diatonic = 1;
+            c.transpose = c.delay % 2 ? 2 : -3;
+            c.voice_transpose[2] = c.max_leap % 2 ? 4 : TRANSPOSE_SAME;
+            if (c.range_low % 3 == 0) {
+                c.invert = 1;
+                c.axis = c.range_low + (c.range_high - c.range_low) / 2;
+            }
+        }
         break;
     }
     if (c.voices > 2 && pick(0, 1)) c.voice_delay[2] = pick(1, 9);
@@ -80,7 +93,36 @@ static PieceConfig random_config(void) {
     if (pick(0, 5) == 0) c.key = KEY_SEARCH;
     c.leading_tone = pick(0, 2) == 0;
     c.double_leaps = pick(0, 2) != 0;
+    if (c.diatonic) {
+        /* diatonic needs one fixed key */
+        c.modulate_at = -1;
+        c.key_second = -1;
+        if (c.key == KEY_SEARCH) c.key = 0;
+    }
     return c;
+}
+
+static int follower_shift(const PieceConfig *c, int v) {
+    int t = c->voice_transpose[v];
+    return t == TRANSPOSE_SAME ? c->transpose : t;
+}
+
+/* Walks `steps` notes along the key's seven-note scale from the scale
+ * note at or below p, then restores p's distance above that note. */
+static int scale_walk(const PieceConfig *c, int p, int steps) {
+    static const int major[7] = {0, 2, 4, 5, 7, 9, 11};
+    static const int minor[7] = {0, 2, 3, 5, 7, 8, 10};
+    const int *scale = c->mode == MODE_MINOR ? minor : major;
+    int mask = 0;
+    for (int d = 0; d < 7; d++) mask |= 1 << ((c->key + scale[d]) % 12);
+    int base = p;
+    while (!((mask >> (((base % 12) + 12) % 12)) & 1)) base--;
+    int q = base;
+    for (int n = steps; n != 0;) {
+        q += n > 0 ? 1 : -1;
+        if ((mask >> (((q % 12) + 12) % 12)) & 1) n += n > 0 ? -1 : 1;
+    }
+    return q + (p - base);
 }
 
 static int key_for(const Model *m, const int *values, int t) {
@@ -114,7 +156,11 @@ static void check_piece(const Model *m, const int *values) {
             if (v > 0 && c->invert)
                 expect = c->invert_mod12 ? invert_pitch_mod12(c->axis, expect)
                                          : invert_pitch(c->axis, expect);
-            if (v > 0) expect += c->transpose;
+            if (v > 0 && c->diatonic) {
+                expect = scale_walk(c, expect, follower_shift(c, v));
+            } else if (v > 0) {
+                expect += follower_shift(c, v);
+            }
             if (p != expect) fail(c, "canon copy", t);
             if (p < c->range_low || p > c->range_high) fail(c, "range", t);
             if (!key_has_pitch(key_for(m, values, t), p)) fail(c, "scale", t);
@@ -309,6 +355,31 @@ int main(void) {
            sat_checked);
     CHECK(solved >= 100);
     CHECK(sat_checked >= 50);
+
+    /* diatonic canons with each follower at its own scale step */
+    int diatonic_solved = 0;
+    for (int trial = 0; trial < 60; trial++) {
+        PieceConfig c = random_config();
+        c.diatonic = 1;
+        c.modulate_at = -1;
+        c.key_second = -1;
+        if (c.key == KEY_SEARCH) c.key = pick(0, 11);
+        c.augment = 0;
+        c.diminish = 0;
+        c.transpose = pick(-4, 4);
+        for (int v = 1; v < VOICE_MAX; v++)
+            c.voice_transpose[v] = pick(0, 2) == 0 ? TRANSPOSE_SAME : pick(-7, 9);
+        char err[200];
+        if (!config_validate(&c, err, sizeof(err))) continue;
+        TestRun *r = test_solve(&c);
+        if (r->status == SOLVE_SAT) {
+            diatonic_solved++;
+            check_piece(&r->model, r->values);
+        }
+        test_close(r);
+    }
+    printf("diatonic solved %d\n", diatonic_solved);
+    CHECK(diatonic_solved >= 10);
     printf("ok\n");
     return 0;
 }

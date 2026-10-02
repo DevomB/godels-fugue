@@ -145,6 +145,21 @@ endif()
 run(limit 3 ERROR "search limit reached" ARGS --max-nodes 2)
 run(corpus 0 MATCH "weights:" ARGS --corpus "${SRC}/corpus" --apply-weights)
 run(delay_search 0 MATCH "delay: [0-9]+" ARGS --set delay_search=1 --set delay_max=5)
+run(diatonic_cli 0 MATCH "voice 2: rest rest rest rest 64 65 67 69 rest" "voice 3: [^
+]* 67 69 71 72
+"
+    ARGS --set length=4 --set "melody=60,62,64,65" --set cadence=0 --set voices=3
+         --set diatonic=1 --set transpose=2 --set transpose_2=4 --set range_high=74)
+run(voice_transpose_cli 0 MATCH "voice 2: rest rest rest rest 67 69 71 72 rest"
+         "voice 3: [^
+]* 60 62 64 65
+"
+    ARGS --set length=4 --set "melody=60,62,64,65" --set cadence=0 --set voices=3
+         --set transpose=0 --set transpose_1=7 --set range_high=74)
+run(diatonic_search 1 ERROR "invalid diatonic: needs a fixed key" ARGS --set diatonic=1 --set key=search)
+run(diatonic_modulate 1 ERROR "invalid diatonic: cannot be used with modulate_at"
+    ARGS --set diatonic=1 --set modulate_at=8)
+run(bad_transpose_1 1 ERROR "transpose_1" ARGS --set transpose_1=30)
 run(help 0 MATCH "usage: canon-collapse" ARGS --help)
 run(version 0 MATCH "canon-collapse [0-9]" ARGS --version)
 run(presets 0 MATCH "baroque" ARGS --list-presets)

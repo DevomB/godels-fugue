@@ -10,6 +10,7 @@
 enum { CONSONANCE_OFF, CONSONANCE_STRONG, CONSONANCE_ALL };
 enum { ORDER_MRV, ORDER_ENTROPY, ORDER_COLLAPSE, ORDER_INDEX };
 enum { KEY_SEARCH = -1 };
+enum { TRANSPOSE_SAME = -128 };
 
 /* Every field is an int so one table can load, check and print them.
  * See config.c for ranges, defaults and the help text of each key. */
@@ -24,6 +25,8 @@ typedef struct PieceConfig {
     int range_high;
     /* canon transforms */
     int transpose;
+    int voice_transpose[VOICE_MAX]; /* TRANSPOSE_SAME = transpose */
+    int diatonic;
     int invert;
     int axis;
     int invert_mod12;

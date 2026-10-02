@@ -141,6 +141,20 @@ static void print_off_word(int v, char *buf, size_t cap) {
     }
 }
 
+static bool parse_same_word(const char *w, int *out) {
+    if (strcmp(w, "same") != 0) return false;
+    *out = TRANSPOSE_SAME;
+    return true;
+}
+
+static void print_same_word(int v, char *buf, size_t cap) {
+    if (v == TRANSPOSE_SAME) {
+        snprintf(buf, cap, "same");
+    } else {
+        snprintf(buf, cap, "%d", v);
+    }
+}
+
 static bool parse_note_word(const char *w, int *out) {
     if (strcmp(w, "?") == 0) {
         *out = -1;
@@ -179,6 +193,7 @@ static void print_motif_word(int v, char *buf, size_t cap) {
 
 #define F(field) offsetof(PieceConfig, field)
 #define VOICE_DELAY(v) (offsetof(PieceConfig, voice_delay) + (v) * sizeof(int))
+#define VOICE_TRANSPOSE(v) (offsetof(PieceConfig, voice_transpose) + (v) * sizeof(int))
 
 static const KeyDef keys[] = {
     {"length", F(length), 1, 1, MELODY_MAX, 12, NULL, NULL, "shape",
@@ -201,7 +216,22 @@ static const KeyDef keys[] = {
      "Highest MIDI pitch any voice may sound."},
 
     {"transpose", F(transpose), 1, -24, 24, 0, NULL, NULL, "canon",
-     "Semitones added to every follower."},
+     "Semitones added to every follower (scale steps when diatonic)."},
+    {"transpose_1", VOICE_TRANSPOSE(1), 1, TRANSPOSE_SAME, 24, TRANSPOSE_SAME,
+     parse_same_word, print_same_word, "canon",
+     "Transposition of voice 2 like transpose, or same to use transpose."},
+    {"transpose_2", VOICE_TRANSPOSE(2), 1, TRANSPOSE_SAME, 24, TRANSPOSE_SAME,
+     parse_same_word, print_same_word, "canon",
+     "Transposition of voice 3 like transpose, or same to use transpose."},
+    {"transpose_3", VOICE_TRANSPOSE(3), 1, TRANSPOSE_SAME, 24, TRANSPOSE_SAME,
+     parse_same_word, print_same_word, "canon",
+     "Transposition of voice 4 like transpose, or same to use transpose."},
+    {"diatonic", F(diatonic), 1, 0, 1, 0, NULL, NULL, "canon",
+     "Transpositions count scale steps of the key instead of semitones (7 = an "
+     "octave), so a canon at the third stays in the key. A note outside the "
+     "seven-note scale, such as minor's raised 7th, moves with the scale note "
+     "below it and keeps its distance. Needs a fixed key and mode and no "
+     "modulation."},
     {"invert", F(invert), 1, 0, 1, 0, NULL, NULL, "canon",
      "Followers play the melody upside down around `axis`."},
     {"axis", F(axis), 1, 0, 127, 67, NULL, NULL, "canon",
@@ -807,6 +837,21 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap) {
     }
     if (config->cyclic && (config->augment >= 2 || config->diminish >= 2)) {
         snprintf(err, cap, "invalid cyclic: a looping canon cannot augment or diminish");
+        return false;
+    }
+    for (int v = 1; v < VOICE_MAX; v++) {
+        int t = config->voice_transpose[v];
+        if (t != TRANSPOSE_SAME && t < -24) {
+            snprintf(err, cap, "invalid transpose_%d: use -24..24 or same", v);
+            return false;
+        }
+    }
+    if (config->diatonic && (config->key < 0 || config->mode < 0)) {
+        snprintf(err, cap, "invalid diatonic: needs a fixed key and mode, not search");
+        return false;
+    }
+    if (config->diatonic && config->modulate_at >= 0) {
+        snprintf(err, cap, "invalid diatonic: cannot be used with modulate_at");
         return false;
     }
     for (const int *m = &config->motif_a; m <= &config->motif_d; m++) {

@@ -186,28 +186,63 @@ static void build_vars(Builder *b) {
     }
 }
 
+/* First voice transposed like `voice`; followers with the same
+ * transposition sound every melody note the same way. */
+static int transform_rep(const PieceConfig *c, int voice) {
+    if (voice <= 0) return 0;
+    for (int u = 1; u < voice; u++) {
+        if (canon_transpose(c, u) == canon_transpose(c, voice)) return u;
+    }
+    return voice;
+}
+
+/* Which line shape (interval sizes) a voice plays. Chromatic
+ * transposition and plain inversion keep interval sizes; a pitch-class
+ * inversion and a diatonic transposition by other than whole octaves
+ * change them. */
+static int line_shape(const PieceConfig *c, int voice) {
+    if (voice <= 0) return 0;
+    int shape = (c->invert && c->invert_mod12) ? 1 : 0;
+    if (!c->diatonic) return shape;
+    int steps = ((canon_transpose(c, voice) % 7) + 7) % 7;
+    if (steps == 0) return shape;
+    return shape | (c->invert ? 2 : 0) | steps << 2;
+}
+
+static int shape_rep(const PieceConfig *c, int voice) {
+    for (int u = 0; u < voice; u++) {
+        if (line_shape(c, u) == line_shape(c, voice)) return u;
+    }
+    return voice;
+}
+
 static void build_pitch_rules(Builder *b) {
     Model *m = b->m;
     const PieceConfig *c = &m->config;
     int length = c->length;
-    unsigned char sounds[MELODY_MAX][2][SECTION_MAX];
+    unsigned char sounds[MELODY_MAX][VOICE_MAX][SECTION_MAX];
     memset(sounds, 0, sizeof(sounds));
     for (int v = 0; v < m->voices; v++) {
         for (int t = 0; t < m->span; t++) {
             int i = m->source[v][t];
-            if (i >= 0) sounds[i][v > 0][model_section_at(m, t)] = 1;
+            if (i >= 0) sounds[i][transform_rep(c, v)][model_section_at(m, t)] = 1;
         }
     }
 
     for (int i = 0; i < length; i++) {
         Constraint *r = add_con(b, CID_RANGE, C_RANGE);
         add_slot(r, m->pitch[i], 0);
-        if (sounds[i][1][0] || sounds[i][1][1]) add_slot(r, m->pitch[i], 1);
+        for (int v = 1; v < m->voices; v++) {
+            if (sounds[i][v][0] || sounds[i][v][1]) add_slot(r, m->pitch[i], v);
+        }
         for (int sec = 0; sec < m->nsections; sec++) {
-            if (!sounds[i][0][sec] && !sounds[i][1][sec]) continue;
+            bool any = false;
+            for (int v = 0; v < m->voices; v++) any = any || sounds[i][v][sec];
+            if (!any) continue;
             Constraint *s = add_con(b, CID_SCALE, C_SCALE);
-            if (sounds[i][0][sec]) add_slot(s, m->pitch[i], 0);
-            if (sounds[i][1][sec]) add_slot(s, m->pitch[i], 1);
+            for (int v = 0; v < m->voices; v++) {
+                if (sounds[i][v][sec]) add_slot(s, m->pitch[i], v);
+            }
             add_slot(s, m->key[sec], -1);
         }
     }
@@ -228,13 +263,12 @@ static void build_pitch_rules(Builder *b) {
         add_slot(r, m->pitch[c->rest_at], -1);
     }
 
-    /* Leaps along every voice's line. Transposition and plain inversion
-     * keep interval sizes, so only a pitch-class inversion needs its own
-     * copy of a pair already checked for the leader. */
-    unsigned char seen[2][MELODY_MAX][MELODY_MAX];
+    /* Leaps along every voice's line, once per line shape: a pair
+     * already checked for a voice of the same shape leaps the same. */
+    unsigned char seen[VOICE_MAX][MELODY_MAX][MELODY_MAX];
     memset(seen, 0, sizeof(seen));
     for (int v = 0; v < m->voices; v++) {
-        int cls = (v > 0 && c->invert && c->invert_mod12) ? 1 : 0;
+        int cls = shape_rep(c, v);
         for (int t = 0; t + 1 < m->span; t++) {
             int i = m->source[v][t];
             int j = m->source[v][t + 1];
@@ -279,12 +313,13 @@ static void build_counterpoint_rules(Builder *b) {
         }
     }
 
-    /* Three consecutive notes along every voice's line, as for the leap
-     * rule. Inversion and retrograde keep two leaps in one direction in
-     * one direction, so only a pitch-class inversion needs its own copy. */
+    /* Three consecutive notes along every voice's line, once per line
+     * shape as for the leap rule. Inversion and retrograde keep two leaps
+     * in one direction in one direction, so only the shapes that change
+     * interval sizes need their own copies. */
     if (c->double_leaps) return;
     for (int v = 0; v < m->voices; v++) {
-        int cls = (v > 0 && c->invert && c->invert_mod12) ? 1 : 0;
+        int cls = shape_rep(c, v);
         int line[3] = {-1, -1, -1};
         int start[3] = {0, 0, 0};
         for (int t = 0; t < m->span; t++) {

@@ -354,6 +354,23 @@ int key_scale_size(int key) {
     return n;
 }
 
+static int floor_div(int a, int b) {
+    return a >= 0 ? a / b : -((-a + b - 1) / b);
+}
+
+int diatonic_shift(int key, int pitch, int steps) {
+    const int *scale = mode_steps[key_mode(key)];
+    int rel = pitch - key_tonic(key);
+    int octave = floor_div(rel, 12);
+    int within = rel - octave * 12;
+    int degree = 6;
+    while (scale[degree] > within) degree--;
+    int offset = within - scale[degree];
+    int target = degree + steps;
+    int up = floor_div(target, 7);
+    return key_tonic(key) + (octave + up) * 12 + scale[target - up * 7] + offset;
+}
+
 int inversion_kept(int key, int axis, int shift) {
     int mask = key_scale_mask(key);
     int kept = 0;

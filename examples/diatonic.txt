@@ -1,0 +1,14 @@
+# A canon at the third and the fifth that stays in the key: with
+# diatonic on, transpositions count scale steps, so voice 2 sounds two
+# scale notes higher (C-E becomes E-G, D-F becomes F-A) and voice 3
+# four higher. Thirds come out major or minor as the key wants them.
+length 12
+voices 3
+delay 4
+range_low 55
+range_high 81
+key C
+mode major
+diatonic 1
+transpose_1 2
+transpose_2 4

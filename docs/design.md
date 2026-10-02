@@ -162,13 +162,26 @@ entry delays, a phase offset, and cyclic canons are **built**. The program warns
 an inversion axis maps scale notes out of the key and suggests one that keeps them
 all.
 
+Each follower may take its own transposition (`transpose_1` to `transpose_3`; the
+default `same` uses `transpose`), so voice 2 can answer at the fifth and voice 3 at
+the octave. Diatonic transposition (`diatonic`) is **built** too: transpositions then
+count steps of the key's seven-note scale (natural minor for minor), so a canon at
+the third stays in the key and its thirds come out major or minor as the key wants.
+A note outside that scale (minor's raised 7th, or any chromatic note) moves with the
+scale note just below it and keeps its distance above it, so $G\sharp$ in A minor
+moves a step up to $A\sharp$. Diatonic steps need one fixed key: key search, mode
+search and modulation are rejected. Inversion comes first, then transposition. A
+chromatic transposition keeps interval sizes, so one leap check of a pair of melody
+notes covers the leader and every follower; a diatonic one does not (C-E is a major
+third, E-G a minor one), so the leap rule is built once for each distinct line shape.
+
 In a cyclic canon with delay $d$ and length $N$, following one note to its copy
 $d$ steps later partitions the positions into $\gcd(N, d)$ cycles, each of length
 $N / \gcd(N, d)$; the rules couple positions along those cycles.
 
-**Not built**: fractional delays on a finer tick grid, diatonic (in-key) transposition,
-different transforms per voice, and composing transforms as group elements (the
-dihedral group of transpositions and inversions).
+**Not built**: fractional delays on a finer tick grid, other transforms (inversion,
+retrograde, augmentation) chosen per voice, and composing transforms as group
+elements (the dihedral group of transpositions and inversions).
 
 ## 8. Keys, modes and modulation
 

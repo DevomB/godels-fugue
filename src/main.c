@@ -1,4 +1,5 @@
 #include "analyze.h"
+#include "canon.h"
 #include "check.h"
 #include "config.h"
 #include "corpus.h"
@@ -139,13 +140,27 @@ static void warn_about_axis(const PieceConfig *c) {
     if (!c->invert || c->key < 0 || c->mode < 0) return;
     int key = key_id(c->key, c->mode);
     int size = key_scale_size(key);
-    int kept = inversion_kept(key, c->axis, c->transpose);
+    /* count for the follower that keeps the fewest; an axis that keeps
+     * them all untransposed also does after a diatonic transposition, so
+     * an axis is suggested only when every follower shares one shift */
+    int shift = c->diatonic ? 0 : canon_transpose(c, 1);
+    bool one_shift = true;
+    int kept = size;
+    for (int v = 1; v < config_voice_count(c); v++) {
+        if (!c->diatonic && canon_transpose(c, v) != shift) one_shift = false;
+        int k = 0;
+        for (int pc = 0; pc < 12; pc++) {
+            if (key_has_pitch(key, pc) && key_has_pitch(key, canon_sounding(c, v, 60 + pc)))
+                k++;
+        }
+        if (k < kept) kept = k;
+    }
     if (kept == size) return;
     char name[32];
     key_name(key, name, sizeof(name));
     fprintf(stderr, "note: inverting around axis %d keeps %d of %d notes of %s in the key",
             c->axis, kept, size, name);
-    int better = inversion_nearest_axis(key, c->axis, c->transpose);
+    int better = one_shift ? inversion_nearest_axis(key, c->axis, shift) : -1;
     if (better >= 0) fprintf(stderr, "; axis %d keeps them all", better);
     fprintf(stderr, "\n");
 }
