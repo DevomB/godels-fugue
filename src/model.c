@@ -10,10 +10,10 @@
 const char *rule_name(int rule) {
     static const char *const names[CID_MAX] = {
         "",           "scale",      "range",           "melodic leap",
-        "consonance", "parallel fifth", "parallel octave", "chord tone",
-        "progression", "cadence",   "tie",             "max hold",
-        "rest",       "lock",       "modulation",      "search",
-        "learned conflict"};
+        "consonance", "parallel fifth", "parallel octave", "spacing",
+        "crossing",   "chord tone", "progression",     "cadence",
+        "tie",        "max hold",   "rest",            "lock",
+        "modulation", "search",     "learned conflict"};
     if (rule <= 0 || rule >= CID_MAX) return "unknown";
     return names[rule];
 }
@@ -216,6 +216,12 @@ static void build_pitch_rules(Builder *b) {
         add_slot(k, m->pitch[c->lock_index], -1);
         if (k != NULL) k->param = c->lock_pitch;
     }
+    for (int i = 0; i < length; i++) {
+        if (c->melody[i] < 0) continue;
+        Constraint *k = add_con(b, CID_LOCK, C_LOCK);
+        add_slot(k, m->pitch[i], -1);
+        if (k != NULL) k->param = c->melody[i];
+    }
     if (c->rest_at >= 0) {
         Constraint *r = add_con(b, CID_REST, C_REST_AT);
         add_slot(r, m->pitch[c->rest_at], -1);
@@ -248,16 +254,41 @@ static void build_vertical_rules(Builder *b) {
     Model *m = b->m;
     const PieceConfig *c = &m->config;
 
-    if (c->consonance != CONSONANCE_OFF) {
-        for (int t = 0; t < m->span; t++) {
-            if (c->consonance == CONSONANCE_STRONG && !is_strong_time(t, c->poly_meter))
-                continue;
-            if (sounding_count(m, t) < 2) continue;
-            Constraint *k = add_con(b, CID_CONSONANCE, C_CONSONANCE);
+    /* Rules over everything sounding at one step; a slot per voice, in
+     * voice order, so the crossing rule knows which voice is which. */
+    for (int t = 0; t < m->span; t++) {
+        if (sounding_count(m, t) < 2) continue;
+        bool strong = is_strong_time(t, c->poly_meter);
+        bool consonant = c->consonance == CONSONANCE_ALL ||
+                         (c->consonance == CONSONANCE_STRONG && strong);
+        int rules[3];
+        int types[3];
+        int params[3];
+        int n = 0;
+        if (consonant) {
+            rules[n] = CID_CONSONANCE;
+            types[n] = C_CONSONANCE;
+            params[n++] = 0;
+        }
+        if (c->max_spacing > 0) {
+            rules[n] = CID_SPACING;
+            types[n] = C_SPACING;
+            params[n++] = c->max_spacing;
+        }
+        if (!c->crossing) {
+            rules[n] = CID_CROSSING;
+            types[n] = C_CROSSING;
+            params[n++] = 0;
+        }
+        for (int r = 0; r < n; r++) {
+            Constraint *k = add_con(b, rules[r], types[r]);
             for (int v = 0; v < m->voices; v++) {
                 if (m->source[v][t] >= 0) add_slot(k, m->pitch[m->source[v][t]], v);
             }
-            if (k != NULL) k->time = t;
+            if (k != NULL) {
+                k->time = t;
+                k->param = params[r];
+            }
         }
     }
 
@@ -703,6 +734,30 @@ bool constraint_holds(const Model *m, const Constraint *c, const int *vals) {
         }
         return sonority_consonant(pitches, n, cfg->allow_fourth, cfg->allow_unison);
     }
+    case C_SPACING: {
+        int low = 0;
+        int high = 0;
+        bool any = false;
+        for (int k = 0; k < c->nslots; k++) {
+            int s = slot_sound(m, c, vals, k);
+            if (s == SOUND_REST) continue;
+            if (!any || s < low) low = s;
+            if (!any || s > high) high = s;
+            any = true;
+        }
+        return high - low <= c->param;
+    }
+    case C_CROSSING: {
+        /* slots run from voice 1 down; a unison is not a crossing */
+        int above = SOUND_REST;
+        for (int k = 0; k < c->nslots; k++) {
+            int s = slot_sound(m, c, vals, k);
+            if (s == SOUND_REST) continue;
+            if (above != SOUND_REST && s > above) return false;
+            above = s;
+        }
+        return true;
+    }
     case C_PARALLEL: {
         int s[4];
         for (int k = 0; k < 4; k++) {
@@ -988,6 +1043,14 @@ void constraint_describe(const Model *m, const Constraint *c, char *buf, size_t 
         break;
     case C_PARALLEL:
         snprintf(buf, cap, "voices %s at steps %d-%d", voices, c->time, c->time + 1);
+        break;
+    case C_SPACING:
+        snprintf(buf, cap, "voices %s stay within %d semitones at step %d (bar %d)", voices,
+                 c->param, c->time, bar);
+        break;
+    case C_CROSSING:
+        snprintf(buf, cap, "voices %s keep their order at step %d (bar %d)", voices, c->time,
+                 bar);
         break;
     case C_CHORD_TONE:
         snprintf(buf, cap, "voice %s at step %d plays a tone of the bar %d chord", voices,

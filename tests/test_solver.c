@@ -117,6 +117,28 @@ static void test_lock(void) {
     CHECK(r->status == SOLVE_SAT);
     CHECK(test_pitch(r, 3) == 69);
     test_close(r);
+
+    /* a melody given in part is completed; given in full it is checked */
+    c = test_config();
+    test_set(&c, "melody=64,?,?,62,?,?,?,?,?,?,67");
+    r = test_solve(&c);
+    CHECK(r->status == SOLVE_SAT);
+    CHECK(test_pitch(r, 0) == 64 && test_pitch(r, 3) == 62 && test_pitch(r, 10) == 67);
+    CHECK(test_pitch(r, 11) == 60); /* the cadence still ends on the tonic */
+    int whole[MELODY_MAX];
+    for (int i = 0; i < c.length; i++) whole[i] = test_pitch(r, i);
+    test_close(r);
+    c = test_config();
+    for (int i = 0; i < c.length; i++) c.melody[i] = whole[i];
+    r = test_solve(&c);
+    CHECK(r->status == SOLVE_SAT);
+    CHECK(r->state.stats.decisions == 0);
+    for (int i = 0; i < c.length; i++) CHECK(test_pitch(r, i) == whole[i]);
+    test_close(r);
+    c.melody[5] = 61; /* C# is not in C major */
+    r = test_solve(&c);
+    CHECK(r->status == SOLVE_UNSAT);
+    test_close(r);
 }
 
 /* A free first variable, then four notes that must all sound consonant
@@ -392,6 +414,20 @@ static void test_run_pipeline(void) {
     bool lock_in_core = false;
     for (int i = 0; i < run->core_n; i++) lock_in_core |= run->core[i] == CID_LOCK;
     CHECK(lock_in_core);
+    run_free(run);
+
+    /* given melody notes get the same counterfactual */
+    c = test_config();
+    test_set(&c, "melody=?,?,?,?,69");
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->status == SOLVE_SAT);
+    CHECK(run->counterfactual);
+    CHECK(run->unlocked_status == SOLVE_SAT);
+    CHECK(run->values[run->model.pitch[4]] == 69);
+    run_free(run);
+    c = test_config();
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(!run->counterfactual);
     run_free(run);
     free(run);
 }

@@ -180,6 +180,8 @@ static void test_documents(void) {
     CHECK(strncmp(html, "<!DOCTYPE html>", 15) == 0);
     CHECK(strstr(html, "/*PIECE_DATA*/") == NULL);
     CHECK(strstr(html, "\"events\":[") != NULL);
+    /* a template checked out with CRLF line endings must not double them */
+    CHECK(strstr(html, "\r\r") == NULL);
     free(html);
 
     CHECK(trace_write_text("output/tests/proof.txt", run));

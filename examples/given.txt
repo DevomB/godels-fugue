@@ -1,0 +1,9 @@
+# A melody given in part: the first bar and the last note are fixed with
+# the melody key (? marks a note the solver chooses), and the rest is
+# completed so the canon obeys every rule. Give every note to check a
+# finished melody instead; the counterfactual shows what the given notes
+# changed.
+length 12
+voices 2
+delay 4
+melody 64 67 69 67 ? ? ? ? ? ? ? 60

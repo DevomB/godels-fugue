@@ -102,6 +102,9 @@ run(explain 0 MATCH "x3 = " "candidates by cost|removed" ARGS --explain 3)
 run(explain_key 0 MATCH "key = C major" ARGS --explain key)
 run(explain_bad 1 ERROR "no variable named" ARGS --explain nope)
 run(lock_cli 0 MATCH "counterfactual: lock x0 = E4" ARGS --lock 0 64)
+run(given 0 MATCH "melody: 64 67 69 67 .* 60" "counterfactual: given x0 = E4, x1 = G4" "changed:"
+    ARGS --config "${SRC}/examples/given.txt")
+run(given_bad 1 ERROR "invalid melody" ARGS --set "melody=60,?,rest")
 run(set 0 MATCH "voice 3:" ARGS --set voices=3)
 run(sat 0 MATCH "melody:" ARGS --sat)
 run(sat_unsat 1 MATCH "unsat" ARGS --config "${SRC}/examples/unsat.txt" --sat)
@@ -117,9 +120,11 @@ run(bad_set 1 ERROR "unknown config key: tempi" ARGS --set tempi=3)
 run(bad_value 1 ERROR "voices" ARGS --set voices=9)
 run(bad_preset 1 ERROR "unknown preset" ARGS --preset romantic)
 run(no_config 1 ERROR "cannot read config" ARGS --config "${SRC}/examples/none.txt")
+run(dir_config 1 ERROR "cannot read config" ARGS --config "${SRC}/examples")
 run(bad_corpus 1 ERROR "cannot read corpus" ARGS --corpus "${SRC}/nothing-here")
 
 run(collide 1 ERROR "both be written" ARGS --proof "${OUT}/collide/score.html")
+run(collide_dag 1 ERROR "both be written" ARGS --entropy "${OUT}/collide_dag/proof.dag")
 run(lock_limit 3 MATCH "inconclusive" ERROR "search limit"
     ARGS --set optimize=0 --set length=16 --set voices=3 --set delay=2 --set range_low=55
          --set range_high=74 --set consonance=all --set harmony=1 --set rhythm=1

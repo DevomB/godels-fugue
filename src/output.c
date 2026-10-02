@@ -52,6 +52,21 @@ static void ensure_parent_dir(const char *path) {
     }
 }
 
+/* The proof DAG goes beside the proof trace: proof.txt gives proof.dag,
+ * and any other name gains the extension. */
+static bool dag_path(char *out, size_t cap, const char *proof) {
+    size_t n = strlen(proof);
+    if (n + 5 > cap) return false;
+    memcpy(out, proof, n + 1);
+    char *dot = strrchr(out, '.');
+    if (dot != NULL && strcmp(dot, ".txt") == 0) {
+        strcpy(dot, ".dag");
+    } else {
+        memcpy(out + n, ".dag", 5);
+    }
+    return true;
+}
+
 typedef bool (*Writer)(const char *path, const Run *run);
 
 static bool write_beside(const char *base, const char *name, Writer writer, const Run *run) {
@@ -85,19 +100,7 @@ bool output_write_all(const Run *run, const OutputPaths *paths) {
     ok &= trace_write_text(paths->proof, run);
     {
         char dag[512];
-        size_t n = strlen(paths->proof);
-        if (n + 5 < sizeof(dag)) {
-            memcpy(dag, paths->proof, n + 1);
-            char *dot = strrchr(dag, '.');
-            if (dot != NULL && strcmp(dot, ".txt") == 0) {
-                strcpy(dot, ".dag");
-            } else {
-                memcpy(dag + n, ".dag", 5);
-            }
-            ok &= trace_write_dag(dag, run);
-        } else {
-            ok = false;
-        }
+        ok &= dag_path(dag, sizeof(dag), paths->proof) && trace_write_dag(dag, run);
     }
     ok &= trace_write_entropy(paths->entropy, run);
     ok &= write_beside(paths->proof, "proof.json", trace_save_json, run);
@@ -137,7 +140,7 @@ static void normalize_path(const char *in, char *out, size_t cap) {
 bool output_paths_distinct(const OutputPaths *paths, char *err, size_t cap) {
     static const char *const beside_midi[] = {"score.musicxml", "contour.svg", "voices.wav",
                                               "score.html",     "explain.txt", "report.txt"};
-    char all[10][512];
+    char all[11][512];
     int n = 0;
     snprintf(all[n++], sizeof(all[0]), "%s", paths->midi);
     snprintf(all[n++], sizeof(all[0]), "%s", paths->proof);
@@ -147,6 +150,7 @@ bool output_paths_distinct(const OutputPaths *paths, char *err, size_t cap) {
         n++;
     }
     if (sibling_path(all[n], sizeof(all[0]), paths->proof, "proof.json")) n++;
+    if (dag_path(all[n], sizeof(all[0]), paths->proof)) n++;
     for (int i = 0; i < n; i++) {
         char a[512];
         normalize_path(all[i], a, sizeof(a));
@@ -193,10 +197,11 @@ static void print_key_lines(FILE *out, const Run *run) {
 static void print_optimize_line(FILE *out, const Run *run) {
     const SolverStats *st = &run->state.stats;
     if (run->status != SOLVE_SAT || run->config.optimize <= 0) return;
-    fprintf(out, "optimize: energy %d -> %d, %ld improvements in %ld windows and %ld more "
+    long improvements = st->solutions - 1;
+    fprintf(out, "optimize: energy %d -> %d, %ld improvement%s in %ld window%s and %ld more "
                  "nodes, %s\n",
-            st->first_energy, run->energy, st->solutions - 1, st->windows,
-            st->nodes - st->first.nodes,
+            st->first_energy, run->energy, improvements, improvements == 1 ? "" : "s",
+            st->windows, st->windows == 1 ? "" : "s", st->nodes - st->first.nodes,
             st->converged     ? "no window improves it"
             : st->windows_cut ? "a full pass found nothing cheaper, some windows cut short"
                               : "budget spent");
@@ -314,14 +319,24 @@ void output_print_failure(FILE *err, const Run *run) {
 void output_print_counterfactual(FILE *out, const Run *run) {
     const PieceConfig *c = &run->config;
     char value[32];
-    explain_label(&run->state, run->model.pitch[c->lock_index], c->lock_pitch, value,
-                  sizeof(value));
-    fprintf(out, "counterfactual: lock x%d = %s\n", c->lock_index, value);
+    if (c->lock) {
+        explain_label(&run->state, run->model.pitch[c->lock_index], c->lock_pitch, value,
+                      sizeof(value));
+        fprintf(out, "counterfactual: lock x%d = %s\n", c->lock_index, value);
+    }
+    bool first = true;
+    for (int i = 0; i < c->length; i++) {
+        if (c->melody[i] < 0) continue;
+        explain_label(&run->state, run->model.pitch[i], c->melody[i], value, sizeof(value));
+        fprintf(out, "%sx%d = %s", first ? "counterfactual: given " : ", ", i, value);
+        first = false;
+    }
+    if (!first) fprintf(out, "\n");
     if (run->unlocked_status != SOLVE_SAT) {
-        fprintf(out, "%s without the lock\n",
+        fprintf(out, "%s without the given notes\n",
                 run->unlocked_status == SOLVE_UNSAT ? "unsat" : "search limit");
     } else if (run->status == SOLVE_LIMIT) {
-        fprintf(out, "inconclusive: the search hit its limit with the lock\n");
+        fprintf(out, "inconclusive: the search hit its limit with the given notes\n");
     } else if (run->status != SOLVE_SAT) {
         fprintf(out, "killed:");
         int shown = 0;
@@ -330,7 +345,7 @@ void output_print_counterfactual(FILE *out, const Run *run) {
             fprintf(out, " %s", rule_name(run->core[i]));
             shown++;
         }
-        fprintf(out, "%s\n", shown ? "" : " the lock");
+        fprintf(out, "%s\n", shown ? "" : " the given notes alone");
     } else {
         int changed = 0;
         fprintf(out, "changed:");

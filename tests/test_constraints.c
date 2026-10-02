@@ -409,6 +409,65 @@ static void test_lock(void) {
     CHECK(!solver_propagate(&r->state));
     CHECK(r->state.failed_variable == r->model.pitch[0]);
     test_close(r);
+
+    /* given melody notes lock the same way, and a free note stays free */
+    c = test_config();
+    test_set(&c, "melody=?,67,?,64");
+    r = test_open(&c);
+    CHECK(solver_propagate(&r->state));
+    CHECK(solver_value(&r->state, r->model.pitch[1]) == 67);
+    CHECK(solver_value(&r->state, r->model.pitch[3]) == 64);
+    CHECK(removed_by(r, r->model.pitch[1], 65) == CID_LOCK);
+    CHECK(domain_count(&r->state.domains[r->model.pitch[2]]) > 1);
+    test_close(r);
+}
+
+static void test_spacing_and_crossing(void) {
+    /* at step 4 the follower's x0 sounds under the lead's x4 */
+    PieceConfig c = test_config();
+    test_set(&c, "range_high=84");
+    test_set(&c, "max_spacing=7");
+    TestRun *r = test_open(&c);
+    int x0 = r->model.pitch[0];
+    int x4 = r->model.pitch[4];
+    int wide[3] = {64, 67, 72};
+    test_only(r, x0, 60);
+    set_domain(r, x4, wide, 3);
+    CHECK(solver_propagate(&r->state));
+    CHECK(has(r, x4, 64) && has(r, x4, 67));
+    CHECK(!has(r, x4, 72));
+    const ProofEvent *e = test_removal(r, x4, 72);
+    CHECK(e != NULL && e->rule == CID_SPACING);
+    CHECK(e->parent_vars[0] == x0 && e->parent_values[0] == 60);
+    char why[128];
+    constraint_describe(&r->model, &r->model.cons[e->constraint], why, sizeof(why));
+    CHECK(strstr(why, "within 7 semitones at step 4") != NULL);
+    test_close(r);
+
+    /* without crossing, voice 2 may not sound above voice 1; a unison is fine */
+    c = test_config();
+    test_set(&c, "crossing=0");
+    test_set(&c, "allow_unison=1");
+    r = test_open(&c);
+    x0 = r->model.pitch[0];
+    x4 = r->model.pitch[4];
+    int around[4] = {60, 64, 67, 72};
+    test_only(r, x0, 64);
+    set_domain(r, x4, around, 4);
+    CHECK(solver_propagate(&r->state));
+    CHECK(!has(r, x4, 60));
+    CHECK(removed_by(r, x4, 60) == CID_CROSSING);
+    CHECK(has(r, x4, 64) && has(r, x4, 67) && has(r, x4, 72));
+    test_close(r);
+
+    /* the rules also hold on weak beats, where consonance does not look */
+    c = test_config();
+    test_set(&c, "max_spacing=4");
+    r = test_open(&c);
+    test_only(r, r->model.pitch[1], 60);
+    test_only(r, r->model.pitch[5], 67);
+    CHECK(!solver_propagate(&r->state));
+    test_close(r);
 }
 
 int main(void) {
@@ -422,6 +481,7 @@ int main(void) {
     test_keys();
     test_negative_followers();
     test_lock();
+    test_spacing_and_crossing();
     printf("ok\n");
     return 0;
 }

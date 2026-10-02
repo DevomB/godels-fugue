@@ -14,9 +14,12 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_BINARY_DIR})
 
 if(MSVC)
   add_compile_options(/W4)
-  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
   add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+if(WIN32)
+  # Clang on Windows uses the same C runtime headers as MSVC.
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 endif()
 
 # The score page template is compiled into the binary.
@@ -51,7 +54,8 @@ add_library(canon STATIC
   ${SCORE_PAGE_C}
 )
 target_include_directories(canon PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
-if(NOT MSVC)
+# The math functions are part of the C runtime on Windows, whatever the compiler.
+if(UNIX)
   target_link_libraries(canon PUBLIC m)
 endif()
 

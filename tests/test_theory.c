@@ -43,6 +43,25 @@ static void test_signatures_and_names(void) {
     CHECK(key_fifths(key_id(2, MODE_MINOR)) == -1);
     CHECK(key_fifths(key_id(2, MODE_DORIAN)) == 0);
     CHECK(key_fifths(key_id(7, MODE_MIXOLYDIAN)) == 0);
+    /* every key's signature spells its own scale: F locrian is written in
+     * flats like the rest of its notes, not in F-sharp major's sharps */
+    CHECK(key_fifths(key_id(6, MODE_MAJOR)) == 6);
+    CHECK(key_fifths(key_id(11, MODE_LYDIAN)) == 6);
+    CHECK(key_fifths(key_id(5, MODE_LOCRIAN)) == -6);
+    CHECK(key_distance(key_id(5, MODE_LOCRIAN), key_id(6, MODE_MAJOR)) == 0);
+    CHECK(key_distance(key_id(5, MODE_LOCRIAN), key_id(11, MODE_MAJOR)) == 1);
+    CHECK(key_distance(key_id(5, MODE_LOCRIAN), key_id(1, MODE_MAJOR)) == 1);
+    for (int key = 0; key < KEY_COUNT; key++) {
+        for (int pc = 0; pc < 12; pc++) {
+            int letter, alter, octave;
+            if (!key_has_pitch(key, 60 + pc)) continue;
+            key_spell(key, 60 + pc, &letter, &alter, &octave);
+            /* a scale note never takes an accidental against the signature,
+             * except minor's raised leading tone */
+            if (key_mode(key) == MODE_MINOR && pc == pitch_class(key_tonic(key) + 11)) continue;
+            CHECK(alter == 0 || (alter > 0) == (key_fifths(key) > 0));
+        }
+    }
 
     CHECK(keys_closely_related(key_id(0, MODE_MAJOR), key_id(7, MODE_MAJOR)));
     CHECK(keys_closely_related(key_id(0, MODE_MAJOR), key_id(9, MODE_MINOR)));

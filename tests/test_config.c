@@ -47,6 +47,16 @@ static void test_defaults_and_set(void) {
     CHECK(c.voice_delay[2] == 7);
     CHECK(config_assign(&c, "max_leap=5", err, sizeof(err)));
     CHECK(c.max_leap == 5);
+    /* melody takes up to length notes; the rest stay free */
+    CHECK(c.melody[0] == -1 && c.melody[MELODY_MAX - 1] == -1);
+    CHECK(config_set(&c, "melody", "60 ? rest 64", err, sizeof(err)));
+    CHECK(c.melody[0] == 60 && c.melody[1] == -1 && c.melody[2] == PITCH_REST);
+    CHECK(c.melody[3] == 64 && c.melody[4] == -1);
+    CHECK(config_set(&c, "melody", "67", err, sizeof(err))); /* a new list replaces the old */
+    CHECK(c.melody[0] == 67 && c.melody[3] == -1);
+    CHECK(!config_set(&c, "melody", "60 x", err, sizeof(err)));
+    CHECK(!config_set(&c, "melody", "", err, sizeof(err)));
+    CHECK(!config_set(&c, "melody", "128", err, sizeof(err)));
 
     CHECK(!config_set(&c, "voices", "9", err, sizeof(err)));
     CHECK(strstr(err, "voices") != NULL);
@@ -55,6 +65,10 @@ static void test_defaults_and_set(void) {
     CHECK(!config_set(&c, "strong_chord", "1", err, sizeof(err)));
     CHECK(strstr(err, "unknown config key: strong_chord") != NULL);
     CHECK(!config_set(&c, "pc_weight", "1,2", err, sizeof(err)));
+    char many[200] = "";
+    for (int i = 0; i <= MELODY_MAX; i++) strcat(many, i ? ",60" : "60");
+    CHECK(!config_set(&c, "melody", many, err, sizeof(err)));
+    CHECK(strstr(err, "at most") != NULL);
     CHECK(!config_assign(&c, "=3", err, sizeof(err)));
     CHECK(!config_assign(&c, "voices", err, sizeof(err)));
 }
@@ -91,6 +105,17 @@ static void test_validation(void) {
     c.lock = 1;
     c.lock_index = 12;
     CHECK(!config_validate(&c, err, sizeof(err)));
+
+    config_defaults(&c);
+    c.melody[12] = 60;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "melody") != NULL && strstr(err, "past") != NULL);
+    config_defaults(&c);
+    c.melody[2] = PITCH_REST;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "rest") != NULL);
+    c.rhythm = 1;
+    CHECK(config_validate(&c, err, sizeof(err)));
 
     config_defaults(&c);
     c.length = 32;
@@ -200,6 +225,7 @@ static void test_round_trip(void) {
     test_set(&a, "modulate_at=8");
     test_set(&a, "key_second=related");
     test_set(&a, "pc_weight=3,0,0,0,0,0,0,0,0,0,0,1");
+    test_set(&a, "melody=62,?,rest,66");
     FILE *f = fopen("output/tests/round.txt", "w");
     CHECK(f != NULL);
     config_write(f, &a);

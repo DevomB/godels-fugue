@@ -189,10 +189,16 @@ static void print_candidates(FILE *f, const SolverState *s, const Explanation *e
     const Decision *d = &s->decisions[e->decision];
     fprintf(f, "  candidates by cost%s:\n",
             d->temperature > 0 ? " (sampled at a temperature above 0)" : "");
+    int width = 6; /* key names are longer than pitches */
     for (int k = 0; k < d->ncand; k++) {
         char value[32];
         explain_label(s, e->var, d->cand_values[k], value, sizeof(value));
-        fprintf(f, "    %-6s %3d%s", value, d->cand_costs[k],
+        if ((int)strlen(value) > width) width = (int)strlen(value);
+    }
+    for (int k = 0; k < d->ncand; k++) {
+        char value[32];
+        explain_label(s, e->var, d->cand_values[k], value, sizeof(value));
+        fprintf(f, "    %-*s %3d%s", width, value, d->cand_costs[k],
                 d->cand_values[k] == e->value ? "  <- chosen" : "");
         if (k < CAND_BREAKDOWN && d->cand_costs[k] > 0) {
             bool first = true;

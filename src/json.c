@@ -126,7 +126,10 @@ static char *parse_string(Parser *p) {
         p->pos++;
         if (c == '"') return b.data;
         if (c != '\\') {
-            if (!buf_push(&b, (char)c)) break;
+            if (!buf_push(&b, (char)c)) {
+                fail(p, "out of memory");
+                break;
+            }
             continue;
         }
         char e = p->text[p->pos++];

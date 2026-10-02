@@ -58,6 +58,14 @@ static PieceConfig random_config(void) {
     c.allow_fourth = c.voices > 2 && pick(0, 1);
     c.allow_unison = pick(0, 3) == 0;
     c.cadence = pick(0, 2) != 0;
+    if (pick(0, 3) == 0) c.max_spacing = pick(7, 19);
+    c.crossing = pick(0, 3) != 0;
+    if (pick(0, 4) == 0) {
+        for (int k = 0; k < 3; k++) {
+            int i = pick(0, c.length - 1);
+            c.melody[i] = pick(c.range_low, c.range_high);
+        }
+    }
     c.harmony = pick(0, 2) == 0;
     c.rhythm = pick(0, 1);
     c.max_hold = pick(1, 2);
@@ -141,6 +149,19 @@ static void check_piece(const Model *m, const int *values) {
                 }
             }
         }
+        if (c->max_spacing > 0) {
+            for (int a = 0; a < n; a++) {
+                for (int b = a + 1; b < n; b++) {
+                    if (abs(sounding[a] - sounding[b]) > c->max_spacing) fail(c, "spacing", t);
+                }
+            }
+        }
+        if (!c->crossing) {
+            /* sounding[] lists the voices in order, so each stays at or below the last */
+            for (int k = 1; k < n; k++) {
+                if (sounding[k] > sounding[k - 1]) fail(c, "crossing", t);
+            }
+        }
         if (c->harmony && strong) {
             int chord = values[m->chord[t / 4]];
             int key = key_for(m, values, t);
@@ -184,6 +205,9 @@ static void check_piece(const Model *m, const int *values) {
         if (run > c->max_hold) fail(c, "max hold", i);
     }
     if (c->rhythm && rests > c->max_rests) fail(c, "max rests", 0);
+    for (int i = 0; i < c->length; i++) {
+        if (c->melody[i] >= 0 && values[m->pitch[i]] != c->melody[i]) fail(c, "given note", i);
+    }
 
     if (c->cadence) {
         int last = c->length - 1;

@@ -26,7 +26,7 @@ typedef struct Run {
     bool core_approximate;
     DelayTrial delays[SPAN_MAX];
     int ndelays;
-    bool counterfactual; /* the config locks a note */
+    bool counterfactual; /* the config gives notes, by lock or melody */
     SolveStatus unlocked_status;
     int unlocked_pitch[MELODY_MAX];
 } Run;

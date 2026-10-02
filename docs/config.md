@@ -53,6 +53,8 @@ style preset first, so every other key in the file overrides it.
 | `allow_fourth` | 0 | 0..1 | Count a fourth above the lowest voice as consonant. |
 | `allow_unison` | 0 | 0..1 | Allow two voices on the same pitch where consonance applies. |
 | `parallels` | 1 | 0..1 | Forbid parallel fifths and octaves between any two voices. |
+| `max_spacing` | 0 | 0..127 | Largest interval in semitones between any two voices sounding together (0 = no limit). |
+| `crossing` | 1 | 0..1 | Let a later voice sound above an earlier one; 0 keeps voice 1 on top, voice 2 below it, and so on. |
 | `harmony` | 0 | 0..1 | Give each bar a chord variable; strong-beat notes must be its chord tones. |
 | `progression` | 1 | 0..1 | With harmony, consecutive bar chords follow the usual root progressions. |
 | `cadence` | 1 | 0..1 | End on the tonic, approached from the dominant triad; followers end on tonic-triad notes. |
@@ -71,9 +73,10 @@ style preset first, so every other key in the file overrides it.
 
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
-| `lock` | 0 | 0..1 | Fix one melody note before the search. |
+| `lock` | 0 | 0..1 | Fix one melody note before the search and report what it changed (melody fixes any number). |
 | `lock_index` | 0 | 0..31 | Melody index of the locked note. |
 | `lock_pitch` | 60 | 0..127 | MIDI pitch of the locked note (0 = rest). |
+| `melody` | ? | up to 32 values | The melody's notes, given as MIDI pitches, rest (needs rhythm) or ? for a note the solver chooses; notes past the list are free. Give them all to check a melody against the rules. |
 
 ### Energy
 

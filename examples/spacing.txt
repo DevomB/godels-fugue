@@ -1,0 +1,12 @@
+# Voice spacing and crossing: three voices entering a bar apart never
+# sound more than two octaves apart, and voice 1 stays on top, voice 2 in
+# the middle and voice 3 at the bottom, so the follower is transposed
+# down an octave.
+length 12
+voices 3
+delay 4
+range_low 48
+range_high 84
+transpose -12
+max_spacing 24
+crossing 0

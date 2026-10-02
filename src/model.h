@@ -21,6 +21,8 @@ enum {
     CID_CONSONANCE,
     CID_PARALLEL_FIFTH,
     CID_PARALLEL_OCTAVE,
+    CID_SPACING,
+    CID_CROSSING,
     CID_CHORD,
     CID_PROGRESSION,
     CID_CADENCE,
@@ -65,6 +67,8 @@ enum {
     C_LEAP,             /* (pitch, pitch) consecutive notes of one voice */
     C_CONSONANCE,       /* (pitches sounding at one step) */
     C_PARALLEL,         /* (a now, a next, b now, b next); param 1 = fifth */
+    C_SPACING,          /* (pitches sounding at one step) param = widest interval */
+    C_CROSSING,         /* (pitches sounding at one step, by voice) none above an earlier one */
     C_CHORD_TONE,       /* (pitch, chord, key) */
     C_PROGRESSION,      /* (chord, next chord) */
     C_CHORD_IS,         /* (chord) param = mask of allowed degrees */
@@ -74,7 +78,7 @@ enum {
     C_MAX_HOLD,         /* (ties...) not all held */
     C_REST_AT,          /* (pitch) is a rest */
     C_MAX_RESTS,        /* every pitch; propagated by counting */
-    C_LOCK,             /* (var) param = value */
+    C_LOCK,             /* (var) param = value; the lock key or a given melody note */
     C_KEY_RELATION,     /* (key, key) closely related */
     C_SAME_MODE         /* (key, key) same mode */
 };

@@ -43,6 +43,8 @@ typedef struct PieceConfig {
     int allow_fourth;
     int allow_unison;
     int parallels;
+    int max_spacing;
+    int crossing;
     int harmony;
     int progression;
     int cadence;
@@ -52,10 +54,11 @@ typedef struct PieceConfig {
     int max_hold;
     int rest_at;
     int max_rests;
-    /* user lock */
+    /* given notes */
     int lock;
     int lock_index;
     int lock_pitch;
+    int melody[MELODY_MAX]; /* pitch of each note, PITCH_REST, or -1 = free */
     /* soft rules */
     int energy;
     int temperature;

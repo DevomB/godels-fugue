@@ -31,9 +31,24 @@ static void test_variables(void) {
     CHECK(m->tie[1] == -1);
     CHECK(count_rule(m, CID_CONSONANCE) == 2); /* steps 4 and 8 */
     CHECK(count_rule(m, CID_LOCK) == 0);
+    CHECK(count_rule(m, CID_SPACING) == 0 && count_rule(m, CID_CROSSING) == 0);
     CHECK(model_rule_used(m, CID_LEAP));
     CHECK(!model_rule_used(m, CID_CHORD));
     test_close(r);
+
+    /* given notes lock, and the spacing and crossing rules cover every
+     * step where two voices sound (steps 4 to 11) */
+    test_set(&c, "melody=60,?,?,64");
+    test_set(&c, "max_spacing=12");
+    test_set(&c, "crossing=0");
+    r = test_open(&c);
+    m = &r->model;
+    CHECK(count_rule(m, CID_LOCK) == 2);
+    CHECK(count_rule(m, CID_SPACING) == 8);
+    CHECK(count_rule(m, CID_CROSSING) == 8);
+    CHECK(count_rule(m, CID_CONSONANCE) == 2);
+    test_close(r);
+    c = test_config();
 
     test_set(&c, "rhythm=1");
     test_set(&c, "harmony=1");

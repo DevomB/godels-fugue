@@ -59,6 +59,15 @@ static void search_delay(Run *run) {
     run->config.delay = best >= 0 ? best : first_tried;
 }
 
+/* Does the config fix any melody note, by lock or by melody? */
+static bool has_given_notes(const PieceConfig *c) {
+    if (c->lock) return true;
+    for (int i = 0; i < c->length && i < MELODY_MAX; i++) {
+        if (c->melody[i] >= 0) return true;
+    }
+    return false;
+}
+
 bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap) {
     memset(run, 0, sizeof(*run));
     run->config = *config;
@@ -80,9 +89,10 @@ bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap) {
                           &run->core_approximate);
     }
 
-    if (run->config.lock) {
+    if (has_given_notes(&run->config)) {
         PieceConfig unlocked = run->config;
         unlocked.lock = 0;
+        for (int i = 0; i < MELODY_MAX; i++) unlocked.melody[i] = -1;
         int energy;
         long nodes;
         run->counterfactual = true;

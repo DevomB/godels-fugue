@@ -72,16 +72,17 @@ applies; the engine never enumerates it.
 | melodic leap | consecutive notes of any voice more than `max_leap` apart | Built |
 | consonance | on strong beats (or every step), any pair of sounding voices other than octave, third, fifth or sixth; a fourth only between upper voices; unisons opt-in | Built |
 | parallel fifths / octaves | two voices moving in the same direction from a perfect interval to the same one | Built |
+| spacing | two voices sounding more than `max_spacing` semitones apart | Built |
+| crossing | with `crossing 0`, a later voice sounding above an earlier one | Built |
 | chord tone | a strong-beat note outside the bar's chord | Built |
 | progression | consecutive bar chords outside the usual root progressions | Built |
 | cadence | a melody that does not end on the tonic approached from the dominant triad; a follower not ending on a tonic-triad note; with harmony, a last bar other than I or a bar before it other than V or vii | Built |
 | tie / max hold / rests | a tie that changes pitch or holds a rest, a note held too long, more than `max_rests` rests | Built |
 | modulation | a searched second key that is not closely related to the first | Built |
-| lock | a locked note taking any other pitch | Built |
+| lock | a locked note, or a note given by `melody`, taking any other pitch | Built |
 
 Rules from the design that are **not built**: suspensions and their resolution,
-leading tones and chordal sevenths resolving, voice crossing and spacing limits,
-limits on repeated large leaps, a registral-centre invariant, motion balance between
+leading tones and chordal sevenths resolving, limits on repeated large leaps, a registral-centre invariant, motion balance between
 voices, and symmetry constraints ($x_i + x_{N-1-i} = 2a$) with controlled symmetry
 breaking. Direct (hidden) fifths and octaves are a soft cost rather than a rule.
 
@@ -229,8 +230,8 @@ changes which steps are strong for every voice), and form as a state machine.
   rule's share of their costs.
 - **Unsat core**: deletion over the rules in use. A rule stays in the core only if
   the problem becomes solvable without it.
-- **Counterfactual**: with a lock, the same rules are solved without it and the
-  notes that change are listed.
+- **Counterfactual**: with a lock or given notes, the same rules are solved without
+  them and the notes that change are listed.
 
 **Built.** **Partly built**: the decisions a forced value "depends on" are an
 over-approximation, not a minimal explanation, and contradiction certificates are the
@@ -275,4 +276,5 @@ None of these are built; the proof log and statistics provide the data for them.
 - Which melody positions are most structurally sensitive?
 - How does temperature trade novelty against cost over many samples?
 - Analysis mode: measure an existing score against the rules, estimate weights, and
-  find recurring structures ("style fingerprints").
+  find recurring structures ("style fingerprints"). **Partly built**: `melody` checks a
+  given melody against the rules and reports its energy or the rules it breaks.

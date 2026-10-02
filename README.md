@@ -29,7 +29,7 @@ melody: 64 67 64 62 60 62 64 67 64 65 67 60
 voice 2: rest rest rest rest 64 67 64 62 60 62 64 67 64 65 67 60
 backtracks: 0
 search: 13 nodes, 12 decisions, 0 backjumps, 0 learned
-optimize: energy 27 -> 24, 1 improvements in 6 windows and 3644 more nodes, no window improves it
+optimize: energy 27 -> 24, 1 improvement in 6 windows and 3644 more nodes, no window improves it
 entropy: 0.000000
 energy: 24 (gravity 9, curve 12, leap 1, dissonance 2)
 ```
@@ -84,7 +84,9 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
 - **Rhythm**: optional ties (half, dotted half and whole notes) and rests, with rules
   against over-long notes and costs for syncopation and plain runs of quarter notes.
 - **Rules you can turn on or off**: consonance, parallel fifths and octaves, maximum
-  leap, cadence, locks on individual notes.
+  leap, voice spacing and crossing, cadence.
+- **Given notes**: fix any notes of the melody and the solver completes the rest, or
+  give the whole melody to check it against the rules and see what it costs.
 - **Soft preferences** that rank the legal choices: stable scale degrees, an arch of
   tension, small leaps, few repeated notes, recovering after a leap, a repeating motif,
   pitch-class weights learned from a corpus, and more. Their sum is the piece's
@@ -94,7 +96,7 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   neighbourhood optimizer that lowers the energy after the first solution.
 - **Explanations**: a proof log of every removal with its parent events, the decisions
   each forced value rests on, an unsat core for impossible rule sets, and a
-  counterfactual for locked notes.
+  counterfactual for given notes.
 - **Style presets**: `renaissance`, `baroque`, `classical`, `minimalist`,
   `experimental`.
 - **A SAT cross-check** (`--sat`) that encodes the same rules for a separate DPLL
@@ -145,11 +147,33 @@ The keys you are most likely to change:
 | `harmony`, `rhythm` | off | Chord variables; ties and rests |
 | `cadence` | on | End on the tonic, approached from the dominant |
 | `consonance` | strong | `off`, `strong` beats, or `all` steps |
+| `max_spacing`, `crossing` | off, allowed | Widest interval between voices; whether a later voice may sound above an earlier one |
+| `melody` | all free | The notes to keep, `?` for the ones to choose |
 | `optimize` | 10000 | Nodes spent lowering the energy after the first solution |
 | `seed`, `temperature` | 1, 0 | Sampling instead of always taking the cheapest value |
 
 The `examples/` directory has a config for each feature. Each file starts with a
 comment saying what it shows.
+
+### Starting from a melody
+
+`melody` fixes the notes you give and leaves the solver the ones marked `?`:
+
+```text
+length 12
+melody 64 67 69 67 ? ? ? ? ? ? ? 60
+```
+
+```text
+melody: 64 67 69 67 71 67 65 64 67 64 62 60
+counterfactual: given x0 = E4, x1 = G4, x2 = A4, x3 = G4, x11 = C4
+changed: 2 3 4 5 6 7 8 9 10
+```
+
+The solver completes the canon around the given notes, and `changed` lists the notes
+that differ from the piece it would have written on its own. Give every note to check a
+finished melody: a run that solves reports its energy, and one that fails names the
+rules the melody breaks.
 
 ## Output files
 

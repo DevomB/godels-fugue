@@ -17,7 +17,7 @@ typedef void (*WordPrinter)(int value, char *buf, size_t cap);
 typedef struct KeyDef {
     const char *name;
     size_t offset;
-    int count; /* array length; 1 for a scalar */
+    int count; /* array length, 1 for a scalar; OPEN(n) allows fewer values */
     int min;
     int max;
     int def;
@@ -26,6 +26,17 @@ typedef struct KeyDef {
     const char *group;
     const char *help;
 } KeyDef;
+
+/* An array key that may be given fewer than n values; the rest keep the default. */
+#define OPEN(n) (-(n))
+
+static int key_count(const KeyDef *def) {
+    return def->count < 0 ? -def->count : def->count;
+}
+
+static bool key_open(const KeyDef *def) {
+    return def->count < 0;
+}
 
 static bool parse_key_word(const char *w, int *out) {
     if (strcmp(w, "search") == 0) {
@@ -130,6 +141,28 @@ static void print_off_word(int v, char *buf, size_t cap) {
     }
 }
 
+static bool parse_note_word(const char *w, int *out) {
+    if (strcmp(w, "?") == 0) {
+        *out = -1;
+        return true;
+    }
+    if (strcmp(w, "rest") == 0) {
+        *out = PITCH_REST;
+        return true;
+    }
+    return false;
+}
+
+static void print_note_word(int v, char *buf, size_t cap) {
+    if (v < 0) {
+        snprintf(buf, cap, "?");
+    } else if (v == PITCH_REST) {
+        snprintf(buf, cap, "rest");
+    } else {
+        snprintf(buf, cap, "%d", v);
+    }
+}
+
 static bool parse_motif_word(const char *w, int *out) {
     if (strcmp(w, "off") != 0) return false;
     *out = -128;
@@ -213,6 +246,12 @@ static const KeyDef keys[] = {
      "Allow two voices on the same pitch where consonance applies."},
     {"parallels", F(parallels), 1, 0, 1, 1, NULL, NULL, "rules",
      "Forbid parallel fifths and octaves between any two voices."},
+    {"max_spacing", F(max_spacing), 1, 0, 127, 0, NULL, NULL, "rules",
+     "Largest interval in semitones between any two voices sounding together (0 = "
+     "no limit)."},
+    {"crossing", F(crossing), 1, 0, 1, 1, NULL, NULL, "rules",
+     "Let a later voice sound above an earlier one; 0 keeps voice 1 on top, voice 2 "
+     "below it, and so on."},
     {"harmony", F(harmony), 1, 0, 1, 0, NULL, NULL, "rules",
      "Give each bar a chord variable; strong-beat notes must be its chord tones."},
     {"progression", F(progression), 1, 0, 1, 1, NULL, NULL, "rules",
@@ -233,11 +272,17 @@ static const KeyDef keys[] = {
      "Most rests the melody may contain."},
 
     {"lock", F(lock), 1, 0, 1, 0, NULL, NULL, "lock",
-     "Fix one melody note before the search."},
+     "Fix one melody note before the search and report what it changed (melody "
+     "fixes any number)."},
     {"lock_index", F(lock_index), 1, 0, MELODY_MAX - 1, 0, NULL, NULL, "lock",
      "Melody index of the locked note."},
     {"lock_pitch", F(lock_pitch), 1, 0, 127, 60, NULL, NULL, "lock",
      "MIDI pitch of the locked note (0 = rest)."},
+    {"melody", F(melody), OPEN(MELODY_MAX), -1, 127, -1, parse_note_word, print_note_word,
+     "lock",
+     "The melody's notes, given as MIDI pitches, rest (needs rhythm) or ? for a note "
+     "the solver chooses; notes past the list are free. Give them all to check a "
+     "melody against the rules."},
 
     {"energy", F(energy), 1, 0, 1, 1, NULL, NULL, "energy",
      "Try cheaper values first (1) or plain ascending order (0)."},
@@ -352,7 +397,7 @@ void config_defaults(PieceConfig *config) {
     memset(config, 0, sizeof(*config));
     for (int i = 0; i < KEY_DEF_COUNT; i++) {
         int *f = field(config, &keys[i]);
-        for (int k = 0; k < keys[i].count; k++) f[k] = keys[i].def;
+        for (int k = 0; k < key_count(&keys[i]); k++) f[k] = keys[i].def;
     }
 }
 
@@ -414,7 +459,8 @@ bool config_set(PieceConfig *config, const char *key, const char *value, char *e
         return false;
     }
     int *slot = field(config, def);
-    if (def->count == 1) return set_scalar(def, slot, value, err, cap);
+    int count = key_count(def);
+    if (count == 1) return set_scalar(def, slot, value, err, cap);
 
     char buf[512];
     if (strlen(value) >= sizeof(buf)) {
@@ -422,19 +468,21 @@ bool config_set(PieceConfig *config, const char *key, const char *value, char *e
         return false;
     }
     snprintf(buf, sizeof(buf), "%s", value);
+    /* a list replaces the whole array */
+    for (int k = 0; k < count; k++) slot[k] = def->def;
     int n = 0;
     for (char *tok = strtok(buf, ", \t"); tok != NULL; tok = strtok(NULL, ", \t")) {
-        if (n >= def->count) {
-            snprintf(err, cap, "config value for %s takes %d numbers", def->name,
-                     def->count);
+        if (n >= count) {
+            snprintf(err, cap, "config value for %s takes %s%d values", def->name,
+                     key_open(def) ? "at most " : "", count);
             return false;
         }
         if (!set_scalar(def, &slot[n], tok, err, cap)) return false;
         n++;
     }
-    if (n != def->count) {
-        snprintf(err, cap, "config value for %s takes %d numbers", def->name,
-                 def->count);
+    if (n != count && !(key_open(def) && n > 0)) {
+        snprintf(err, cap, "config value for %s takes %s%d values", def->name,
+                 key_open(def) ? "at most " : "", count);
         return false;
     }
     return true;
@@ -540,6 +588,11 @@ static char *read_file(const char *path, size_t *length) {
         } else {
             data = grown;
         }
+    }
+    /* a directory opens on POSIX and only fails when read */
+    if (data != NULL && ferror(f)) {
+        free(data);
+        data = NULL;
     }
     fclose(f);
     if (data != NULL) data[len] = '\0';
@@ -720,7 +773,7 @@ int config_voice_count(const PieceConfig *config) {
 bool config_validate(const PieceConfig *config, char *err, size_t cap) {
     for (int i = 0; i < KEY_DEF_COUNT; i++) {
         const int *f = cfield(config, &keys[i]);
-        for (int k = 0; k < keys[i].count; k++) {
+        for (int k = 0; k < key_count(&keys[i]); k++) {
             if (f[k] < keys[i].min || f[k] > keys[i].max) {
                 snprintf(err, cap, "invalid %s: must be %d..%d", keys[i].name,
                          keys[i].min, keys[i].max);
@@ -758,6 +811,18 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap) {
         }
         if (config->lock_pitch == PITCH_REST && !config->rhythm) {
             snprintf(err, cap, "invalid lock: a rest needs rhythm");
+            return false;
+        }
+    }
+    for (int i = 0; i < MELODY_MAX; i++) {
+        if (config->melody[i] < 0) continue;
+        if (i >= config->length) {
+            snprintf(err, cap, "invalid melody: note %d is past the end of %d notes", i,
+                     config->length);
+            return false;
+        }
+        if (config->melody[i] == PITCH_REST && !config->rhythm) {
+            snprintf(err, cap, "invalid melody: a rest at note %d needs rhythm", i);
             return false;
         }
     }
@@ -818,9 +883,18 @@ const char *config_key_name(int index) {
 void config_key_value(const PieceConfig *config, int index, char *buf, size_t cap) {
     buf[0] = '\0';
     if (index < 0 || index >= KEY_DEF_COUNT || cap == 0) return;
-    const int *v = cfield(config, &keys[index]);
+    const KeyDef *def = &keys[index];
+    const int *v = cfield(config, def);
+    int count = key_count(def);
+    /* an open array lists its values up to the last one given */
+    if (key_open(def)) {
+        count = 1;
+        for (int k = 0; k < key_count(def); k++) {
+            if (v[k] != def->def) count = k + 1;
+        }
+    }
     size_t used = 0;
-    for (int k = 0; k < keys[index].count; k++) {
+    for (int k = 0; k < count; k++) {
         char item[32];
         format_value(&keys[index], v[k], item, sizeof(item));
         int w = snprintf(buf + used, cap - used, "%s%s", k == 0 ? "" : ",", item);
@@ -858,7 +932,9 @@ void config_print_reference(FILE *f, bool markdown) {
             char dflt[32];
             char range[64];
             format_value(def, def->def, dflt, sizeof(dflt));
-            if (def->count > 1) {
+            if (key_open(def)) {
+                snprintf(range, sizeof(range), "up to %d values", key_count(def));
+            } else if (def->count > 1) {
                 snprintf(range, sizeof(range), "%d x %d..%d", def->count, def->min,
                          def->max);
             } else if (def->min == INT_MIN) {

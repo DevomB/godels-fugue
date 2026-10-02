@@ -92,6 +92,9 @@ bool key_triad_has(int key, int degree, int pitch) {
 int key_fifths(int key) {
     static const int major_fifths[12] = {0, -5, 2, -3, 4, -1, 6, 1, -4, 3, -2, 5};
     int parent = pitch_class(key_tonic(key) - mode_offset[key_mode(key)]);
+    /* The seventh degree of F-sharp major is E-sharp, which the note names
+     * here cannot write; F locrian takes G-flat major's six flats instead. */
+    if (parent == 6 && key_mode(key) == MODE_LOCRIAN) return -6;
     return major_fifths[parent];
 }
 
