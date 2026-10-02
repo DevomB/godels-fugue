@@ -51,13 +51,14 @@ x8 = E4 (pitch of melody note 8)
     C4 D4 F4 B4 consonance: voices 1,2 must be consonant at step 0 (bar 1) (with x0 = C4)
     C#4 D#4 F#4 G#4 A#4 scale: notes stay in the key (with key = C major)
     G4 A4 C5 consonance: voices 1,2 must be consonant at step 8 (bar 3) (with x4 = G4)
-  depends on: x11 = C4, x0 = C4, x4 = G4
+  depends on: x0 = C4, x4 = G4
 ```
 
 In this round, voice 2 plays note 8 at the very start, against the melody's C4, and
-again at step 8 against its G4. Only E4 is consonant with both. A note the search
-chose instead of one that was forced lists the candidates it weighed and what each
-one cost.
+again at step 8 against its G4. Only E4 is consonant with both. Those two decisions
+are all it depends on: propagating from them alone forces E4, and neither does it
+without the other. A note the search chose instead of one that was forced lists the
+candidates it weighed and what each one cost.
 
 When the rules can't all hold, the program says which ones clash:
 
@@ -98,8 +99,9 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   conflict-directed backjumping, learned conflicts, node and time limits, and a
   neighbourhood optimizer that lowers the energy after the first solution.
 - **Explanations**: a proof log of every removal with its parent events, the decisions
-  each forced value rests on, an unsat core for impossible rule sets, and a
-  counterfactual for given notes.
+  each forced value rests on (a minimal set whenever propagation from them forces it:
+  dropping any one leaves the value unforced), an unsat core for impossible rule sets,
+  and a counterfactual for given notes.
 - **Style presets**: `renaissance`, `baroque`, `classical`, `minimalist`,
   `experimental`.
 - **A SAT cross-check** (`--sat`) that encodes the same rules for a separate DPLL

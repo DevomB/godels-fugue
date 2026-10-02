@@ -102,6 +102,9 @@ endforeach()
 run(explain 0 MATCH "x3 = " "candidates by cost|removed" ARGS --explain 3)
 run(explain_key 0 MATCH "key = C major" ARGS --explain key)
 run(explain_bad 1 ERROR "no variable named" ARGS --explain nope)
+# the README's example: x11 narrowed x0 before x0 was chosen, yet x0 and x4 alone force x8
+run(explain_minimal 0 MATCH "depends on: x0 = C4, x4 = G4\r?\n"
+    ARGS --config "${SRC}/examples/cyclic.txt" --set time_limit=0 --explain x8)
 run(lock_cli 0 MATCH "counterfactual: lock x0 = E4" ARGS --lock 0 64)
 run(given 0 MATCH "melody: 64 67 69 67 .* 60" "counterfactual: given x0 = E4, x1 = G4" "changed:"
     ARGS --config "${SRC}/examples/given.txt")

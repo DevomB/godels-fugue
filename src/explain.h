@@ -29,11 +29,19 @@ typedef struct Explanation {
     int event;    /* the decision or forced event, or -1 */
     int level;    /* search depth when the value was fixed */
     int decision; /* index into state->decisions when decided, else 0 */
-    LevelSet reason;
+    LevelSet reason; /* every decision behind the removals */
+    /* For a forced value, a part of reason that forces it by propagation
+     * alone and no longer does without any one of its decisions. Equal to
+     * reason when all of reason cannot (the search's refutations did part
+     * of the work) and for any other status. */
+    LevelSet minimal;
+    bool minimized; /* minimal was checked by propagation */
     int nrejected;
     Rejection rejected[128];
 } Explanation;
 
+/* Propagates once per decision in a forced value's reason to find the
+ * minimal set. */
 void explain_var(const SolverState *s, int var, Explanation *e);
 /* A value's name, spelled and numbered in the key the solver settled on. */
 void explain_label(const SolverState *s, int var, int value, char *buf, size_t cap);

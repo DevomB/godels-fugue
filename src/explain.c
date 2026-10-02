@@ -64,6 +64,72 @@ static bool locked(const Model *m, int var) {
     return false;
 }
 
+/* A second solver that replays chosen decisions from the root fixpoint,
+ * under the same model and rules, with no search. */
+typedef struct Replay {
+    SolverState state;
+    Snapshot root;
+} Replay;
+
+static Replay *replay_open(const SolverState *s) {
+    Replay *r = malloc(sizeof(*r));
+    if (r == NULL) return NULL;
+    if (!solver_init(&r->state, s->model)) {
+        free(r);
+        return NULL;
+    }
+    memcpy(r->state.skip, s->skip, sizeof(r->state.skip));
+    if (!solver_propagate(&r->state)) {
+        solver_free(&r->state);
+        free(r);
+        return NULL;
+    }
+    solver_save(&r->state, &r->root);
+    return r;
+}
+
+static void replay_close(Replay *r) {
+    solver_free(&r->state);
+    free(r);
+}
+
+/* Do the decisions in set, and nothing else the search did, leave var
+ * with only value? Starting from the root fixpoint reaches the same
+ * fixpoint as starting from the initial domains with every rule queued. */
+static bool replay_forces(Replay *r, const SolverState *s, const LevelSet *set, int var,
+                          int value) {
+    SolverState *t = &r->state;
+    solver_restore(t, &r->root);
+    for (int l = 1; l <= s->level; l++) {
+        if (!levelset_has(set, l)) continue;
+        const Decision *d = &s->decisions[l];
+        if (!domain_contains(&t->domains[d->var], d->value)) return false;
+        domain_clear(&t->domains[d->var]);
+        domain_add(&t->domains[d->var], d->value);
+        solver_touch(t, d->var);
+    }
+    return solver_propagate(t) && solver_value(t, var) == value;
+}
+
+/* Deletion over the reason, latest decision first: a decision goes when
+ * the rest still force the value. More decisions only ever remove more
+ * values, so each one kept is needed by the final set as well. */
+static void minimize(const SolverState *s, Explanation *e) {
+    Replay *r = replay_open(s);
+    if (r == NULL) return;
+    LevelSet set = e->reason;
+    if (replay_forces(r, s, &set, e->var, e->value)) {
+        for (int l = s->level; l >= 1; l--) {
+            if (!levelset_has(&set, l)) continue;
+            levelset_remove(&set, l);
+            if (!replay_forces(r, s, &set, e->var, e->value)) levelset_add(&set, l);
+        }
+        e->minimal = set;
+        e->minimized = true;
+    }
+    replay_close(r);
+}
+
 void explain_var(const SolverState *s, int var, Explanation *e) {
     const Model *m = s->model;
     const ProofLog *log = &s->proof;
@@ -110,6 +176,8 @@ void explain_var(const SolverState *s, int var, Explanation *e) {
             }
         }
     }
+    e->minimal = e->reason;
+    if (e->status == WHY_FORCED) minimize(s, e);
 }
 
 static size_t append(char *buf, size_t cap, size_t used, const char *text) {
@@ -286,7 +354,7 @@ void explain_print(FILE *f, const SolverState *s, const Explanation *e) {
     }
     if (e->status == WHY_FORCED) {
         char deps[EXPLAIN_TEXT_MAX];
-        append_decisions(s, &e->reason, deps, sizeof(deps), 0);
+        append_decisions(s, &e->minimal, deps, sizeof(deps), 0);
         fprintf(f, "  depends on: %s\n", deps);
     }
 }
@@ -327,8 +395,9 @@ void explain_json(FILE *f, const SolverState *s, const Explanation *e) {
     fprintf(f, ",\"depends\":[");
     bool first = true;
     if (e->status == WHY_FORCED || e->status == WHY_DECIDED) {
+        const LevelSet *deps = e->status == WHY_FORCED ? &e->minimal : &e->reason;
         for (int l = 1; l <= s->level; l++) {
-            if (!levelset_has(&e->reason, l)) continue;
+            if (!levelset_has(deps, l)) continue;
             if (e->status == WHY_DECIDED && l == e->decision) continue; /* itself */
             char name[16];
             var_label(m, s->decisions[l].var, name, sizeof(name));

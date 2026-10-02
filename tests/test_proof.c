@@ -244,12 +244,128 @@ static void test_refutation(void) {
     test_close(r);
 }
 
+/* Propagates from the root in a fresh solver with only the decisions in
+ * set and reports whether var is left with value. */
+static bool forces_alone(const TestRun *r, const LevelSet *set, int var, int value) {
+    SolverState *t = malloc(sizeof(SolverState));
+    CHECK(t != NULL);
+    CHECK(solver_init(t, &r->model));
+    memcpy(t->skip, r->state.skip, sizeof(t->skip));
+    for (int l = 1; l <= r->state.level; l++) {
+        if (!levelset_has(set, l)) continue;
+        const Decision *d = &r->state.decisions[l];
+        domain_clear(&t->domains[d->var]);
+        domain_add(&t->domains[d->var], d->value);
+        solver_touch(t, d->var);
+    }
+    bool forced = solver_propagate(t) && solver_value(t, var) == value;
+    solver_free(t);
+    free(t);
+    return forced;
+}
+
+static bool levelset_same(const LevelSet *a, const LevelSet *b) {
+    return memcmp(a, b, sizeof(LevelSet)) == 0;
+}
+
+/* The decisions "depends on:" lists, counted by their " = ". */
+static int printed_depends(const TestRun *r, const Explanation *e) {
+    test_output_dir();
+    FILE *f = fopen("output/tests/minimal.txt", "w");
+    CHECK(f != NULL);
+    explain_print(f, &r->state, e);
+    CHECK(fclose(f) == 0);
+    char *text = test_slurp("output/tests/minimal.txt", NULL);
+    char *line = strstr(text, "depends on: ");
+    CHECK(line != NULL);
+    int n = 0;
+    for (char *p = line; *p != '\n' && *p != '\0'; p++) n += strncmp(p, " = ", 3) == 0;
+    free(text);
+    return n;
+}
+
+/* Every forced value's minimal set is part of its reason, forces the value
+ * by propagation alone, and no longer does without any one of its
+ * decisions. A reason that cannot force the value by propagation is kept
+ * whole. Counts the sets strictly smaller than their reason, and the
+ * reasons kept. */
+static void check_minimal(const TestRun *r, int *smaller, int *kept) {
+    *smaller = 0;
+    *kept = 0;
+    for (int v = 0; v < r->model.nvars; v++) {
+        Explanation e;
+        explain_var(&r->state, v, &e);
+        if (e.status != WHY_FORCED || !e.minimized) {
+            CHECK(levelset_same(&e.minimal, &e.reason));
+            if (e.status == WHY_FORCED) {
+                CHECK(!forces_alone(r, &e.reason, v, e.value));
+                (*kept)++;
+            }
+            continue;
+        }
+        LevelSet both = e.reason;
+        levelset_union(&both, &e.minimal);
+        CHECK(levelset_same(&both, &e.reason));
+        CHECK(forces_alone(r, &e.minimal, v, e.value));
+        for (int l = 1; l <= r->state.level; l++) {
+            if (!levelset_has(&e.minimal, l)) continue;
+            LevelSet less = e.minimal;
+            levelset_remove(&less, l);
+            CHECK(!forces_alone(r, &less, v, e.value));
+        }
+        if (levelset_count(&e.minimal) < levelset_count(&e.reason)) {
+            (*smaller)++;
+            CHECK(printed_depends(r, &e) == levelset_count(&e.minimal));
+        }
+    }
+}
+
+static void test_minimal(void) {
+    int smaller;
+    int kept;
+    /* the forced note here rests on three decisions, two of which force it */
+    PieceConfig c = test_config();
+    test_set(&c, "voices=3");
+    TestRun *r = test_solve(&c);
+    CHECK(r->status == SOLVE_SAT);
+    check_minimal(r, &smaller, &kept);
+    CHECK(smaller >= 1);
+    CHECK(kept == 0);
+    test_close(r);
+
+    c = test_config();
+    test_set(&c, "rhythm=1");
+    r = test_solve(&c);
+    CHECK(r->status == SOLVE_SAT);
+    check_minimal(r, &smaller, &kept);
+    CHECK(smaller >= 1);
+    test_close(r);
+
+    /* the search's refutations did part of the work for some forced values,
+     * so propagation from their whole reason does not force them */
+    c = test_config();
+    test_set(&c, "var_order=index");
+    test_set(&c, "voices=3");
+    test_set(&c, "length=24");
+    test_set(&c, "delay=2");
+    test_set(&c, "consonance=all");
+    test_set(&c, "range_low=55");
+    test_set(&c, "range_high=76");
+    r = test_solve(&c);
+    CHECK(r->status == SOLVE_SAT);
+    check_minimal(r, &smaller, &kept);
+    CHECK(smaller >= 1);
+    CHECK(kept >= 1);
+    test_close(r);
+}
+
 int main(void) {
     test_levelsets();
     test_log();
     test_restore();
     test_explanations();
     test_refutation();
+    test_minimal();
     test_breakdowns();
     test_open_variables();
     printf("ok\n");

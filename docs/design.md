@@ -245,6 +245,15 @@ changes which steps are strong for every voice), and form as a state machine.
   variable's status, the rule that removed each other value, and the decisions a
   forced value rests on. For a chosen value, the ranked candidates and each soft
   rule's share of their costs.
+- **Minimal explanations**: the decisions behind a forced value's removals are
+  an over-approximation, since a decision's own reason includes whatever shaped
+  its domain before it was made. They are replayed from the root with
+  propagation alone and cut by deletion, latest first: a decision goes when the
+  rest still force the value. Propagation only removes more values as decisions
+  are added, so the set left is minimal: it forces the value, and without any one
+  of its decisions it does not. When all of them together do not force the value
+  (the search's refutations or learned conflicts did part of the work), the full
+  set is shown. The cost is one propagation per decision in the reason.
 - **Unsat core**: deletion over the rules in use. A rule stays in the core only if
   the problem becomes solvable without it.
 - **Counterfactual**: with a lock or given notes, the same rules are solved without
@@ -262,11 +271,11 @@ changes which steps are strong for every voice), and form as a state machine.
   D4, x0 = C4)`. A rule that touches a note still to be chosen is never judged, so
   nothing is reported that a completion could still satisfy.
 
-**Built.** **Partly built**: the decisions a forced value "depends on" are an
-over-approximation, not a minimal explanation, and contradiction certificates are the
-unsat core plus the last removal, naming broken rule instances only for given notes.
-**Not built**: measuring how much the rest of the piece changes when a note is
-perturbed (sensitivity lists only the viable values).
+**Built**, with forced values explained minimally under propagation. **Partly
+built**: contradiction certificates are the unsat core plus the last removal, naming
+broken rule instances only for given notes. **Not built**: measuring how much the
+rest of the piece changes when a note is perturbed (sensitivity lists only the viable
+values).
 
 ## 12. Interface
 
