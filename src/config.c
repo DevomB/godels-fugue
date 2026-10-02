@@ -177,6 +177,20 @@ static void print_note_word(int v, char *buf, size_t cap) {
     }
 }
 
+static bool parse_unset_word(const char *w, int *out) {
+    if (strcmp(w, "?") != 0) return false;
+    *out = -1;
+    return true;
+}
+
+static void print_unset_word(int v, char *buf, size_t cap) {
+    if (v < 0) {
+        snprintf(buf, cap, "?");
+    } else {
+        snprintf(buf, cap, "%d", v);
+    }
+}
+
 static bool parse_motif_word(const char *w, int *out) {
     if (strcmp(w, "off") != 0) return false;
     *out = -128;
@@ -299,6 +313,13 @@ static const KeyDef keys[] = {
      "tonic-triad notes."},
     {"poly_meter", F(poly_meter), 1, 0, 1, 0, NULL, NULL, "rules",
      "Treat every third step as strong as well as every fourth."},
+    {"mirror", F(mirror), 1, 0, 1, 0, NULL, NULL, "rules",
+     "Make the melody its own retrograde inversion: notes i and length - 1 - i sum to "
+     "2 * mirror_axis, a rest pairs only with a rest, and an odd length has the axis "
+     "itself as its middle note. Only pitches are mirrored, not ties."},
+    {"mirror_axis", F(mirror_axis), 1, 1, 127, 66, NULL, NULL, "rules",
+     "MIDI pitch the mirror reflects around; it must lie within range_low..range_high. "
+     "The second degree of a major key keeps every scale note (D for C major)."},
 
     {"rhythm", F(rhythm), 1, 0, 1, 0, NULL, NULL, "rhythm",
      "Let notes be tied into longer values and let rests appear."},
@@ -339,7 +360,14 @@ static const KeyDef keys[] = {
     {"w_gravity", F(w_gravity), 1, 0, 100, 1, NULL, NULL, "energy",
      "Cost of unstable scale degrees (leading tone high, tonic low)."},
     {"w_curve", F(w_curve), 1, 0, 100, 1, NULL, NULL, "energy",
-     "Cost of straying from an arch-shaped tension curve."},
+     "Cost per unit of difference between a melody note's gravity and its target on the "
+     "tension curve."},
+    {"tension", F(tension), OPEN(MELODY_MAX), -1, 4, -1, parse_unset_word,
+     print_unset_word, "energy",
+     "The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as "
+     "points spread evenly from the first melody note to the last; notes between points "
+     "take the straight line between them, rounded. 0 4 0 peaks in the middle, one value "
+     "is flat, a ? point is filled in from its neighbours, and all ? is an arch."},
     {"w_leap", F(w_leap), 1, 0, 100, 1, NULL, NULL, "energy",
      "Cost per four semitones of melodic interval."},
     {"w_repeat", F(w_repeat), 1, 0, 100, 4, NULL, NULL, "energy",
@@ -894,6 +922,14 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap) {
     }
     if (config->cadence && config->length < 2) {
         snprintf(err, cap, "invalid cadence: needs a melody of two notes or more");
+        return false;
+    }
+    /* two notes mirrored around the axis lie on either side of it (an odd
+     * length's middle note on it), so both fit the range only if it does */
+    if (config->mirror &&
+        (config->mirror_axis < config->range_low || config->mirror_axis > config->range_high)) {
+        snprintf(err, cap, "invalid mirror_axis: %d is outside range_low..range_high",
+                 config->mirror_axis);
         return false;
     }
     if (config->delay_search && config->delay_min > config->delay_max) {

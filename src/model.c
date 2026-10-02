@@ -14,7 +14,7 @@ const char *rule_name(int rule) {
         "consonance", "parallel fifth", "parallel octave", "spacing",
         "crossing",   "chord tone", "progression",     "cadence",
         "tie",        "max hold",   "rest",            "lock",
-        "modulation", "search",     "learned conflict"};
+        "modulation", "mirror",     "search",          "learned conflict"};
     if (rule <= 0 || rule >= CID_MAX) return "unknown";
     return names[rule];
 }
@@ -523,6 +523,25 @@ static void build_rhythm_rules(Builder *b) {
     }
 }
 
+/* The melody is its own retrograde inversion: note i and note
+ * length - 1 - i mirror each other around the axis, and the middle note
+ * of an odd length mirrors itself, so it is the axis. */
+static void build_mirror_rules(Builder *b) {
+    Model *m = b->m;
+    const PieceConfig *c = &m->config;
+    if (!c->mirror) return;
+    for (int i = 0; i <= c->length - 1 - i; i++) {
+        int j = c->length - 1 - i;
+        Constraint *r = add_con(b, CID_MIRROR, C_MIRROR);
+        add_slot(r, m->pitch[i], -1);
+        if (j != i) add_slot(r, m->pitch[j], -1);
+        if (r != NULL) {
+            r->param = c->mirror_axis;
+            r->time = i;
+        }
+    }
+}
+
 static void build_key_rules(Builder *b) {
     Model *m = b->m;
     const PieceConfig *c = &m->config;
@@ -560,7 +579,10 @@ static void build_terms(Builder *b) {
         t = add_term(b, TERM_CURVE, c->w_curve);
         add_slot(t, m->pitch[i], 0);
         add_slot(t, key, -1);
-        if (t != NULL) t->time = i;
+        if (t != NULL) {
+            t->time = i;
+            t->param = tension_curve(c->tension, MELODY_MAX, i, length);
+        }
         if (corpus) {
             t = add_term(b, TERM_CORPUS, 1);
             add_slot(t, m->pitch[i], 0);
@@ -765,6 +787,7 @@ bool model_build(Model *m, const PieceConfig *config, char *err, size_t cap) {
     build_harmony_rules(&b);
     build_cadence_rules(&b);
     build_rhythm_rules(&b);
+    build_mirror_rules(&b);
     build_key_rules(&b);
     build_terms(&b);
     if (b.oom || !model_link(m)) {
@@ -939,6 +962,13 @@ bool constraint_holds(const Model *m, const Constraint *c, const int *vals) {
         return keys_closely_related(slot_value(c, vals, 0), slot_value(c, vals, 1));
     case C_SAME_MODE:
         return key_mode(slot_value(c, vals, 0)) == key_mode(slot_value(c, vals, 1));
+    case C_MIRROR: {
+        int a = slot_value(c, vals, 0);
+        if (c->nslots == 1) return a == c->param;
+        int b = slot_value(c, vals, 1);
+        if (a == PITCH_REST || b == PITCH_REST) return a == b;
+        return a + b == 2 * c->param;
+    }
     case C_MAX_RESTS:
     default:
         return true;
@@ -959,7 +989,7 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
         if (p == PITCH_REST) return 0;
         int g = pitch_gravity(p, slot_value(t, vals, 1));
         if (t->rule == TERM_GRAVITY) return w * g;
-        return w * iabs(g - tension_target(t->time, cfg->length));
+        return w * iabs(g - t->param); /* param: the curve's target */
     }
     case TERM_CORPUS: {
         int p = slot_value(t, vals, 0);
@@ -1235,6 +1265,17 @@ void constraint_describe(const Model *m, const Constraint *c, char *buf, size_t 
     case C_SAME_MODE:
         snprintf(buf, cap, "both keys share a mode");
         break;
+    case C_MIRROR: {
+        char axis[16];
+        key_pitch_name(fixed_key(m), c->param, axis, sizeof(axis));
+        if (c->nslots == 1) {
+            snprintf(buf, cap, "the middle note %d is the mirror axis %s", c->time, axis);
+        } else {
+            snprintf(buf, cap, "notes %d and %d mirror each other around %s", c->time,
+                     cfg->length - 1 - c->time, axis);
+        }
+        break;
+    }
     default:
         snprintf(buf, cap, "%s", rule_name(c->rule));
         break;

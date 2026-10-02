@@ -65,6 +65,8 @@ style preset first, so every other key in the file overrides it.
 | `progression` | 1 | 0..1 | With harmony, consecutive bar chords follow the usual root progressions. |
 | `cadence` | 1 | 0..1 | End on the tonic, approached from the dominant triad; followers end on tonic-triad notes. |
 | `poly_meter` | 0 | 0..1 | Treat every third step as strong as well as every fourth. |
+| `mirror` | 0 | 0..1 | Make the melody its own retrograde inversion: notes i and length - 1 - i sum to 2 * mirror_axis, a rest pairs only with a rest, and an odd length has the axis itself as its middle note. Only pitches are mirrored, not ties. |
+| `mirror_axis` | 66 | 1..127 | MIDI pitch the mirror reflects around; it must lie within range_low..range_high. The second degree of a major key keeps every scale note (D for C major). |
 
 ### Rhythm
 
@@ -96,7 +98,8 @@ style preset first, so every other key in the file overrides it.
 | `anneal_steps` | 0 | 0..1000 | Decisions over which the linear schedule cools (0 = off). |
 | `anneal_ratio` | 0 | 0..99 | Geometric schedule: temperature *= ratio / 100 per decision (0 = off). |
 | `w_gravity` | 1 | 0..100 | Cost of unstable scale degrees (leading tone high, tonic low). |
-| `w_curve` | 1 | 0..100 | Cost of straying from an arch-shaped tension curve. |
+| `w_curve` | 1 | 0..100 | Cost per unit of difference between a melody note's gravity and its target on the tension curve. |
+| `tension` | ? | up to 32 values | The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as points spread evenly from the first melody note to the last; notes between points take the straight line between them, rounded. 0 4 0 peaks in the middle, one value is flat, a ? point is filled in from its neighbours, and all ? is an arch. |
 | `w_leap` | 1 | 0..100 | Cost per four semitones of melodic interval. |
 | `w_repeat` | 4 | 0..100 | Cost of striking the same pitch twice in a row. |
 | `w_recover` | 2 | 0..100 | Cost of not stepping back after a leap larger than a third. |

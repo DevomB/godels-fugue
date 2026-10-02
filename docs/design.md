@@ -82,11 +82,13 @@ applies; the engine never enumerates it.
 | tie / max hold / rests | a tie that changes pitch or holds a rest, a note held too long, more than `max_rests` rests | Built |
 | modulation | a searched second key that is not closely related to the first | Built |
 | lock | a locked note, or a note given by `melody`, taking any other pitch | Built |
+| mirror | a melody that is not its own retrograde inversion around `mirror_axis` $a$: $x_i + x_{N-1-i} = 2a$, a rest pairs only with a rest, and an odd length's middle note is $a$ | Built |
 
 Rules from the design that are **not built**: suspensions and their resolution,
-chordal sevenths resolving, a registral-centre invariant, and symmetry constraints ($x_i + x_{N-1-i} = 2a$) with controlled symmetry
-breaking. Direct (hidden) fifths and octaves are a soft cost rather than a rule, and
-so is the motion balance between voices (`w_contrary`).
+chordal sevenths resolving, a registral-centre invariant, and controlled symmetry
+breaking (a mirror melody with a few pairs allowed off the axis). Direct (hidden)
+fifths and octaves are a soft cost rather than a rule, and so is the motion balance
+between voices (`w_contrary`).
 
 ## 5. Energy
 
@@ -97,7 +99,9 @@ can be broken down by rule (`report.txt`, `score.html`):
 
 - **gravity** – tonal potential of each scale degree (tonic and mediant stable,
   leading tone and chromatic notes unstable), relative to the key in force;
-- **curve** – distance from an arch-shaped tension target over the melody;
+- **curve** – distance from a tension target over the melody: a built-in arch, or the
+  curve drawn with `tension`, whose points spread evenly over the melody and are
+  joined by straight lines;
 - **leap**, **repeat**, **recovery** – interval size, striking a pitch twice, and
   failing to step back after a leap larger than a third;
 - **motif** – breaking a repeating interval pattern;
@@ -126,9 +130,9 @@ the melody, everything outside it is fixed to the best piece so far, and branch 
 bound looks for a strictly cheaper piece inside the window. The best piece is replayed
 from the root so the proof describes it.
 
-**Built.** **Not built**: tension curves the user draws, emergent motif detection and
-"motif pressure" that reinforces discovered motifs, rule weights that change with
-musical form, and weights learned from example pieces.
+**Built.** **Not built**: emergent motif detection and "motif pressure" that
+reinforces discovered motifs, rule weights that change with musical form, and
+weights learned from example pieces.
 
 ## 6. Information and entropy
 

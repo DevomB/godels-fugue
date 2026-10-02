@@ -411,3 +411,30 @@ int tension_target(int index, int length) {
     if (index > length - 1) index = length - 1;
     return arch[index * 11 / (length - 1)];
 }
+
+int tension_curve(const int *points, int count, int index, int length) {
+    int n = 0; /* points up to the last one given */
+    for (int k = 0; k < count; k++) {
+        if (points[k] >= 0) n = k + 1;
+    }
+    if (n == 0) return tension_target(index, length);
+    if (length < 1) length = 1;
+    if (index < 0) index = 0;
+    if (index > length - 1) index = length - 1;
+    /* the note sits at at / den points along the curve */
+    int den = length > 1 ? length - 1 : 1;
+    int at = index * (n - 1);
+    int before = -1;
+    int after = -1;
+    for (int k = 0; k < n; k++) {
+        if (points[k] < 0) continue;
+        if (k * den <= at) before = k;
+        if (k * den >= at && after < 0) after = k;
+    }
+    if (before < 0) return points[after];
+    if (after == before) return points[before];
+    int span = (after - before) * den;
+    int part = at - before * den;
+    int scaled = points[before] * (span - part) + points[after] * part;
+    return (2 * scaled + span) / (2 * span); /* nearest, halves up */
+}

@@ -226,6 +226,33 @@ static void test_transforms_and_costs(void) {
     CHECK(tension_target(11, 12) == 0);
 }
 
+/* A drawn curve spreads its points from the first note to the last and
+ * rounds the straight line between them, halves up. */
+static void test_tension_curve(void) {
+    const int none[3] = {-1, -1, -1};
+    for (int i = 0; i < 12; i++) CHECK(tension_curve(none, 3, i, 12) == tension_target(i, 12));
+    const int peak[3] = {0, 4, 0};
+    const int want[12] = {0, 1, 1, 2, 3, 4, 4, 3, 2, 1, 1, 0};
+    for (int i = 0; i < 12; i++) CHECK(tension_curve(peak, 3, i, 12) == want[i]);
+    const int flat[2] = {2, -1};
+    CHECK(tension_curve(flat, 2, 0, 12) == 2 && tension_curve(flat, 2, 11, 12) == 2);
+    const int full[4] = {3, 0, 4, 1};
+    for (int i = 0; i < 4; i++) CHECK(tension_curve(full, 4, i, 4) == full[i]);
+    const int rise[2] = {0, 1};
+    const int fall[2] = {1, 0};
+    CHECK(tension_curve(rise, 2, 1, 3) == 1 && tension_curve(fall, 2, 1, 3) == 1);
+    /* a ? point takes the line between its neighbours, or the nearest
+     * given point before the first one */
+    const int gap[3] = {0, -1, 4};
+    CHECK(tension_curve(gap, 3, 1, 3) == 2);
+    const int late[3] = {-1, -1, 3};
+    CHECK(tension_curve(late, 3, 0, 5) == 3);
+    /* more points than notes: each note takes the curve where it falls */
+    const int many[5] = {0, 1, 2, 3, 4};
+    CHECK(tension_curve(many, 5, 1, 3) == 2 && tension_curve(many, 5, 2, 3) == 4);
+    CHECK(tension_curve(many, 5, 0, 1) == 0);
+}
+
 static void check_name(int key, int pitch, const char *want) {
     char buf[16];
     key_pitch_name(key, pitch, buf, sizeof(buf));
@@ -263,6 +290,7 @@ int main(void) {
     test_chords();
     test_intervals();
     test_transforms_and_costs();
+    test_tension_curve();
     printf("ok\n");
     return 0;
 }

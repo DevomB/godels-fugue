@@ -54,6 +54,8 @@ typedef struct PieceConfig {
     int progression;
     int cadence;
     int poly_meter;
+    int mirror;
+    int mirror_axis;
     /* rhythm */
     int rhythm;
     int max_hold;
@@ -74,6 +76,7 @@ typedef struct PieceConfig {
     int anneal_ratio;
     int w_gravity;
     int w_curve;
+    int tension[MELODY_MAX]; /* points of the target curve, or -1 = ? */
     int w_leap;
     int w_repeat;
     int w_recover;

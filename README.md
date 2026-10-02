@@ -87,15 +87,17 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   against over-long notes and costs for syncopation and plain runs of quarter notes.
 - **Rules you can turn on or off**: consonance, parallel fifths and octaves, maximum
   leap, voice spacing and crossing, cadence, leading tones rising to the tonic
-  (`leading_tone`), and no two large leaps in a row in one direction (`double_leaps 0`).
+  (`leading_tone`), no two large leaps in a row in one direction (`double_leaps 0`),
+  and a mirror melody that is its own retrograde inversion (it sounds the same
+  backwards and upside down).
 - **Given notes**: fix any notes of the melody and the solver completes the rest, or
   give the whole melody, typed in or read from a MIDI file, to check it against the
   rules and see what it costs.
-- **Soft preferences** that rank the legal choices: stable scale degrees, an arch of
-  tension, small leaps, few repeated notes, recovering after a leap, a repeating motif,
-  contrary rather than similar motion between voices (`w_contrary`), pitch-class
-  weights learned from a corpus, and more. Their sum is the piece's
-  *energy*.
+- **Soft preferences** that rank the legal choices: stable scale degrees, a tension
+  curve you draw (an arch unless you give one), small leaps, few repeated notes,
+  recovering after a leap, a repeating motif, contrary rather than similar motion
+  between voices (`w_contrary`), pitch-class weights learned from a corpus, and more.
+  Their sum is the piece's *energy*.
 - **Search** with minimum-remaining-values, entropy or look-ahead variable ordering,
   conflict-directed backjumping, learned conflicts, node and time limits, and a
   neighbourhood optimizer that lowers the energy after the first solution.

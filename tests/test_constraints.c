@@ -563,6 +563,83 @@ static void test_counterpoint(void) {
     test_close(r);
 }
 
+/* Mirror: a note fixes its partner at the other end of the melody, and
+ * the middle note of an odd length is the axis. */
+static void test_mirror(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "mirror=1");
+    test_set(&c, "mirror_axis=62");
+    test_set(&c, "range_low=50");
+    test_set(&c, "range_high=74");
+    test_set(&c, "cadence=0");
+    TestRun *r = test_open(&c);
+    int x0 = r->model.pitch[0];
+    int x11 = r->model.pitch[11];
+    test_only(r, x0, 67);
+    CHECK(solver_propagate(&r->state));
+    CHECK(domain_count(&r->state.domains[x11]) == 1 && has(r, x11, 57)); /* G4 mirrors to A3 */
+    const ProofEvent *e = test_removal(r, x11, 60);
+    CHECK(e != NULL && e->rule == CID_MIRROR);
+    CHECK(e->parent_count == 1);
+    CHECK(e->parent_vars[0] == x0 && e->parent_values[0] == 67);
+    char why[128];
+    constraint_describe(&r->model, &r->model.cons[e->constraint], why, sizeof(why));
+    CHECK(strstr(why, "notes 0 and 11 mirror each other around D4") != NULL);
+    /* D4 maps C major onto itself, so a free pair keeps the whole range */
+    int x5 = r->model.pitch[5];
+    CHECK(has(r, x5, 50) && has(r, x5, 62) && has(r, x5, 74));
+    test_close(r);
+
+    /* with the range lopsided around the axis, a note whose image falls
+     * below range_low goes, by the mirror rule */
+    test_set(&c, "range_low=55");
+    r = test_open(&c);
+    CHECK(solver_propagate(&r->state));
+    x5 = r->model.pitch[5];
+    CHECK(!has(r, x5, 72) && removed_by(r, x5, 72) == CID_MIRROR); /* image 52 */
+    CHECK(has(r, x5, 69));                                         /* image 55 */
+    test_close(r);
+
+    /* rests pair with rests */
+    c = test_config();
+    test_set(&c, "mirror=1");
+    test_set(&c, "rhythm=1");
+    test_set(&c, "cadence=0");
+    r = test_open(&c);
+    test_only(r, r->model.pitch[3], PITCH_REST);
+    CHECK(solver_propagate(&r->state));
+    CHECK(domain_value(&r->state.domains[r->model.pitch[8]]) == PITCH_REST);
+    CHECK(!has(r, r->model.pitch[2], PITCH_REST)); /* max_rests 2 are used up */
+    test_close(r);
+
+    /* an odd length forces the middle note onto the axis */
+    c = test_config();
+    test_set(&c, "mirror=1");
+    test_set(&c, "mirror_axis=62");
+    test_set(&c, "range_low=50");
+    test_set(&c, "range_high=74");
+    test_set(&c, "length=11");
+    test_set(&c, "cadence=0");
+    r = test_open(&c);
+    CHECK(solver_propagate(&r->state));
+    x5 = r->model.pitch[5];
+    CHECK(domain_value(&r->state.domains[x5]) == 62);
+    e = test_removal(r, x5, 64);
+    CHECK(e != NULL && e->rule == CID_MIRROR && e->parent_count == 0);
+    test_close(r);
+
+    /* given notes that are not each other's mirror image cannot both stand */
+    c = test_config();
+    test_set(&c, "mirror=1");
+    test_set(&c, "cadence=0");
+    test_set(&c, "melody=60,?,?,?,?,?,?,?,?,?,?,71");
+    r = test_open(&c);
+    CHECK(!solver_propagate(&r->state));
+    int failed = r->state.failed_variable;
+    CHECK(failed == r->model.pitch[0] || failed == r->model.pitch[11]);
+    test_close(r);
+}
+
 int main(void) {
     test_scale_and_range();
     test_leap();
@@ -576,6 +653,7 @@ int main(void) {
     test_lock();
     test_spacing_and_crossing();
     test_counterpoint();
+    test_mirror();
     printf("ok\n");
     return 0;
 }

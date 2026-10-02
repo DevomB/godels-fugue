@@ -33,6 +33,7 @@ enum {
     CID_REST,
     CID_LOCK,
     CID_MODULATION,
+    CID_MIRROR,
     CID_REFUTED, /* the search tried the value and every completion failed */
     CID_LEARNED, /* a learned conflict excluded the value */
     CID_MAX
@@ -85,7 +86,8 @@ enum {
     C_KEY_RELATION,     /* (key, key) closely related */
     C_SAME_MODE,        /* (key, key) same mode */
     C_LEADING_TONE,     /* (pitch, next pitch, key[, next tie]) the melody */
-    C_DOUBLE_LEAP       /* (pitch, pitch, pitch) consecutive notes of one voice */
+    C_DOUBLE_LEAP,      /* (pitch, pitch, pitch) consecutive notes of one voice */
+    C_MIRROR            /* (pitch, pitch) mirrored around param; one slot: the middle note */
 };
 
 enum { SCOPE_MAX = 8, SLOT_MAX = 8 };

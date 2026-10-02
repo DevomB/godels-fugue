@@ -1,0 +1,11 @@
+# A mirror melody: played backwards and upside down, it is itself. Notes
+# i and 11 - i lie as far below D4 (62) as above it. D is the axis that
+# maps C major onto itself, so the final C mirrors an opening E and the
+# cadence still holds.
+length 12
+voices 2
+delay 4
+range_low 50
+range_high 74
+mirror 1
+mirror_axis 62

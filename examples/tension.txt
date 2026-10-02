@@ -1,0 +1,11 @@
+# A tension curve drawn by hand: calm at the start, rising to a peak
+# about two thirds of the way through, then settling for the cadence.
+# The six points spread over the twelve notes, so the targets run
+# 0 0 1 1 2 3 3 4 3 2 1 0 on the gravity scale: 0 tonic or third, 1 fifth,
+# 3 leading tone, 4 outside the key. The scale rule forbids 4, so the
+# peak asks for the least stable notes the key has.
+length 12
+voices 2
+delay 4
+w_curve 3
+tension 0 1 2 4 2 0

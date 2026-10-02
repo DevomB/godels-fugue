@@ -121,6 +121,112 @@ static const Constraint *find(const Model *m, int type, int time) {
     return NULL;
 }
 
+/* The curve term of each note carries its target: the arch until a
+ * curve is drawn, then the drawn curve stretched over the melody. */
+static void check_targets(const PieceConfig *c, const int *want) {
+    TestRun *r = test_open(c);
+    int seen = 0;
+    for (int k = 0; k < r->model.nterms; k++) {
+        const Constraint *t = &r->model.terms[k];
+        if (t->rule != TERM_CURVE) continue;
+        CHECK(t->param == want[t->time]);
+        seen++;
+    }
+    CHECK(seen == c->length);
+    test_close(r);
+}
+
+static void test_tension(void) {
+    PieceConfig c = test_config();
+    int arch[12];
+    for (int i = 0; i < 12; i++) arch[i] = tension_target(i, 12);
+    check_targets(&c, arch);
+    test_set(&c, "tension=0 4 0");
+    const int peak[12] = {0, 1, 1, 2, 3, 4, 4, 3, 2, 1, 1, 0};
+    check_targets(&c, peak);
+    test_set(&c, "tension=3");
+    const int flat[12] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3};
+    check_targets(&c, flat);
+    test_set(&c, "tension=0,1,2,3,4,4,3,2,1,0,1,2");
+    const int full[12] = {0, 1, 2, 3, 4, 4, 3, 2, 1, 0, 1, 2};
+    check_targets(&c, full);
+
+    /* the cost is the distance from the target: E (gravity 0) under a
+     * target of 3 costs three times w_curve */
+    test_set(&c, "w_curve=2");
+    TestRun *r = test_open(&c);
+    const Constraint *t = NULL;
+    for (int k = 0; k < r->model.nterms; k++) {
+        if (r->model.terms[k].rule == TERM_CURVE && r->model.terms[k].time == 3)
+            t = &r->model.terms[k];
+    }
+    CHECK(t != NULL);
+    int v[SCOPE_MAX];
+    v[t->slot[0]] = 64;
+    v[t->slot[1]] = key_id(0, MODE_MAJOR);
+    CHECK(term_cost(&r->model, t, v) == 6);
+    v[t->slot[0]] = 71; /* B, gravity 3 */
+    CHECK(term_cost(&r->model, t, v) == 0);
+    test_close(r);
+}
+
+/* One mirror constraint per pair of notes, and the middle note of an
+ * odd length alone. */
+static void test_mirror(void) {
+    PieceConfig c = test_config();
+    TestRun *r = test_open(&c);
+    CHECK(count_rule(&r->model, CID_MIRROR) == 0);
+    test_close(r);
+    CHECK(strcmp(rule_name(CID_MIRROR), "mirror") == 0);
+    CHECK(strcmp(rule_name(CID_MODULATION), "modulation") == 0);
+    CHECK(strcmp(rule_name(CID_REFUTED), "search") == 0);
+    CHECK(strcmp(rule_name(CID_LEARNED), "learned conflict") == 0);
+
+    test_set(&c, "mirror=1");
+    r = test_open(&c);
+    const Model *m = &r->model;
+    CHECK(count_rule(m, CID_MIRROR) == 6);
+    CHECK(model_rule_used(m, CID_MIRROR));
+    const Constraint *pair = find(m, C_MIRROR, 2);
+    CHECK(pair != NULL && pair->n == 2 && pair->nslots == 2 && pair->param == 66);
+    CHECK(pair->vars[0] == m->pitch[2] && pair->vars[1] == m->pitch[9]);
+    int v[SCOPE_MAX];
+    v[0] = 60;
+    v[1] = 72;
+    CHECK(constraint_holds(m, pair, v));
+    v[1] = 71;
+    CHECK(!constraint_holds(m, pair, v));
+    v[0] = PITCH_REST;
+    CHECK(!constraint_holds(m, pair, v)); /* a rest pairs only with a rest */
+    v[1] = PITCH_REST;
+    CHECK(constraint_holds(m, pair, v));
+    v[0] = 66;
+    v[1] = 66;
+    CHECK(constraint_holds(m, pair, v));
+    char why[128];
+    constraint_describe(m, pair, why, sizeof(why));
+    CHECK(strstr(why, "notes 2 and 9 mirror each other around F#4") != NULL);
+    test_close(r);
+
+    test_set(&c, "length=13");
+    test_set(&c, "rhythm=1");
+    r = test_open(&c);
+    m = &r->model;
+    CHECK(count_rule(m, CID_MIRROR) == 7);
+    const Constraint *middle = find(m, C_MIRROR, 6);
+    CHECK(middle != NULL && middle->n == 1 && middle->nslots == 1);
+    CHECK(middle->vars[0] == m->pitch[6]);
+    v[0] = 66;
+    CHECK(constraint_holds(m, middle, v));
+    v[0] = 67;
+    CHECK(!constraint_holds(m, middle, v));
+    v[0] = PITCH_REST;
+    CHECK(!constraint_holds(m, middle, v)); /* the middle note is the axis itself */
+    constraint_describe(m, middle, why, sizeof(why));
+    CHECK(strstr(why, "middle note 6") != NULL);
+    test_close(r);
+}
+
 static void test_predicates(void) {
     PieceConfig c = test_config();
     test_set(&c, "rhythm=1");
@@ -232,6 +338,7 @@ static void test_energy(void) {
         {"rhythm=1", "harmony=1", "w_motif=3", "motif_a=2", "motif_b=-1", NULL},
         {"key=search", "mode=search", "modulate_at=6", "pc_weight=0,1,2,3,4,5,6,7,8,9,10,11", NULL},
         {"poly_meter=1", "rhythm=1", "voices=3", NULL},
+        {"tension=0,?,4,1", "w_curve=3", "mirror=1", "rhythm=1", NULL},
     };
     for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
         PieceConfig c = test_config();
@@ -288,6 +395,8 @@ int main(void) {
     test_variables();
     test_voice_transpose();
     test_predicates();
+    test_tension();
+    test_mirror();
     test_energy();
     printf("ok\n");
     return 0;

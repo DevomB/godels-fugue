@@ -138,33 +138,16 @@ static int run_analysis(const PieceConfig *config, long count_max, bool sensitiv
     return exit_code;
 }
 
-/* An inversion axis that maps the key onto other notes leaves the
- * scale rule few pitches to choose from; say so and suggest one. */
-static void warn_about_axis(const PieceConfig *c) {
-    if (!c->invert || c->key < 0 || c->mode < 0) return;
-    int key = key_id(c->key, c->mode);
+/* An inversion or mirror axis that maps the key onto other notes leaves
+ * the scale rule few pitches to choose from; say so, and suggest the axis
+ * better (-1 for none) that keeps them all. */
+static void warn_axis(int key, const char *verb, int axis, int kept, int better) {
     int size = key_scale_size(key);
-    /* count for the follower that keeps the fewest; an axis that keeps
-     * them all untransposed also does after a diatonic transposition, so
-     * an axis is suggested only when every follower shares one shift */
-    int shift = c->diatonic ? 0 : canon_transpose(c, 1);
-    bool one_shift = true;
-    int kept = size;
-    for (int v = 1; v < config_voice_count(c); v++) {
-        if (!c->diatonic && canon_transpose(c, v) != shift) one_shift = false;
-        int k = 0;
-        for (int pc = 0; pc < 12; pc++) {
-            if (key_has_pitch(key, pc) && key_has_pitch(key, canon_sounding(c, v, 60 + pc)))
-                k++;
-        }
-        if (k < kept) kept = k;
-    }
     if (kept == size) return;
     char name[32];
     key_name(key, name, sizeof(name));
-    fprintf(stderr, "note: inverting around axis %d keeps %d of %d notes of %s in the key",
-            c->axis, kept, size, name);
-    int better = one_shift ? inversion_nearest_axis(key, c->axis, shift) : -1;
+    fprintf(stderr, "note: %s around axis %d keeps %d of %d notes of %s in the key", verb,
+            axis, kept, size, name);
     if (better >= 0) fprintf(stderr, "; axis %d keeps them all", better);
     fprintf(stderr, "\n");
 }
@@ -217,6 +200,35 @@ static bool melody_from_midi(PieceConfig *c, const char *path, char *err, size_t
     c->length = n;
     for (int i = 0; i < MELODY_MAX; i++) c->melody[i] = i < n ? steps[i] : -1;
     return true;
+}
+
+static void warn_about_axis(const PieceConfig *c) {
+    if (c->key < 0 || c->mode < 0) return;
+    int key = key_id(c->key, c->mode);
+    if (c->invert) {
+        /* count for the follower that keeps the fewest; an axis that keeps
+         * them all untransposed also does after a diatonic transposition, so
+         * an axis is suggested only when every follower shares one shift */
+        int shift = c->diatonic ? 0 : canon_transpose(c, 1);
+        bool one_shift = true;
+        int kept = key_scale_size(key);
+        for (int v = 1; v < config_voice_count(c); v++) {
+            if (!c->diatonic && canon_transpose(c, v) != shift) one_shift = false;
+            int k = 0;
+            for (int pc = 0; pc < 12; pc++) {
+                if (key_has_pitch(key, pc) && key_has_pitch(key, canon_sounding(c, v, 60 + pc)))
+                    k++;
+            }
+            if (k < kept) kept = k;
+        }
+        warn_axis(key, "inverting", c->axis, kept,
+                  one_shift ? inversion_nearest_axis(key, c->axis, shift) : -1);
+    }
+    if (c->mirror) {
+        warn_axis(key, "mirroring the melody", c->mirror_axis,
+                  inversion_kept(key, c->mirror_axis, 0),
+                  inversion_nearest_axis(key, c->mirror_axis, 0));
+    }
 }
 
 static bool need_value(int i, int argc, int count, const char *flag) {

@@ -99,6 +99,18 @@ static PieceConfig random_config(void) {
         c.key_second = -1;
         if (c.key == KEY_SEARCH) c.key = 0;
     }
+    if (pick(0, 5) == 0) {
+        /* half the time an axis that maps the key onto itself, if one is in range */
+        c.mirror = 1;
+        c.mirror_axis = pick(c.range_low, c.range_high);
+        if (c.key != KEY_SEARCH && pick(0, 1)) {
+            int keep = inversion_nearest_axis(key_id(c.key, c.mode), c.mirror_axis, 0);
+            if (keep >= c.range_low && keep <= c.range_high) c.mirror_axis = keep;
+        }
+    }
+    if (pick(0, 3) == 0) {
+        for (int k = pick(1, 6) - 1; k >= 0; k--) c.tension[k] = pick(-1, 4);
+    }
     return c;
 }
 
@@ -288,6 +300,14 @@ static void check_piece(const Model *m, const int *values) {
     for (int i = 0; i < c->length; i++) {
         if (c->melody[i] >= 0 && values[m->pitch[i]] != c->melody[i]) fail(c, "given note", i);
     }
+    /* mirror: read backwards and upside down, the melody is itself */
+    for (int i = 0; c->mirror && i < c->length; i++) {
+        int a = values[m->pitch[i]];
+        int b = values[m->pitch[c->length - 1 - i]];
+        bool rest = a == PITCH_REST || b == PITCH_REST;
+        if (rest ? a != b || 2 * i + 1 == c->length : a + b != 2 * c->mirror_axis)
+            fail(c, "mirror", i);
+    }
 
     if (c->cadence) {
         int last = c->length - 1;
@@ -316,6 +336,7 @@ static void check_piece(const Model *m, const int *values) {
 
 int main(void) {
     int solved = 0;
+    int mirrored = 0;
     int unsat = 0;
     int limited = 0;
     int sat_checked = 0;
@@ -326,6 +347,7 @@ int main(void) {
         TestRun *r = test_solve(&c);
         if (r->status == SOLVE_SAT) {
             solved++;
+            mirrored += c.mirror;
             check_piece(&r->model, r->values);
             /* the proof log's last word on every variable is its value */
             for (int v = 0; v < r->model.nvars; v++) CHECK(r->values[v] >= 0);
@@ -351,9 +373,10 @@ int main(void) {
         }
         test_close(r);
     }
-    printf("solved %d, unsat %d, limit %d, sat-checked %d\n", solved, unsat, limited,
-           sat_checked);
+    printf("solved %d (%d mirrored), unsat %d, limit %d, sat-checked %d\n", solved, mirrored,
+           unsat, limited, sat_checked);
     CHECK(solved >= 100);
+    CHECK(mirrored >= 3);
     CHECK(sat_checked >= 50);
 
     /* diatonic canons with each follower at its own scale step */

@@ -78,5 +78,10 @@ int diatonic_shift(int key, int pitch, int steps);
 
 int pitch_gravity(int pitch, int key);
 int tension_target(int index, int length);
+/* Target tension of note index from a drawn curve of count points, -1
+ * marking a point to fill in from its neighbours. The points spread
+ * evenly from the first note to the last, and a note between two takes
+ * the straight line between them, rounded. No point given: the arch. */
+int tension_curve(const int *points, int count, int index, int length);
 
 #endif

@@ -63,6 +63,22 @@ static void test_defaults_and_set(void) {
     CHECK(!config_set(&c, "melody", "60 x", err, sizeof(err)));
     CHECK(!config_set(&c, "melody", "", err, sizeof(err)));
     CHECK(!config_set(&c, "melody", "128", err, sizeof(err)));
+    /* tension: ? (the arch) everywhere until a curve is drawn; a short
+     * list leaves the later points ?, and a new list replaces the old */
+    CHECK(c.tension[0] == -1 && c.tension[MELODY_MAX - 1] == -1);
+    CHECK(config_set(&c, "tension", "0 4 0", err, sizeof(err)));
+    CHECK(c.tension[0] == 0 && c.tension[1] == 4 && c.tension[2] == 0 && c.tension[3] == -1);
+    CHECK(config_set(&c, "tension", "1,?,3", err, sizeof(err)));
+    CHECK(c.tension[0] == 1 && c.tension[1] == -1 && c.tension[2] == 3);
+    CHECK(config_set(&c, "tension", "?", err, sizeof(err)));
+    CHECK(c.tension[0] == -1 && c.tension[2] == -1);
+    CHECK(!config_set(&c, "tension", "5", err, sizeof(err)));
+    CHECK(!config_set(&c, "tension", "0 rest", err, sizeof(err)));
+    CHECK(config_set(&c, "mirror", "on", err, sizeof(err)));
+    CHECK(c.mirror == 1 && c.mirror_axis == 66);
+    CHECK(config_set(&c, "mirror_axis", "62", err, sizeof(err)));
+    CHECK(c.mirror_axis == 62);
+    CHECK(!config_set(&c, "mirror_axis", "0", err, sizeof(err)));
 
     CHECK(!config_set(&c, "voices", "9", err, sizeof(err)));
     CHECK(strstr(err, "voices") != NULL);
@@ -166,6 +182,26 @@ static void test_validation(void) {
     c.delay_min = 5;
     c.delay_max = 3;
     CHECK(!config_validate(&c, err, sizeof(err)));
+
+    /* mirrored notes straddle the axis, so it must be in range; given
+     * notes and an odd length are fine */
+    config_defaults(&c);
+    c.mirror = 1;
+    c.mirror_axis = 73;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "mirror_axis") != NULL);
+    c.mirror_axis = 59;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    c.mirror_axis = 72;
+    c.length = 13;
+    c.melody[0] = 72;
+    c.lock = 1;
+    c.lock_index = 12;
+    c.lock_pitch = 72;
+    CHECK(config_validate(&c, err, sizeof(err)));
+    c.mirror = 0;
+    c.mirror_axis = 100;
+    CHECK(config_validate(&c, err, sizeof(err)));
 }
 
 static void test_presets(void) {
@@ -228,6 +264,12 @@ static void test_files(void) {
     CHECK(c.pc_weight[11] == 2);
     CHECK(c.max_leap == 5); /* from the preset */
 
+    write_file("output/tests/tension.json", "{\"tension\": [0, \"?\", 4], \"mirror\": true}");
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/tension.json", err, sizeof(err)));
+    CHECK(c.tension[0] == 0 && c.tension[1] == -1 && c.tension[2] == 4 && c.tension[3] == -1);
+    CHECK(c.mirror == 1);
+
     write_file("output/tests/bad.json", "{\"voices\": 2.5}");
     CHECK(!config_load_file(&c, "output/tests/bad.json", err, sizeof(err)));
     write_file("output/tests/broken.json", "{\"voices\": }");
@@ -253,6 +295,9 @@ static void test_round_trip(void) {
     test_set(&a, "melody=62,?,rest,66");
     test_set(&a, "transpose_1=0");
     test_set(&a, "transpose_2=-5");
+    test_set(&a, "tension=0,?,4,1");
+    test_set(&a, "mirror=1");
+    test_set(&a, "mirror_axis=62");
     FILE *f = fopen("output/tests/round.txt", "w");
     CHECK(f != NULL);
     config_write(f, &a);
