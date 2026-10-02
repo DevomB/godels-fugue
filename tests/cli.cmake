@@ -105,6 +105,11 @@ run(lock_cli 0 MATCH "counterfactual: lock x0 = E4" ARGS --lock 0 64)
 run(given 0 MATCH "melody: 64 67 69 67 .* 60" "counterfactual: given x0 = E4, x1 = G4" "changed:"
     ARGS --config "${SRC}/examples/given.txt")
 run(given_bad 1 ERROR "invalid melody" ARGS --set "melody=60,?,rest")
+run(leading_tone 1 ERROR "core: leading tone" "rises to the tonic at note 1"
+    ARGS --set leading_tone=1 --set "melody=71,67")
+run(double_leap 1 ERROR "core: double leap" "two leaps over 4 semitones"
+    ARGS --set double_leaps=0 --set max_leap=12 --set range_high=84 --set "melody=60,67,74")
+run(contrary 0 MATCH "melody:" ARGS --set voices=3 --set w_contrary=4)
 run(check_bad 1 MATCH "violation: scale: notes stay in the key \\(x1 = C#4"
     ARGS --set "melody=60,61" --check)
 if(EXISTS "${last_dir}")

@@ -78,6 +78,8 @@ static PieceConfig random_config(void) {
         c.key_second = pick(0, 1) ? KEY_SEARCH : (c.key + 7) % 12;
     }
     if (pick(0, 5) == 0) c.key = KEY_SEARCH;
+    c.leading_tone = pick(0, 2) == 0;
+    c.double_leaps = pick(0, 2) != 0;
     return c;
 }
 
@@ -124,6 +126,38 @@ static void check_piece(const Model *m, const int *values) {
             if (a == SOUND_REST || b == SOUND_REST) continue;
             if (abs(a - b) > c->max_leap) fail(c, "leap", t);
         }
+        /* two leaps over 4 semitones in one direction between three
+         * consecutive notes; a step that repeats its melody note (as in
+         * augmentation) is the same note, a silence breaks the line */
+        int prev[2] = {SOUND_REST, SOUND_REST};
+        int last = -1;
+        for (int t = 0; t < m->span && !c->double_leaps; t++) {
+            int i = canon_map_source(c, v, t);
+            int p = score.line[v][t];
+            if (i < 0 || p == SOUND_REST) {
+                prev[0] = prev[1] = SOUND_REST;
+                last = -1;
+                continue;
+            }
+            if (i == last) continue;
+            last = i;
+            if (prev[0] != SOUND_REST && prev[1] != SOUND_REST) {
+                int first = prev[1] - prev[0];
+                int second = p - prev[1];
+                if (abs(first) > 4 && abs(second) > 4 && (first > 0) == (second > 0))
+                    fail(c, "double leap", t);
+            }
+            prev[0] = prev[1];
+            prev[1] = p;
+        }
+    }
+
+    /* a leading tone in the melody rises to the tonic at the next attack */
+    for (int i = 0; c->leading_tone && i + 1 < c->length; i++) {
+        int p = values[m->pitch[i]];
+        if (p == PITCH_REST || pitch_class(p + 1) != key_tonic(key_for(m, values, i))) continue;
+        if (m->tie[i + 1] >= 0 && values[m->tie[i + 1]] == TIE_HOLD) continue;
+        if (values[m->pitch[i + 1]] != p + 1) fail(c, "leading tone", i);
     }
 
     for (int t = 0; t < m->span; t++) {

@@ -237,6 +237,14 @@ static const KeyDef keys[] = {
 
     {"max_leap", F(max_leap), 1, 0, 24, 7, NULL, NULL, "rules",
      "Largest melodic interval in semitones."},
+    {"leading_tone", F(leading_tone), 1, 0, 1, 0, NULL, NULL, "rules",
+     "A melody note a semitone below the tonic of the key in force must be followed by "
+     "the tonic a semitone above; a tie carries the duty to the next attack, a rest "
+     "does not resolve it, and the last note is free."},
+    {"double_leaps", F(double_leaps), 1, 0, 1, 1, NULL, NULL, "rules",
+     "Allow two leaps larger than a major third (over 4 semitones) in a row in the same "
+     "direction along any voice; 0 forbids them. A note repeated or held between the "
+     "leaps, or a silence, separates them."},
     {"consonance", F(consonance), 1, 0, 2, CONSONANCE_STRONG, parse_consonance_word,
      print_consonance_word, "rules",
      "Where sounding voices must be consonant: off, strong beats, or all steps."},
@@ -313,6 +321,9 @@ static const KeyDef keys[] = {
      "semitone 3)."},
     {"w_parallel", F(w_parallel), 1, 0, 100, 2, NULL, NULL, "energy",
      "Cost of similar motion into a fifth or octave."},
+    {"w_contrary", F(w_contrary), 1, 0, 100, 0, NULL, NULL, "energy",
+     "Cost of each pair of voices that both move up or both move down from one step "
+     "to the next, favouring contrary and oblique motion."},
     {"w_motif", F(w_motif), 1, 0, 100, 0, NULL, NULL, "energy",
      "Cost of each melodic step that breaks the motif pattern."},
     {"motif_a", F(motif_a), 1, -128, 24, 0, parse_motif_word, print_motif_word,

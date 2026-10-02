@@ -49,6 +49,8 @@ style preset first, so every other key in the file overrides it.
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
 | `max_leap` | 7 | 0..24 | Largest melodic interval in semitones. |
+| `leading_tone` | 0 | 0..1 | A melody note a semitone below the tonic of the key in force must be followed by the tonic a semitone above; a tie carries the duty to the next attack, a rest does not resolve it, and the last note is free. |
+| `double_leaps` | 1 | 0..1 | Allow two leaps larger than a major third (over 4 semitones) in a row in the same direction along any voice; 0 forbids them. A note repeated or held between the leaps, or a silence, separates them. |
 | `consonance` | strong | see meaning | Where sounding voices must be consonant: off, strong beats, or all steps. |
 | `allow_fourth` | 0 | 0..1 | Count a fourth above the lowest voice as consonant. |
 | `allow_unison` | 0 | 0..1 | Allow two voices on the same pitch where consonance applies. |
@@ -96,6 +98,7 @@ style preset first, so every other key in the file overrides it.
 | `w_recover` | 2 | 0..100 | Cost of not stepping back after a leap larger than a third. |
 | `w_dissonance` | 1 | 0..100 | Cost per grade of vertical dissonance (fourth 1, second or tritone 2, semitone 3). |
 | `w_parallel` | 2 | 0..100 | Cost of similar motion into a fifth or octave. |
+| `w_contrary` | 0 | 0..100 | Cost of each pair of voices that both move up or both move down from one step to the next, favouring contrary and oblique motion. |
 | `w_motif` | 0 | 0..100 | Cost of each melodic step that breaks the motif pattern. |
 | `motif_a` | 0 | see meaning | First interval of the motif pattern in semitones. |
 | `motif_b` | 0 | see meaning | Second interval of the motif pattern. |

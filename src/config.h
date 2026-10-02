@@ -39,6 +39,8 @@ typedef struct PieceConfig {
     int mode_second;
     /* hard rules */
     int max_leap;
+    int leading_tone;
+    int double_leaps;
     int consonance;
     int allow_fourth;
     int allow_unison;
@@ -74,6 +76,7 @@ typedef struct PieceConfig {
     int w_recover;
     int w_dissonance;
     int w_parallel;
+    int w_contrary;
     int w_motif;
     int motif_a;
     int motif_b;

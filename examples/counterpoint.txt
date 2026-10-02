@@ -1,0 +1,13 @@
+# Melodic counterpoint: three voices where every leading tone of the
+# melody rises to the tonic, no line takes two large leaps in a row in
+# one direction, and voices that move together cost a little, so the
+# search prefers contrary and oblique motion.
+length 12
+voices 3
+delay 4
+range_low 55
+range_high 76
+max_leap 9
+leading_tone 1
+double_leaps 0
+w_contrary 2

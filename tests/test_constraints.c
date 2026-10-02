@@ -470,6 +470,99 @@ static void test_spacing_and_crossing(void) {
     test_close(r);
 }
 
+static bool parent_is(const ProofEvent *e, int var, int value) {
+    for (int k = 0; k < e->parent_count; k++) {
+        if (e->parent_vars[k] == var && e->parent_values[k] == value) return true;
+    }
+    return false;
+}
+
+static void test_counterpoint(void) {
+    /* B in C major must rise to C */
+    PieceConfig c = test_config();
+    test_set(&c, "leading_tone=1");
+    TestRun *r = test_open(&c);
+    int x0 = r->model.pitch[0];
+    int x1 = r->model.pitch[1];
+    int next[3] = {67, 72, 69};
+    test_only(r, x0, 71);
+    set_domain(r, x1, next, 3);
+    CHECK(solver_propagate(&r->state));
+    CHECK(has(r, x1, 72) && !has(r, x1, 67) && !has(r, x1, 69));
+    const ProofEvent *e = test_removal(r, x1, 67);
+    CHECK(e != NULL && e->rule == CID_LEADING_TONE);
+    CHECK(parent_is(e, x0, 71));
+    CHECK(parent_is(e, r->model.key[0], key_id(0, MODE_MAJOR)));
+    char why[128];
+    constraint_describe(&r->model, &r->model.cons[e->constraint], why, sizeof(why));
+    CHECK(strstr(why, "melody note 0 rises to the tonic at note 1") != NULL);
+    test_close(r);
+
+    /* the other way round: a note other than C after x0 rules out B */
+    r = test_open(&c);
+    test_only(r, r->model.pitch[1], 69);
+    CHECK(solver_propagate(&r->state));
+    CHECK(!has(r, r->model.pitch[0], 71));
+    CHECK(removed_by(r, r->model.pitch[0], 71) == CID_LEADING_TONE);
+    test_close(r);
+
+    /* a held leading tone passes the duty on; a rest does not resolve it */
+    test_set(&c, "rhythm=1");
+    r = test_open(&c);
+    int x2 = r->model.pitch[2];
+    int after[3] = {PITCH_REST, 67, 72};
+    test_only(r, r->model.pitch[0], 71);
+    test_only(r, r->model.tie[1], TIE_HOLD);
+    set_domain(r, x2, after, 3);
+    CHECK(solver_propagate(&r->state));
+    CHECK(has(r, r->model.pitch[1], 71));
+    CHECK(has(r, x2, 72) && !has(r, x2, 67) && !has(r, x2, PITCH_REST));
+    CHECK(removed_by(r, x2, PITCH_REST) == CID_LEADING_TONE);
+    test_close(r);
+
+    /* in A minor the raised seventh G# leads to A; G does not */
+    c = test_config();
+    test_set(&c, "leading_tone=1");
+    test_set(&c, "key=A");
+    test_set(&c, "mode=minor");
+    test_set(&c, "range_low=57");
+    test_set(&c, "range_high=76");
+    r = test_open(&c);
+    int free_next[2] = {64, 69};
+    test_only(r, r->model.pitch[0], 68);
+    set_domain(r, r->model.pitch[1], free_next, 2);
+    CHECK(solver_propagate(&r->state));
+    CHECK(!has(r, r->model.pitch[1], 64) && has(r, r->model.pitch[1], 69));
+    test_close(r);
+    r = test_open(&c);
+    test_only(r, r->model.pitch[0], 67);
+    set_domain(r, r->model.pitch[1], free_next, 2);
+    CHECK(solver_propagate(&r->state));
+    CHECK(has(r, r->model.pitch[1], 64));
+    test_close(r);
+
+    /* two leaps over a major third in one direction */
+    c = test_config();
+    test_set(&c, "double_leaps=0");
+    test_set(&c, "max_leap=12");
+    test_set(&c, "range_high=84");
+    r = test_open(&c);
+    x0 = r->model.pitch[0];
+    x1 = r->model.pitch[1];
+    x2 = r->model.pitch[2];
+    int third[4] = {64, 71, 72, 74};
+    test_only(r, x0, 60);
+    test_only(r, x1, 67);
+    set_domain(r, x2, third, 4);
+    CHECK(solver_propagate(&r->state));
+    CHECK(has(r, x2, 64) && has(r, x2, 71)); /* back down, or a third up */
+    CHECK(!has(r, x2, 72) && !has(r, x2, 74));
+    e = test_removal(r, x2, 72);
+    CHECK(e != NULL && e->rule == CID_DOUBLE_LEAP);
+    CHECK(parent_is(e, x0, 60) && parent_is(e, x1, 67));
+    test_close(r);
+}
+
 int main(void) {
     test_scale_and_range();
     test_leap();
@@ -482,6 +575,7 @@ int main(void) {
     test_negative_followers();
     test_lock();
     test_spacing_and_crossing();
+    test_counterpoint();
     printf("ok\n");
     return 0;
 }

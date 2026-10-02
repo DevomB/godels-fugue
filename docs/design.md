@@ -70,6 +70,8 @@ applies; the engine never enumerates it.
 | scale | a sounding pitch outside the key in force at that step | Built |
 | range | any voice sounding outside `range_low`..`range_high` | Built |
 | melodic leap | consecutive notes of any voice more than `max_leap` apart | Built |
+| leading tone | with `leading_tone 1`, a melody note a semitone below the tonic of the key in force followed by anything but that tonic; a tie passes the duty to the next attack, a rest does not resolve it, the last note is free | Built |
+| double leap | with `double_leaps 0`, two leaps over 4 semitones in a row in one direction between three consecutive notes of any voice; a repeated or held note or a silence between them separates them | Built |
 | consonance | on strong beats (or every step), any pair of sounding voices other than octave, third, fifth or sixth; a fourth only between upper voices; unisons opt-in | Built |
 | parallel fifths / octaves | two voices moving in the same direction from a perfect interval to the same one | Built |
 | spacing | two voices sounding more than `max_spacing` semitones apart | Built |
@@ -82,9 +84,9 @@ applies; the engine never enumerates it.
 | lock | a locked note, or a note given by `melody`, taking any other pitch | Built |
 
 Rules from the design that are **not built**: suspensions and their resolution,
-leading tones and chordal sevenths resolving, limits on repeated large leaps, a registral-centre invariant, motion balance between
-voices, and symmetry constraints ($x_i + x_{N-1-i} = 2a$) with controlled symmetry
-breaking. Direct (hidden) fifths and octaves are a soft cost rather than a rule.
+chordal sevenths resolving, a registral-centre invariant, and symmetry constraints ($x_i + x_{N-1-i} = 2a$) with controlled symmetry
+breaking. Direct (hidden) fifths and octaves are a soft cost rather than a rule, and
+so is the motion balance between voices (`w_contrary`).
 
 ## 5. Energy
 
@@ -101,6 +103,8 @@ can be broken down by rule (`report.txt`, `score.html`):
 - **motif** – breaking a repeating interval pattern;
 - **dissonance** and **direct perfect** – graded vertical dissonance, and similar
   motion into a fifth or octave;
+- **contrary motion** – each pair of voices both moving up or both moving down from
+  one step to the next (`w_contrary`), the motion balance between voices;
 - **rest**, **hold**, **syncopation**, **rhythm**, **final** – rhythm preferences;
 - **chord**, **chord motion**, **non-chord tone** – harmony preferences;
 - **key**, **key distance** – accidentals of a searched key, and the distance between

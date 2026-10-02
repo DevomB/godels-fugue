@@ -10,6 +10,7 @@
 const char *rule_name(int rule) {
     static const char *const names[CID_MAX] = {
         "",           "scale",      "range",           "melodic leap",
+        "leading tone", "double leap",
         "consonance", "parallel fifth", "parallel octave", "spacing",
         "crossing",   "chord tone", "progression",     "cadence",
         "tie",        "max hold",   "rest",            "lock",
@@ -21,7 +22,7 @@ const char *rule_name(int rule) {
 const char *term_name(int term) {
     static const char *const names[TERM_COUNT] = {
         "gravity",   "curve",       "corpus", "rest",  "leap",       "repeat",
-        "recovery",  "motif",       "dissonance", "direct perfect", "hold",
+        "recovery",  "motif",       "dissonance", "direct perfect", "contrary motion", "hold",
         "syncopation", "rhythm",    "final",  "chord", "chord motion", "non-chord tone", "key",
         "key distance"};
     if (term < 0 || term >= TERM_COUNT) return "unknown";
@@ -246,6 +247,71 @@ static void build_pitch_rules(Builder *b) {
             add_slot(l, m->pitch[i], cls);
             add_slot(l, m->pitch[j], cls);
             if (l != NULL) l->time = t;
+        }
+    }
+}
+
+static bool has_double_leap(const Model *m, int a, int b, int c, int cls) {
+    for (int k = 0; k < m->ncons; k++) {
+        const Constraint *d = &m->cons[k];
+        if (d->type != C_DOUBLE_LEAP || d->voice[0] != cls) continue;
+        if (d->vars[d->slot[0]] == a && d->vars[d->slot[1]] == b &&
+            d->vars[d->slot[2]] == c)
+            return true;
+    }
+    return false;
+}
+
+static void build_counterpoint_rules(Builder *b) {
+    Model *m = b->m;
+    const PieceConfig *c = &m->config;
+
+    /* A tie carries the leading tone to its next step, where the same
+     * rule applies again, so the duty falls on the next attack. */
+    if (c->leading_tone) {
+        for (int i = 0; i + 1 < c->length; i++) {
+            Constraint *l = add_con(b, CID_LEADING_TONE, C_LEADING_TONE);
+            add_slot(l, m->pitch[i], 0);
+            add_slot(l, m->pitch[i + 1], 0);
+            add_slot(l, m->key[model_section_at(m, i)], -1);
+            add_slot(l, m->tie[i + 1], -1);
+            if (l != NULL) l->time = i;
+        }
+    }
+
+    /* Three consecutive notes along every voice's line, as for the leap
+     * rule. Inversion and retrograde keep two leaps in one direction in
+     * one direction, so only a pitch-class inversion needs its own copy. */
+    if (c->double_leaps) return;
+    for (int v = 0; v < m->voices; v++) {
+        int cls = (v > 0 && c->invert && c->invert_mod12) ? 1 : 0;
+        int line[3] = {-1, -1, -1};
+        int start[3] = {0, 0, 0};
+        for (int t = 0; t < m->span; t++) {
+            int i = m->source[v][t];
+            if (i < 0) {
+                line[0] = line[1] = line[2] = -1;
+                continue;
+            }
+            if (i == line[2]) continue;
+            line[0] = line[1];
+            line[1] = line[2];
+            line[2] = i;
+            start[0] = start[1];
+            start[1] = start[2];
+            start[2] = t;
+            if (line[0] < 0) continue;
+            int first = line[0] < line[2] ? line[0] : line[2];
+            int last = line[0] < line[2] ? line[2] : line[0];
+            int pa = m->pitch[first];
+            int pb = m->pitch[line[1]];
+            int pc = m->pitch[last];
+            if (has_double_leap(m, pa, pb, pc, cls)) continue;
+            Constraint *d = add_con(b, CID_DOUBLE_LEAP, C_DOUBLE_LEAP);
+            add_slot(d, pa, cls);
+            add_slot(d, pb, cls);
+            add_slot(d, pc, cls);
+            if (d != NULL) d->time = start[0];
         }
     }
 }
@@ -521,6 +587,12 @@ static void build_terms(Builder *b) {
                 add_slot(d, m->pitch[i2], vb);
                 add_slot(d, m->pitch[i3], vb);
                 if (d != NULL) d->time = t;
+                Constraint *r = add_term(b, TERM_CONTRARY, c->w_contrary);
+                add_slot(r, m->pitch[i0], va);
+                add_slot(r, m->pitch[i1], va);
+                add_slot(r, m->pitch[i2], vb);
+                add_slot(r, m->pitch[i3], vb);
+                if (r != NULL) r->time = t;
             }
         }
     }
@@ -653,6 +725,7 @@ bool model_build(Model *m, const PieceConfig *config, char *err, size_t cap) {
     Builder b = {m, false};
     build_vars(&b);
     build_pitch_rules(&b);
+    build_counterpoint_rules(&b);
     build_vertical_rules(&b);
     build_harmony_rules(&b);
     build_cadence_rules(&b);
@@ -724,6 +797,24 @@ bool constraint_holds(const Model *m, const Constraint *c, const int *vals) {
         int b = slot_sound(m, c, vals, 1);
         if (a == SOUND_REST || b == SOUND_REST) return true;
         return !leap_exceeds(a, b, cfg->max_leap);
+    }
+    case C_LEADING_TONE: {
+        int p = slot_value(c, vals, 0);
+        if (p == PITCH_REST) return true;
+        if (pitch_class(p + 1) != key_tonic(slot_value(c, vals, 2))) return true;
+        if (c->nslots > 3 && slot_value(c, vals, 3) == TIE_HOLD) return true;
+        return slot_value(c, vals, 1) == p + 1;
+    }
+    case C_DOUBLE_LEAP: {
+        int s[3];
+        for (int k = 0; k < 3; k++) {
+            s[k] = slot_sound(m, c, vals, k);
+            if (s[k] == SOUND_REST) return true;
+        }
+        int first = s[1] - s[0];
+        int second = s[2] - s[1];
+        if (abs(first) <= 4 || abs(second) <= 4) return true;
+        return (first > 0) != (second > 0);
     }
     case C_CONSONANCE: {
         int pitches[SLOT_MAX];
@@ -897,6 +988,16 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
         }
         return is_direct_perfect(s[0], s[2], s[1], s[3]) ? w : 0;
     }
+    case TERM_CONTRARY: {
+        int s[4];
+        for (int k = 0; k < 4; k++) {
+            s[k] = slot_sound(m, t, vals, k);
+            if (s[k] == SOUND_REST) return 0;
+        }
+        int a = s[1] - s[0];
+        int b = s[3] - s[2];
+        return (a > 0 && b > 0) || (a < 0 && b < 0) ? w : 0;
+    }
     case TERM_HOLD:
         return slot_value(t, vals, 0) == TIE_HOLD ? w : 0;
     case TERM_SYNCOPATION:
@@ -1036,6 +1137,14 @@ void constraint_describe(const Model *m, const Constraint *c, char *buf, size_t 
         break;
     case C_LEAP:
         snprintf(buf, cap, "leap of at most %d semitones", cfg->max_leap);
+        break;
+    case C_LEADING_TONE:
+        snprintf(buf, cap, "a leading tone at melody note %d rises to the tonic at note %d",
+                 c->time, c->time + 1);
+        break;
+    case C_DOUBLE_LEAP:
+        snprintf(buf, cap, "no two leaps over 4 semitones in one direction from step %d",
+                 c->time);
         break;
     case C_CONSONANCE:
         snprintf(buf, cap, "voices %s must be consonant at step %d (bar %d)", voices,

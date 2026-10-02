@@ -84,12 +84,14 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
 - **Rhythm**: optional ties (half, dotted half and whole notes) and rests, with rules
   against over-long notes and costs for syncopation and plain runs of quarter notes.
 - **Rules you can turn on or off**: consonance, parallel fifths and octaves, maximum
-  leap, voice spacing and crossing, cadence.
+  leap, voice spacing and crossing, cadence, leading tones rising to the tonic
+  (`leading_tone`), and no two large leaps in a row in one direction (`double_leaps 0`).
 - **Given notes**: fix any notes of the melody and the solver completes the rest, or
   give the whole melody to check it against the rules and see what it costs.
 - **Soft preferences** that rank the legal choices: stable scale degrees, an arch of
   tension, small leaps, few repeated notes, recovering after a leap, a repeating motif,
-  pitch-class weights learned from a corpus, and more. Their sum is the piece's
+  contrary rather than similar motion between voices (`w_contrary`), pitch-class
+  weights learned from a corpus, and more. Their sum is the piece's
   *energy*.
 - **Search** with minimum-remaining-values, entropy or look-ahead variable ordering,
   conflict-directed backjumping, learned conflicts, node and time limits, and a

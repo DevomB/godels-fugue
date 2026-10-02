@@ -18,6 +18,8 @@ enum {
     CID_SCALE,
     CID_RANGE,
     CID_LEAP,
+    CID_LEADING_TONE,
+    CID_DOUBLE_LEAP,
     CID_CONSONANCE,
     CID_PARALLEL_FIFTH,
     CID_PARALLEL_OCTAVE,
@@ -48,6 +50,7 @@ enum {
     TERM_MOTIF,
     TERM_DISSONANCE,
     TERM_DIRECT,
+    TERM_CONTRARY,
     TERM_HOLD,
     TERM_SYNCOPATION,
     TERM_RHYTHM,
@@ -80,7 +83,9 @@ enum {
     C_MAX_RESTS,        /* every pitch; propagated by counting */
     C_LOCK,             /* (var) param = value; the lock key or a given melody note */
     C_KEY_RELATION,     /* (key, key) closely related */
-    C_SAME_MODE         /* (key, key) same mode */
+    C_SAME_MODE,        /* (key, key) same mode */
+    C_LEADING_TONE,     /* (pitch, next pitch, key[, next tie]) the melody */
+    C_DOUBLE_LEAP       /* (pitch, pitch, pitch) consecutive notes of one voice */
 };
 
 enum { SCOPE_MAX = 8, SLOT_MAX = 8 };

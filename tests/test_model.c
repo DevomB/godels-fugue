@@ -81,6 +81,37 @@ static void test_variables(void) {
     value_label(m, m->tie[3], TIE_HOLD, buf, sizeof(buf));
     CHECK(strcmp(buf, "hold") == 0);
     test_close(r);
+
+    /* one leading-tone rule per melody step; double leaps once per
+     * triple, shared by a plain or retrograde follower but not by a
+     * pitch-class inversion; contrary motion wherever both voices move */
+    c = test_config();
+    CHECK(c.double_leaps == 1 && c.leading_tone == 0);
+    test_set(&c, "leading_tone=1");
+    test_set(&c, "double_leaps=0");
+    test_set(&c, "w_contrary=3");
+    r = test_open(&c);
+    m = &r->model;
+    CHECK(count_rule(m, CID_LEADING_TONE) == 11);
+    CHECK(count_rule(m, CID_DOUBLE_LEAP) == 10);
+    CHECK(count_term(m, TERM_CONTRARY) == 7); /* steps 4-5 to 10-11 */
+    test_close(r);
+    test_set(&c, "retrograde=1");
+    r = test_open(&c);
+    CHECK(count_rule(&r->model, CID_DOUBLE_LEAP) == 10);
+    test_close(r);
+    c.retrograde = 0;
+    test_set(&c, "invert=1");
+    test_set(&c, "invert_mod12=1");
+    r = test_open(&c);
+    CHECK(count_rule(&r->model, CID_DOUBLE_LEAP) == 20);
+    test_close(r);
+    c = test_config();
+    r = test_open(&c);
+    CHECK(count_rule(&r->model, CID_LEADING_TONE) == 0);
+    CHECK(count_rule(&r->model, CID_DOUBLE_LEAP) == 0);
+    CHECK(count_term(&r->model, TERM_CONTRARY) == 0);
+    test_close(r);
 }
 
 static const Constraint *find(const Model *m, int type, int time) {
@@ -206,6 +237,7 @@ static void test_energy(void) {
         PieceConfig c = test_config();
         test_set(&c, "w_dissonance=3");
         test_set(&c, "w_parallel=2");
+        test_set(&c, "w_contrary=1");
         for (int k = 0; shapes[s][k] != NULL; k++) test_set(&c, shapes[s][k]);
         for (unsigned seed = 1; seed <= 4; seed++) check_energy_consistency(&c, seed + 10u * (unsigned)s);
     }
