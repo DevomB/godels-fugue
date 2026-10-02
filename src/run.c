@@ -87,6 +87,7 @@ bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap) {
     } else if (run->status == SOLVE_UNSAT) {
         solver_unsat_core(&run->model, run->core, CID_MAX, &run->core_n,
                           &run->core_approximate);
+        run->nviolations = check_given(&run->model, run->violations, CHECK_MAX);
     }
 
     if (has_given_notes(&run->config)) {

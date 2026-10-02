@@ -35,6 +35,7 @@ add_custom_command(
 add_library(canon STATIC
   src/analyze.c
   src/canon.c
+  src/check.c
   src/config.c
   src/corpus.c
   src/domain.c
@@ -70,6 +71,7 @@ foreach(name IN ITEMS
     test_json
     test_config
     test_canon
+    test_check
     test_model
     test_constraints
     test_solver

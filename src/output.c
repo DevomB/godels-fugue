@@ -288,6 +288,7 @@ void output_print_failure(FILE *err, const Run *run) {
                 run->config.time_limit);
         return;
     }
+    check_print(err, &run->model, run->violations, run->nviolations);
     if (run->core_n > 0) {
         fprintf(err, "core:");
         for (int i = 0; i < run->core_n; i++) fprintf(err, " %s", rule_name(run->core[i]));
@@ -402,6 +403,14 @@ bool output_write_report(const char *path, const Run *run) {
         fprintf(f, "core:");
         for (int i = 0; i < run->core_n; i++) fprintf(f, " %s", rule_name(run->core[i]));
         fprintf(f, "%s\n", run->core_approximate ? " (approximate)" : "");
+    }
+    if (run->nviolations > 0) {
+        fprintf(f, "violations:\n");
+        for (int i = 0; i < run->nviolations; i++) {
+            char text[CHECK_TEXT_MAX];
+            check_text(&run->model, &run->violations[i], text, sizeof(text));
+            fprintf(f, "  %s\n", text);
+        }
     }
     if (run->ndelays > 0) {
         fprintf(f, "delays tried:\n");

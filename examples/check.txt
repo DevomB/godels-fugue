@@ -1,0 +1,7 @@
+# A finished melody checked against the rules: every note is given, so
+# the solver only confirms it. Run it with --check to judge the notes
+# without a search; change a note (say the fifth to 64) to see each rule
+# it breaks named, with the notes involved.
+voices 3
+length 12
+melody 62 64 60 64 69 67 64 67 65 64 67 60

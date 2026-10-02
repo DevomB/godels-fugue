@@ -1,4 +1,5 @@
 #include "analyze.h"
+#include "check.h"
 #include "config.h"
 #include "corpus.h"
 #include "explain.h"
@@ -26,6 +27,8 @@ static void usage(FILE *f) {
             "  --lock INDEX PITCH   fix melody note INDEX to MIDI PITCH\n"
             "  --explain VAR        print why a variable has its value: a melody index\n"
             "                       such as 5, or x5, tie5, chord2, key, key2\n"
+            "  --check              only check the given notes against the rules: print\n"
+            "                       each broken rule, or \"violations: none\"\n"
             "  --out FILE           MIDI path; the other score files go beside it\n"
             "                       (default output/canon.mid)\n"
             "  --proof FILE         proof trace path (default output/proof.txt)\n"
@@ -147,6 +150,25 @@ static void warn_about_axis(const PieceConfig *c) {
     fprintf(stderr, "\n");
 }
 
+/* Judges the given notes without a search; exit 1 if any rule breaks. */
+static int run_check(const PieceConfig *config) {
+    Model m;
+    char err[200];
+    if (!model_build(&m, config, err, sizeof(err))) {
+        fprintf(stderr, "%s\n", err);
+        return EXIT_UNSAT;
+    }
+    if (config->delay_search) {
+        fprintf(stderr, "note: --check judges the notes at delay %d only\n", config->delay);
+    }
+    Violation v[CHECK_MAX];
+    int n = check_given(&m, v, CHECK_MAX);
+    if (n == 0) printf("violations: none\n");
+    check_print(stdout, &m, v, n);
+    model_free(&m);
+    return n > 0 ? EXIT_UNSAT : 0;
+}
+
 static bool need_value(int i, int argc, int count, const char *flag) {
     if (i + count < argc) return true;
     fprintf(stderr, "missing value for %s\n", flag);
@@ -169,6 +191,7 @@ int main(int argc, char **argv) {
     const char *time_limit = NULL;
     bool apply_weights = false;
     bool sat_mode = false;
+    bool check_mode = false;
     const char *count_text = NULL;
     bool sensitivity = false;
     bool markdown = false;
@@ -193,6 +216,8 @@ int main(int argc, char **argv) {
             apply_weights = true;
         } else if (strcmp(a, "--sat") == 0) {
             sat_mode = true;
+        } else if (strcmp(a, "--check") == 0) {
+            check_mode = true;
         } else if (strcmp(a, "--sensitivity") == 0) {
             sensitivity = true;
         } else if (strcmp(a, "--lock") == 0) {
@@ -280,6 +305,7 @@ int main(int argc, char **argv) {
         return EXIT_UNSAT;
     }
     warn_about_axis(&config);
+    if (check_mode) return run_check(&config);
     if (!sat_mode && !output_paths_distinct(&paths, err, sizeof(err))) {
         fprintf(stderr, "%s\n", err);
         return EXIT_UNSAT;

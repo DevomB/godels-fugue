@@ -177,6 +177,19 @@ that differ from the piece it would have written on its own. Give every note to 
 finished melody: a run that solves reports its energy, and one that fails names the
 rules the melody breaks.
 
+`--check` judges the given notes without a search and writes no files. Every rule whose
+notes are all given is checked, and each broken one is named with the notes involved
+(exit 1); a rule that touches a `?` note is left to the solver:
+
+```text
+$ canon-collapse --set melody=60,61,?,?,62 --check
+violation: scale: notes stay in the key (x1 = C#4, key = C major)
+violation: consonance: voices 1,2 must be consonant at step 4 (bar 2) (x4 = D4, x0 = C4)
+```
+
+A failed run prints the same lines before its `core:` line, and adds them to
+`report.txt` and `proof.json`. `examples/check.txt` gives a whole melody to check.
+
 ## Output files
 
 Every run writes these next to `--out` (default `output/canon.mid`):
@@ -189,7 +202,7 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 | `contour.svg` | Pitch over time for every voice |
 | `score.html` | Interactive score: piano roll per voice, playback, why each note is there, a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart), what the given notes changed, entropy and energy charts, and the proof log |
 | `explain.txt` | The explanation for every variable, as `--explain` prints it |
-| `report.txt` | Keys, search statistics, energy by rule, values removed by each rule, the unsat core, and every config key used |
+| `report.txt` | Keys, search statistics, energy by rule, values removed by each rule, the unsat core, the rules given notes break, and every config key used |
 | `proof.txt` | Every proof event in order: removals, decisions, forced collapses, and entropy after each round of propagation |
 | `proof.dag` | Each proof event with the events and assignments it rests on |
 | `proof.json` | The whole piece as JSON: config, score, each variable's explanation, events with their parents, and statistics |
@@ -208,6 +221,8 @@ canon-collapse [options]
   --set KEY=VALUE      override one key after the config file (repeatable)
   --lock INDEX PITCH   fix melody note INDEX to MIDI PITCH and report what changed
   --explain VAR        print why a variable has its value: 5, x5, tie5, chord2, key, key2
+  --check              only check the given notes against the rules: print each broken
+                       rule, or "violations: none" (exit 1 if any)
   --out FILE           MIDI path; the other score files go beside it
   --proof FILE         proof trace path (default output/proof.txt)
   --entropy FILE       entropy log path (default output/entropy.txt)

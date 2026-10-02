@@ -1,6 +1,7 @@
 #ifndef RUN_H
 #define RUN_H
 
+#include "check.h"
 #include "score.h"
 #include "solver.h"
 
@@ -24,6 +25,8 @@ typedef struct Run {
     int core[CID_MAX];
     int core_n;
     bool core_approximate;
+    Violation violations[CHECK_MAX]; /* rules the given notes break */
+    int nviolations;
     DelayTrial delays[SPAN_MAX];
     int ndelays;
     bool counterfactual; /* the config gives notes, by lock or melody */

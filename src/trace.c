@@ -189,6 +189,30 @@ static long forced_count(const ProofLog *log) {
     return n;
 }
 
+static void write_violations(FILE *f, const Run *run) {
+    const Model *m = &run->model;
+    fprintf(f, ",\"violations\":[");
+    for (int i = 0; i < run->nviolations; i++) {
+        const Violation *v = &run->violations[i];
+        const Constraint *c = &m->cons[v->con];
+        char why[256];
+        constraint_describe(m, c, why, sizeof(why));
+        fprintf(f, "%s{\"rule\":", i ? "," : "");
+        json_string(f, rule_name(c->rule));
+        fprintf(f, ",\"why\":");
+        json_string(f, why);
+        fprintf(f, ",\"vars\":[");
+        for (int k = 0; k < v->nvars; k++) {
+            char name[16];
+            var_label(m, v->vars[k], name, sizeof(name));
+            fprintf(f, "%s", k ? "," : "");
+            json_string(f, name);
+        }
+        fprintf(f, "]}");
+    }
+    fprintf(f, "]");
+}
+
 static void write_stats(FILE *f, const Run *run) {
     const SolverStats *st = &run->state.stats;
     fprintf(f,
@@ -308,6 +332,7 @@ void trace_write_json(FILE *f, const Run *run) {
                 d->delay, solve_status_name(d->status), d->energy, d->nodes);
     }
     fprintf(f, "]");
+    write_violations(f, run);
     if (run->counterfactual) write_counterfactual(f, run);
     fprintf(f, "}\n");
 }
