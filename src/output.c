@@ -4,6 +4,7 @@
 #include "explain.h"
 #include "export.h"
 #include "midi.h"
+#include "notation.h"
 #include "page.h"
 #include "theory.h"
 #include "trace.h"
@@ -84,6 +85,14 @@ static bool write_musicxml(const char *path, const Run *run) {
     return export_musicxml(path, &run->score);
 }
 
+static bool write_lilypond(const char *path, const Run *run) {
+    return export_lilypond(path, &run->score);
+}
+
+static bool write_abc(const char *path, const Run *run) {
+    return export_abc(path, &run->score);
+}
+
 static bool write_contour(const char *path, const Run *run) {
     return export_contour(path, &run->score);
 }
@@ -109,7 +118,8 @@ bool output_write_all(const Run *run, const OutputPaths *paths) {
     ok &= write_beside(paths->midi, "score.html", page_write, run);
     ok &= write_beside(paths->midi, "explain.txt", output_write_explanations, run);
     if (run->status != SOLVE_SAT) {
-        static const char *const stale[] = {"score.musicxml", "contour.svg", "voices.wav"};
+        static const char *const stale[] = {"score.musicxml", "score.ly", "score.abc",
+                                            "contour.svg", "voices.wav"};
         remove(paths->midi);
         for (size_t i = 0; i < sizeof(stale) / sizeof(stale[0]); i++) {
             char path[512];
@@ -120,6 +130,8 @@ bool output_write_all(const Run *run, const OutputPaths *paths) {
 
     ok &= write_midi(paths->midi, run);
     ok &= write_beside(paths->midi, "score.musicxml", write_musicxml, run);
+    ok &= write_beside(paths->midi, "score.ly", write_lilypond, run);
+    ok &= write_beside(paths->midi, "score.abc", write_abc, run);
     ok &= write_beside(paths->midi, "contour.svg", write_contour, run);
     ok &= write_beside(paths->midi, "voices.wav", write_wav, run);
     return ok;
@@ -138,9 +150,10 @@ static void normalize_path(const char *in, char *out, size_t cap) {
 }
 
 bool output_paths_distinct(const OutputPaths *paths, char *err, size_t cap) {
-    static const char *const beside_midi[] = {"score.musicxml", "contour.svg", "voices.wav",
-                                              "score.html",     "explain.txt", "report.txt"};
-    char all[11][512];
+    static const char *const beside_midi[] = {"score.musicxml", "score.ly",    "score.abc",
+                                              "contour.svg",    "voices.wav",  "score.html",
+                                              "explain.txt",    "report.txt"};
+    char all[13][512];
     int n = 0;
     snprintf(all[n++], sizeof(all[0]), "%s", paths->midi);
     snprintf(all[n++], sizeof(all[0]), "%s", paths->proof);

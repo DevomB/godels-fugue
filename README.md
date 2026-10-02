@@ -12,8 +12,8 @@ chooses a note and propagation continues, until every note has collapsed to a si
 pitch. Every removal is recorded with the rule that caused it and the facts it relied
 on. That record answers "why is this note here?" for any note in the finished piece.
 
-It is written in C11 with no dependencies and writes MIDI, MusicXML, WAV, an SVG
-contour, a proof trace, and an interactive HTML score.
+It is written in C11 with no dependencies and writes MIDI, MusicXML, LilyPond, ABC,
+WAV, an SVG contour, a proof trace, and an interactive HTML score.
 
 ## Quick start
 
@@ -200,6 +200,8 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 | --- | --- |
 | `canon.mid` | Standard MIDI file: a tempo, meter and key-signature track, then one track per voice |
 | `score.musicxml` | MusicXML 3.1 for notation software, with ties across barlines and key changes |
+| `score.ly` | LilyPond source: one staff per voice in a staff group, the same spelling, ties, clefs and key changes |
+| `score.abc` | ABC notation: one voice per canon voice, with accidentals written out relative to the key signature |
 | `voices.wav` | All voices mixed to mono, 16-bit, 44.1 kHz |
 | `contour.svg` | Pitch over time for every voice |
 | `score.html` | Interactive score: piano roll per voice, playback, why each note is there, a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart), what the given notes changed, entropy and energy charts, and the proof log |
@@ -333,7 +335,7 @@ src/
   proof.c     the proof log
   explain.c   why each variable has its value
   score.c     notes with durations for every voice
-  midi.c, export.c, page.c, trace.c    output files
+  midi.c, export.c, notation.c, page.c, trace.c    output files
   sat.c       SAT encoding and DPLL
   run.c, output.c, main.c              the command-line program
 tests/        unit, property and command-line tests

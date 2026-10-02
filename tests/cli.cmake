@@ -63,7 +63,8 @@ endfunction()
 
 # A default run writes every output file.
 run(default 0 MATCH "key: C major" "melody:" "backtracks:" "entropy:" "energy:")
-foreach(pair IN ITEMS "canon.mid|MThd" "score.musicxml|<?xml" "contour.svg|<svg"
+foreach(pair IN ITEMS "canon.mid|MThd" "score.musicxml|<?xml" "score.ly|\\version"
+                      "score.abc|X:" "contour.svg|<svg"
                       "voices.wav|RIFF" "score.html|<!DOCTYPE html>" "proof.json|{"
                       "report.txt|Canon Collapse" "explain.txt|" "proof.txt|" "proof.dag|"
                       "entropy.txt|")
@@ -172,7 +173,7 @@ execute_process(COMMAND "${EXE}" --out "${dir}/canon.mid" --proof "${dir}/proof.
 execute_process(COMMAND "${EXE}" --out "${dir}/canon.mid" --proof "${dir}/proof.txt"
                         --entropy "${dir}/entropy.txt" --config "${SRC}/examples/unsat.txt"
                 WORKING_DIRECTORY "${SRC}" RESULT_VARIABLE rc OUTPUT_QUIET ERROR_QUIET)
-foreach(name IN ITEMS canon.mid score.musicxml contour.svg voices.wav)
+foreach(name IN ITEMS canon.mid score.musicxml score.ly score.abc contour.svg voices.wav)
   if(EXISTS "${dir}/${name}")
     fail("stale ${name} left beside a failed run")
   endif()

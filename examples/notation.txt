@@ -1,0 +1,16 @@
+# LilyPond and ABC: every run writes score.ly and score.abc beside
+# canon.mid. D minor with held notes, a key change to F major in the
+# middle of bar 2, and a follower an octave down on a bass staff.
+length 16
+voices 2
+delay 4
+key D
+mode minor
+rhythm 1
+max_hold 2
+modulate_at 6
+key_second F
+mode_second major
+transpose -12
+range_low 45
+range_high 74

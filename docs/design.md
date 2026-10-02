@@ -195,8 +195,8 @@ in later bars too, a canon at a one-bar delay tends to keep harmonies that share
 tones, as rounds do.
 
 With `rhythm`, each note has a tie variable and the pitch domain gains a rest, so
-durations from a quarter to a whole note appear on the one-step grid. MIDI, MusicXML
-and WAV carry the real durations.
+durations from a quarter to a whole note appear on the one-step grid. MIDI, MusicXML,
+LilyPond, ABC and WAV carry the real durations.
 
 **Built.** **Not built**: cadence type as a variable (authentic, half, deceptive),
 phrase boundaries as variables, meter as a variable, per-voice meters (`poly_meter`
@@ -290,7 +290,9 @@ already expose the research data: entropy, statistics, and removals by rule.
 - Config: one table of keys drives text and JSON configs, `--set`, validation,
   presets and [config.md](config.md). `report.txt` records every key used, so a piece
   can be reproduced from it.
-- Outputs: MIDI, MusicXML, WAV, SVG, text and JSON traces, and the HTML page.
+- Outputs: MIDI, MusicXML, LilyPond, ABC, WAV, SVG, text and JSON traces, and the
+  HTML page. The notation exports share one spelling (`key_spell`), cut notes at
+  barlines and at the key change with ties, and pad the last bar with a rest.
 
 ## 15. Research directions
 
