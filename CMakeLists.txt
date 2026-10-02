@@ -43,6 +43,7 @@ add_library(canon STATIC
   src/export.c
   src/json.c
   src/midi.c
+  src/midi_read.c
   src/model.c
   src/notation.c
   src/output.c
@@ -81,7 +82,8 @@ foreach(name IN ITEMS
     test_proof
     test_export
     test_notation
-    test_midi)
+    test_midi
+    test_midi_read)
   add_executable(${name} tests/${name}.c)
   target_link_libraries(${name} PRIVATE canon)
   add_test(NAME ${name} COMMAND ${name})

@@ -89,7 +89,8 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   leap, voice spacing and crossing, cadence, leading tones rising to the tonic
   (`leading_tone`), and no two large leaps in a row in one direction (`double_leaps 0`).
 - **Given notes**: fix any notes of the melody and the solver completes the rest, or
-  give the whole melody to check it against the rules and see what it costs.
+  give the whole melody, typed in or read from a MIDI file, to check it against the
+  rules and see what it costs.
 - **Soft preferences** that rank the legal choices: stable scale degrees, an arch of
   tension, small leaps, few repeated notes, recovering after a leap, a repeating motif,
   contrary rather than similar motion between voices (`w_contrary`), pitch-class
@@ -137,7 +138,8 @@ JSON works too, and so does starting from a preset:
 ```
 
 Settings apply in order: the defaults, then `--preset`, then the config file (whose own
-`preset` key applies before its other keys), then each `--set KEY=VALUE`.
+`preset` key applies before its other keys), then each `--set KEY=VALUE`, then
+`--melody-midi` and `--lock`.
 **[docs/config.md](docs/config.md) lists every key** with its default, range and
 meaning; `canon-collapse --list-config` prints the same list.
 
@@ -181,6 +183,11 @@ The solver completes the canon around the given notes, and `changed` lists the n
 that differ from the piece it would have written on its own. Give every note to check a
 finished melody: a run that solves reports its energy, and one that fails names the
 rules the melody breaks.
+
+`--melody-midi FILE` gives every note from a Standard MIDI file instead, and sets
+`length` to fit: it reads the first track with notes at one step per quarter note,
+takes the highest note where notes overlap, and rests where none sounds (rests need
+`rhythm 1`).
 
 `--check` judges the given notes without a search and writes no files. Every rule whose
 notes are all given is checked, and each broken one is named with the notes involved
@@ -227,13 +234,14 @@ canon-collapse [options]
   --preset NAME        apply a style preset before the config file
   --set KEY=VALUE      override one key after the config file (repeatable)
   --lock INDEX PITCH   fix melody note INDEX to MIDI PITCH and report what changed
+  --melody-midi FILE   take the melody and its length from a MIDI file
   --explain VAR        print why a variable has its value: 5, x5, tie5, chord2, key, key2
   --check              only check the given notes against the rules: print each broken
                        rule, or "violations: none" (exit 1 if any)
   --out FILE           MIDI path; the other score files go beside it
   --proof FILE         proof trace path (default output/proof.txt)
   --entropy FILE       entropy log path (default output/entropy.txt)
-  --corpus DIR         suggest pitch-class weights from files of MIDI pitches
+  --corpus DIR         suggest pitch-class weights from files of MIDI pitches and .mid files
   --apply-weights      use the suggested corpus weights
   --sat                check the rules with the SAT backend instead
   --count N            count the pieces the rules allow, up to N
@@ -339,6 +347,7 @@ src/
   explain.c   why each variable has its value
   score.c     notes with durations for every voice
   midi.c, export.c, notation.c, page.c, trace.c    output files
+  midi_read.c MIDI input for --melody-midi and --corpus
   sat.c       SAT encoding and DPLL
   run.c, output.c, main.c              the command-line program
 tests/        unit, property and command-line tests

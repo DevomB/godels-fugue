@@ -312,6 +312,12 @@ already expose the research data: entropy, statistics, and removals by rule.
 - Config: one table of keys drives text and JSON configs, `--set`, validation,
   presets and [config.md](config.md). `report.txt` records every key used, so a piece
   can be reproduced from it.
+- Inputs: text and JSON configs, and Standard MIDI files of format 0, 1 or 2
+  (`midi_read.c`). `--melody-midi` reads a melody from the first track with notes,
+  rounding onsets and ends to the nearest quarter note: a held note gives its pitch
+  on every step it covers, the highest of overlapping notes wins, and a gap is a rest.
+  `--corpus` counts the pitch classes of their notes as it does for lists of pitches;
+  notes on channel 10, the General MIDI drums, are skipped.
 - Outputs: MIDI, MusicXML, LilyPond, ABC, WAV, SVG, text and JSON traces, and the
   HTML page. The notation exports share one spelling (`key_spell`), cut notes at
   barlines and at the key change with ties, and pad the last bar with a rest.
@@ -328,5 +334,6 @@ Most of these are not built; the proof log and statistics provide the data for t
   lists each note's viable values and marks it frozen or a bifurcation point.
 - How does temperature trade novelty against cost over many samples?
 - Analysis mode: measure an existing score against the rules, estimate weights, and
-  find recurring structures ("style fingerprints"). **Partly built**: `melody` checks a
-  given melody against the rules and reports its energy or the rules it breaks.
+  find recurring structures ("style fingerprints"). **Partly built**: `melody`, or
+  `--melody-midi` for a melody in a MIDI file, checks a given melody against the rules
+  and reports its energy or the rules it breaks.

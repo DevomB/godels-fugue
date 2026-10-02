@@ -147,6 +147,25 @@ if(EXISTS "${OUT}/count/canon.mid")
 endif()
 run(limit 3 ERROR "search limit reached" ARGS --max-nodes 2)
 run(corpus 0 MATCH "weights:" ARGS --corpus "${SRC}/corpus" --apply-weights)
+# A piece's MIDI file gives back its melody, rests and all (the character
+# after the line ends it), and a corpus can be MIDI files.
+run(midi_piece 0 MATCH "melody:" ARGS)
+string(REGEX MATCH "melody:( [0-9]+| rest)+" melody_line "${last_out}")
+run(melody_midi 0 MATCH "${melody_line}[^ 0-9a-z]" "counterfactual: given"
+    ARGS --melody-midi "${last_dir}/canon.mid")
+run(midi_rests 0 MATCH "melody:.* rest" ARGS --set rhythm=1 --set rest_at=3)
+string(REGEX MATCH "melody:( [0-9]+| rest)+" melody_line "${last_out}")
+run(melody_midi_rests 0 MATCH "${melody_line}[^ 0-9a-z]"
+    ARGS --set rhythm=1 --melody-midi "${OUT}/midi_rests/canon.mid")
+run(melody_midi_rhythm 1 ERROR "rests at step [0-9]+, and rests need rhythm: add --set rhythm=1"
+    ARGS --melody-midi "${OUT}/midi_rests/canon.mid")
+run(melody_midi_text 1 ERROR "not a Standard MIDI file"
+    ARGS --melody-midi "${SRC}/examples/given.txt")
+run(melody_midi_missing 1 ERROR "cannot read MIDI file" ARGS --melody-midi "${OUT}/none.mid")
+file(REMOVE_RECURSE "${OUT}/midi_corpus")
+file(MAKE_DIRECTORY "${OUT}/midi_corpus")
+file(COPY "${OUT}/midi_rests/canon.mid" DESTINATION "${OUT}/midi_corpus")
+run(corpus_midi 0 MATCH "weights:( [0-9]+)+" ARGS --corpus "${OUT}/midi_corpus")
 run(delay_search 0 MATCH "delay: [0-9]+" ARGS --set delay_search=1 --set delay_max=5)
 run(diatonic_cli 0 MATCH "voice 2: rest rest rest rest 64 65 67 69 rest" "voice 3: [^
 ]* 67 69 71 72

@@ -1,5 +1,9 @@
 #include "corpus.h"
 
+#include "midi_read.h"
+
+#include <ctype.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,12 +33,41 @@ int corpus_row_counts(const char *path, int counts[12]) {
     return n;
 }
 
+/* Counts every note of every track; a file that fails to read counts nothing. */
+int corpus_midi_counts(const char *path, int counts[12]) {
+    if (path == NULL || counts == NULL) return 0;
+    MidiFile file;
+    char err[300];
+    if (!midi_read_file(&file, path, err, sizeof(err))) return 0;
+    int n = 0;
+    for (int k = 0; k < file.ntracks; k++) {
+        const MidiTrack *t = &file.tracks[k];
+        for (int i = 0; i < t->count; i++) counts[t->notes[i].pitch % 12] += 1;
+        n += t->count;
+    }
+    midi_file_free(&file);
+    return n;
+}
+
+/* .mid or .midi, in any case. */
+static bool is_midi_name(const char *name) {
+    const char *dot = strrchr(name, '.');
+    if (dot == NULL || strlen(dot) > 5) return false;
+    char ext[6];
+    size_t i = 0;
+    for (; dot[i] != '\0'; i++) ext[i] = (char)tolower((unsigned char)dot[i]);
+    ext[i] = '\0';
+    return strcmp(ext, ".mid") == 0 || strcmp(ext, ".midi") == 0;
+}
+
 static int count_entry(const char *dir, const char *name, int counts[12]) {
     char path[512];
     if (name[0] == '.') return 0;
     if (snprintf(path, sizeof(path), "%s/%s", dir, name) >= (int)sizeof(path))
         return 0;
-    return corpus_row_counts(path, counts) > 0;
+    int n = is_midi_name(name) ? corpus_midi_counts(path, counts)
+                               : corpus_row_counts(path, counts);
+    return n > 0;
 }
 
 /* Returns the number of files that held at least one pitch. */
