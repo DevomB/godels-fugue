@@ -11,9 +11,10 @@ enum { EXPLAIN_TEXT_MAX = 4096 };
 /* Propagations one pass over the variables may spend minimizing forced
  * values. Each costs at most one per decision in its reason, plus one, and
  * is minimized only if that much is left; the others keep their whole
- * reason, which is still sound. The largest pieces tried, 32 notes in four
- * voices, need up to about 500; the cap keeps a worse one from holding up
- * its own output. One variable (at most VAR_MAX decisions) always fits. */
+ * reason, which is still sound. Pieces of 32 notes in four voices need up
+ * to about 500, and the largest tried, 64 notes in three or four voices,
+ * about 900; the cap keeps a worse one from holding up its own output. One
+ * variable (at most VAR_MAX decisions) always fits. */
 enum { EXPLAIN_BUDGET = 1000 };
 
 /* How a variable reached its final value. */

@@ -1017,7 +1017,7 @@ void config_key_value(const PieceConfig *config, int index, char *buf, size_t ca
 
 void config_write(FILE *f, const PieceConfig *config) {
     for (int i = 0; i < KEY_DEF_COUNT; i++) {
-        char buf[256];
+        char buf[CONFIG_VALUE_MAX];
         config_key_value(config, i, buf, sizeof(buf));
         fprintf(f, "%s %s\n", keys[i].name, buf);
     }
