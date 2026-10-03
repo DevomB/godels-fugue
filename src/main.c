@@ -16,7 +16,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CANON_COLLAPSE_VERSION "0.2.0"
+/* CMake passes the project version; this is the fallback for other builds. */
+#ifndef CANON_COLLAPSE_VERSION
+#define CANON_COLLAPSE_VERSION "1.0.0"
+#endif
 
 enum { EXIT_UNSAT = 1, EXIT_TOO_LARGE = 2, EXIT_LIMIT = 3, SETS_MAX = 64 };
 

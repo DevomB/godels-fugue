@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(canon-collapse VERSION 0.2.0 LANGUAGES C)
+project(canon-collapse VERSION 1.0.0 LANGUAGES C)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -65,6 +65,7 @@ endif()
 
 add_executable(canon-collapse src/main.c)
 target_link_libraries(canon-collapse PRIVATE canon)
+target_compile_definitions(canon-collapse PRIVATE CANON_COLLAPSE_VERSION="${PROJECT_VERSION}")
 
 enable_testing()
 foreach(name IN ITEMS
