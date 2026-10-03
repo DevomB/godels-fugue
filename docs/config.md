@@ -99,7 +99,7 @@ style preset first, so every other key in the file overrides it.
 | `anneal_ratio` | 0 | 0..99 | Geometric schedule: temperature *= ratio / 100 per decision (0 = off). |
 | `w_gravity` | 1 | 0..100 | Cost of unstable scale degrees (leading tone high, tonic low). |
 | `w_curve` | 1 | 0..100 | Cost per unit of difference between a melody note's gravity and its target on the tension curve. |
-| `tension` | ? | up to 32 values | The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as points spread evenly from the first melody note to the last; notes between points take the straight line between them, rounded. 0 4 0 peaks in the middle, one value is flat, a ? point is filled in from its neighbours, and all ? is an arch. |
+| `tension` | arch | up to 32 values | The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as points spread evenly from the first melody note to the last; notes between points take the straight line between them, rounded. 0 4 0 peaks in the middle and one value is flat. A ? point is filled in from the given points on either side, or from the nearest one at either end, so 0 4 ? rises over the first half and then holds. arch (or no given point) is the built-in arch. |
 | `w_leap` | 1 | 0..100 | Cost per four semitones of melodic interval. |
 | `w_repeat` | 4 | 0..100 | Cost of striking the same pitch twice in a row. |
 | `w_recover` | 2 | 0..100 | Cost of not stepping back after a leap larger than a third. |

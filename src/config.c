@@ -177,14 +177,22 @@ static void print_note_word(int v, char *buf, size_t cap) {
     }
 }
 
-static bool parse_unset_word(const char *w, int *out) {
-    if (strcmp(w, "?") != 0) return false;
-    *out = -1;
-    return true;
+static bool parse_tension_word(const char *w, int *out) {
+    if (strcmp(w, "?") == 0) {
+        *out = TENSION_FREE;
+        return true;
+    }
+    if (strcmp(w, "arch") == 0) {
+        *out = TENSION_UNLISTED;
+        return true;
+    }
+    return false;
 }
 
-static void print_unset_word(int v, char *buf, size_t cap) {
-    if (v < 0) {
+static void print_tension_word(int v, char *buf, size_t cap) {
+    if (v == TENSION_UNLISTED) {
+        snprintf(buf, cap, "arch");
+    } else if (v < 0) {
         snprintf(buf, cap, "?");
     } else {
         snprintf(buf, cap, "%d", v);
@@ -362,12 +370,14 @@ static const KeyDef keys[] = {
     {"w_curve", F(w_curve), 1, 0, 100, 1, NULL, NULL, "energy",
      "Cost per unit of difference between a melody note's gravity and its target on the "
      "tension curve."},
-    {"tension", F(tension), OPEN(MELODY_MAX), -1, 4, -1, parse_unset_word,
-     print_unset_word, "energy",
+    {"tension", F(tension), OPEN(MELODY_MAX), TENSION_UNLISTED, 4, TENSION_UNLISTED,
+     parse_tension_word, print_tension_word, "energy",
      "The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as "
      "points spread evenly from the first melody note to the last; notes between points "
-     "take the straight line between them, rounded. 0 4 0 peaks in the middle, one value "
-     "is flat, a ? point is filled in from its neighbours, and all ? is an arch."},
+     "take the straight line between them, rounded. 0 4 0 peaks in the middle and one "
+     "value is flat. A ? point is filled in from the given points on either side, or "
+     "from the nearest one at either end, so 0 4 ? rises over the first half and then "
+     "holds. arch (or no given point) is the built-in arch."},
     {"w_leap", F(w_leap), 1, 0, 100, 1, NULL, NULL, "energy",
      "Cost per four semitones of melodic interval."},
     {"w_repeat", F(w_repeat), 1, 0, 100, 4, NULL, NULL, "energy",

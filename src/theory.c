@@ -413,11 +413,13 @@ int tension_target(int index, int length) {
 }
 
 int tension_curve(const int *points, int count, int index, int length) {
-    int n = 0; /* points up to the last one given */
+    int n = 0; /* points up to the last one listed, ? included */
+    bool given = false;
     for (int k = 0; k < count; k++) {
-        if (points[k] >= 0) n = k + 1;
+        if (points[k] != TENSION_UNLISTED) n = k + 1;
+        if (points[k] >= 0) given = true;
     }
-    if (n == 0) return tension_target(index, length);
+    if (!given) return tension_target(index, length);
     if (length < 1) length = 1;
     if (index < 0) index = 0;
     if (index > length - 1) index = length - 1;
@@ -432,6 +434,7 @@ int tension_curve(const int *points, int count, int index, int length) {
         if (k * den >= at && after < 0) after = k;
     }
     if (before < 0) return points[after];
+    if (after < 0) return points[before];
     if (after == before) return points[before];
     int span = (after - before) * den;
     int part = at - before * den;

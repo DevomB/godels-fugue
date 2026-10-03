@@ -63,15 +63,21 @@ static void test_defaults_and_set(void) {
     CHECK(!config_set(&c, "melody", "60 x", err, sizeof(err)));
     CHECK(!config_set(&c, "melody", "", err, sizeof(err)));
     CHECK(!config_set(&c, "melody", "128", err, sizeof(err)));
-    /* tension: ? (the arch) everywhere until a curve is drawn; a short
-     * list leaves the later points ?, and a new list replaces the old */
-    CHECK(c.tension[0] == -1 && c.tension[MELODY_MAX - 1] == -1);
+    /* tension: unlisted (the arch) until a curve is drawn; a short list
+     * leaves the later slots unlisted, a ? is a point of its own, and a
+     * new list replaces the old */
+    CHECK(c.tension[0] == TENSION_UNLISTED && c.tension[MELODY_MAX - 1] == TENSION_UNLISTED);
     CHECK(config_set(&c, "tension", "0 4 0", err, sizeof(err)));
-    CHECK(c.tension[0] == 0 && c.tension[1] == 4 && c.tension[2] == 0 && c.tension[3] == -1);
+    CHECK(c.tension[0] == 0 && c.tension[1] == 4 && c.tension[2] == 0);
+    CHECK(c.tension[3] == TENSION_UNLISTED);
     CHECK(config_set(&c, "tension", "1,?,3", err, sizeof(err)));
-    CHECK(c.tension[0] == 1 && c.tension[1] == -1 && c.tension[2] == 3);
+    CHECK(c.tension[0] == 1 && c.tension[1] == TENSION_FREE && c.tension[2] == 3);
+    CHECK(config_set(&c, "tension", "0 4 ?", err, sizeof(err)));
+    CHECK(c.tension[2] == TENSION_FREE && c.tension[3] == TENSION_UNLISTED);
     CHECK(config_set(&c, "tension", "?", err, sizeof(err)));
-    CHECK(c.tension[0] == -1 && c.tension[2] == -1);
+    CHECK(c.tension[0] == TENSION_FREE && c.tension[2] == TENSION_UNLISTED);
+    CHECK(config_set(&c, "tension", "arch", err, sizeof(err)));
+    CHECK(c.tension[0] == TENSION_UNLISTED && c.tension[2] == TENSION_UNLISTED);
     CHECK(!config_set(&c, "tension", "5", err, sizeof(err)));
     CHECK(!config_set(&c, "tension", "0 rest", err, sizeof(err)));
     CHECK(config_set(&c, "mirror", "on", err, sizeof(err)));
@@ -267,7 +273,8 @@ static void test_files(void) {
     write_file("output/tests/tension.json", "{\"tension\": [0, \"?\", 4], \"mirror\": true}");
     config_defaults(&c);
     CHECK(config_load_file(&c, "output/tests/tension.json", err, sizeof(err)));
-    CHECK(c.tension[0] == 0 && c.tension[1] == -1 && c.tension[2] == 4 && c.tension[3] == -1);
+    CHECK(c.tension[0] == 0 && c.tension[1] == TENSION_FREE && c.tension[2] == 4);
+    CHECK(c.tension[3] == TENSION_UNLISTED);
     CHECK(c.mirror == 1);
 
     write_file("output/tests/bad.json", "{\"voices\": 2.5}");
@@ -295,7 +302,7 @@ static void test_round_trip(void) {
     test_set(&a, "melody=62,?,rest,66");
     test_set(&a, "transpose_1=0");
     test_set(&a, "transpose_2=-5");
-    test_set(&a, "tension=0,?,4,1");
+    test_set(&a, "tension=0,?,4,?"); /* a trailing ? survives the round trip */
     test_set(&a, "mirror=1");
     test_set(&a, "mirror_axis=62");
     FILE *f = fopen("output/tests/round.txt", "w");

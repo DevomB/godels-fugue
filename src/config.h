@@ -76,7 +76,7 @@ typedef struct PieceConfig {
     int anneal_ratio;
     int w_gravity;
     int w_curve;
-    int tension[MELODY_MAX]; /* points of the target curve, or -1 = ? */
+    int tension[MELODY_MAX]; /* curve points, TENSION_FREE (?) or TENSION_UNLISTED */
     int w_leap;
     int w_repeat;
     int w_recover;
