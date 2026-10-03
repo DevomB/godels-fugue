@@ -1,0 +1,68 @@
+name: Release
+
+# Builds, tests and packages canon-collapse for each platform and attaches the
+# archives to the GitHub release that triggered the run.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to attach the archives to
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-latest
+            # A static binary runs on any x86_64 Linux, whatever its glibc.
+            configure: -DCMAKE_EXE_LINKER_FLAGS=-static
+          - name: macos-universal
+            os: macos-latest
+            configure: -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64
+          - name: windows-x86_64
+            os: windows-latest
+            # Link the C runtime statically so no redistributable is needed.
+            configure: -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release "${{ matrix.configure }}"
+        shell: bash
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Test
+        working-directory: build
+        run: ctest -C Release --output-on-failure
+      - name: Package
+        shell: bash
+        run: |
+          name="canon-collapse-${TAG#v}-${{ matrix.name }}"
+          mkdir -p "$name"
+          if [ "$RUNNER_OS" = Windows ]; then exe=canon-collapse.exe; else exe=canon-collapse; fi
+          cp "build/$exe" README.md LICENSE "$name/"
+          cp -r examples docs corpus "$name/"
+          if [ "$RUNNER_OS" = Windows ]; then
+            7z a "$name.zip" "$name" > /dev/null
+            echo "ASSET=$name.zip" >> "$GITHUB_ENV"
+          else
+            tar czf "$name.tar.gz" "$name"
+            echo "ASSET=$name.tar.gz" >> "$GITHUB_ENV"
+          fi
+      - name: Upload
+        shell: bash
+        run: gh release upload "$TAG" "$ASSET" --clobber
