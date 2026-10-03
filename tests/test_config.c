@@ -103,7 +103,7 @@ static void test_defaults_and_set(void) {
     CHECK(!config_set(&c, "strong_chord", "1", err, sizeof(err)));
     CHECK(strstr(err, "unknown config key: strong_chord") != NULL);
     CHECK(!config_set(&c, "pc_weight", "1,2", err, sizeof(err)));
-    char many[200] = "";
+    char many[3 * (MELODY_MAX + 1) + 1] = "";
     for (int i = 0; i <= MELODY_MAX; i++) strcat(many, i ? ",60" : "60");
     CHECK(!config_set(&c, "melody", many, err, sizeof(err)));
     CHECK(strstr(err, "at most") != NULL);
@@ -335,6 +335,70 @@ static void test_round_trip(void) {
     CHECK(config_key_name(config_key_count()) == NULL);
 }
 
+/* A melody takes up to 64 notes, from text or JSON, and writing the
+ * config keeps every one of them. */
+static void test_longest_melody(void) {
+    PieceConfig a;
+    PieceConfig b;
+    char err[300];
+    test_output_dir();
+    CHECK(MELODY_MAX == 64);
+    config_defaults(&b);
+    CHECK(config_set(&b, "lock_index", "63", err, sizeof(err)));
+    CHECK(!config_set(&b, "lock_index", "64", err, sizeof(err)));
+    CHECK(config_set(&b, "rest_at", "63", err, sizeof(err)));
+    CHECK(!config_set(&b, "rest_at", "64", err, sizeof(err)));
+    config_defaults(&a);
+    CHECK(config_set(&a, "length", "64", err, sizeof(err)));
+    CHECK(a.length == 64);
+    CHECK(!config_set(&a, "length", "65", err, sizeof(err)));
+    CHECK(strstr(err, "must be 1..64") != NULL);
+    CHECK(config_set(&a, "max_rests", "64", err, sizeof(err)));
+    CHECK(!config_set(&a, "max_rests", "65", err, sizeof(err)));
+
+    /* rests and three-digit pitches make the longest text a melody has */
+    char text[5 * MELODY_MAX] = "";
+    char json[16 * MELODY_MAX] = "{\"length\": 64, \"rhythm\": 1, \"max_rests\": 64, \"melody\": [";
+    for (int i = 0; i < MELODY_MAX; i++) {
+        strcat(text, i ? "," : "");
+        strcat(text, i % 2 ? "127" : "rest");
+        strcat(json, i ? ", " : "");
+        strcat(json, i % 2 ? "127" : "\"rest\"");
+    }
+    strcat(json, "]}");
+    CHECK(strlen(text) > 256);
+    CHECK(config_set(&a, "melody", text, err, sizeof(err)));
+    for (int i = 0; i < MELODY_MAX; i++) CHECK(a.melody[i] == (i % 2 ? 127 : PITCH_REST));
+    test_set(&a, "rhythm=1");
+    CHECK(config_validate(&a, err, sizeof(err)));
+    a.length = 63; /* the last note is past the end */
+    CHECK(!config_validate(&a, err, sizeof(err)));
+    CHECK(strstr(err, "note 63 is past the end") != NULL);
+    a.length = 64;
+
+    write_file("output/tests/longest.json", json);
+    config_defaults(&b);
+    CHECK(config_load_file(&b, "output/tests/longest.json", err, sizeof(err)));
+    CHECK(memcmp(&a, &b, sizeof(a)) == 0);
+
+    int key = -1;
+    for (int i = 0; i < config_key_count(); i++) {
+        if (strcmp(config_key_name(i), "melody") == 0) key = i;
+    }
+    CHECK(key >= 0);
+    char value[CONFIG_VALUE_MAX];
+    config_key_value(&a, key, value, sizeof(value));
+    CHECK(strcmp(value, text) == 0);
+
+    FILE *f = fopen("output/tests/longest.txt", "w");
+    CHECK(f != NULL);
+    config_write(f, &a);
+    CHECK(fclose(f) == 0);
+    config_defaults(&b);
+    CHECK(config_load_file(&b, "output/tests/longest.txt", err, sizeof(err)));
+    CHECK(memcmp(&a, &b, sizeof(a)) == 0);
+}
+
 static void test_reference(void) {
     FILE *f = fopen("output/tests/reference.md", "w");
     CHECK(f != NULL);
@@ -447,6 +511,7 @@ int main(void) {
     test_presets();
     test_files();
     test_round_trip();
+    test_longest_melody();
     test_reference();
     printf("ok\n");
     return 0;

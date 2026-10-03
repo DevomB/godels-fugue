@@ -11,7 +11,7 @@ style preset first, so every other key in the file overrides it.
 
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
-| `length` | 12 | 1..32 | Melody length in steps. One step is a quarter note; four steps make a bar. |
+| `length` | 12 | 1..64 | Melody length in steps. One step is a quarter note; four steps make a bar. |
 | `voices` | 2 | 2..4 | Number of voices. Voice 1 plays the melody; the others follow it. |
 | `delay` | 4 | 0..128 | Steps between entries: voice v enters after v * delay steps. |
 | `delay_1` | 0 | 0..128 | Entry step of voice 2 (0 = 1 * delay). |
@@ -75,16 +75,16 @@ style preset first, so every other key in the file overrides it.
 | `rhythm` | 0 | 0..1 | Let notes be tied into longer values and let rests appear. |
 | `max_hold` | 1 | 1..3 | Longest tie in steps after the attack (1 = half notes, 3 = whole notes). |
 | `rest_at` | off | see meaning | Force a rest at this melody index (needs rhythm). |
-| `max_rests` | 2 | 0..32 | Most rests the melody may contain. |
+| `max_rests` | 2 | 0..64 | Most rests the melody may contain. |
 
 ### Lock
 
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
 | `lock` | 0 | 0..1 | Fix one melody note before the search and report what it changed (melody fixes any number). |
-| `lock_index` | 0 | 0..31 | Melody index of the locked note. |
+| `lock_index` | 0 | 0..63 | Melody index of the locked note. |
 | `lock_pitch` | 60 | 0..127 | MIDI pitch of the locked note (0 = rest). |
-| `melody` | ? | up to 32 values | The melody's notes, given as MIDI pitches, rest (needs rhythm) or ? for a note the solver chooses; notes past the list are free. Give them all to check a melody against the rules. |
+| `melody` | ? | up to 64 values | The melody's notes, given as MIDI pitches, rest (needs rhythm) or ? for a note the solver chooses; notes past the list are free. Give them all to check a melody against the rules. |
 
 ### Energy
 
@@ -99,7 +99,7 @@ style preset first, so every other key in the file overrides it.
 | `anneal_ratio` | 0 | 0..99 | Geometric schedule: temperature *= ratio / 100 per decision (0 = off). |
 | `w_gravity` | 1 | 0..100 | Cost of unstable scale degrees (leading tone high, tonic low). |
 | `w_curve` | 1 | 0..100 | Cost per unit of difference between a melody note's gravity and its target on the tension curve. |
-| `tension` | arch | up to 32 values | The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as points spread evenly from the first melody note to the last; notes between points take the straight line between them, rounded. 0 4 0 peaks in the middle and one value is flat. A ? point is filled in from the given points on either side, or from the nearest one at either end, so 0 4 ? rises over the first half and then holds. arch (or no given point) is the built-in arch. |
+| `tension` | arch | up to 64 values | The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as points spread evenly from the first melody note to the last; notes between points take the straight line between them, rounded. 0 4 0 peaks in the middle and one value is flat. A ? point is filled in from the given points on either side, or from the nearest one at either end, so 0 4 ? rises over the first half and then holds. arch (or no given point) is the built-in arch. |
 | `w_leap` | 1 | 0..100 | Cost per four semitones of melodic interval. |
 | `w_repeat` | 4 | 0..100 | Cost of striking the same pitch twice in a row. |
 | `w_recover` | 2 | 0..100 | Cost of not stepping back after a leap larger than a third. |

@@ -24,6 +24,10 @@ static void test_levelsets(void) {
     CHECK(levelset_count(&a) == 3);
     levelset_remove(&a, 70);
     CHECK(levelset_max(&a) == 5);
+    /* a search deciding every variable reaches level VAR_MAX */
+    levelset_add(&a, VAR_MAX);
+    CHECK(levelset_has(&a, VAR_MAX) && levelset_max(&a) == VAR_MAX);
+    CHECK(levelset_count(&a) == 3);
 }
 
 static void test_log(void) {

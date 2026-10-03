@@ -4,7 +4,7 @@
 /* Size limits shared by every module.
  * A melody step is one quarter note; a bar is four steps. */
 enum {
-    MELODY_MAX = 32,
+    MELODY_MAX = 64,
     VOICE_MAX = 4,
     SPAN_MAX = 128,
     BAR_MAX = SPAN_MAX / 4,

@@ -133,7 +133,9 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap);
 void config_write(FILE *f, const PieceConfig *config);
 int config_key_count(void);
 const char *config_key_name(int index);
-/* Text form of one key's value; arrays are comma-separated. */
+/* Text form of one key's value; arrays are comma-separated. The longest,
+ * a melody of MELODY_MAX rests, fits in CONFIG_VALUE_MAX characters. */
+enum { CONFIG_VALUE_MAX = 5 * MELODY_MAX };
 void config_key_value(const PieceConfig *config, int index, char *buf, size_t cap);
 /* Reference of every key: plain text, or a Markdown table. */
 void config_print_reference(FILE *f, bool markdown);

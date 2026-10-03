@@ -93,7 +93,7 @@ bool trace_write_entropy(const char *path, const Run *run) {
 static void write_config(FILE *f, const PieceConfig *config) {
     fprintf(f, "\"config\":{");
     for (int i = 0; i < config_key_count(); i++) {
-        char value[256];
+        char value[CONFIG_VALUE_MAX];
         config_key_value(config, i, value, sizeof(value));
         fprintf(f, "%s", i ? "," : "");
         json_string(f, config_key_name(i));
