@@ -171,7 +171,7 @@ The keys you are most likely to change:
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `length` | 12 | Melody notes (one step each; four steps make a bar) |
+| `length` | 12 | Melody notes, up to 64 (one step each; four steps make a bar) |
 | `voices` | 2 | Number of voices |
 | `delay` | 4 | Steps between voice entries |
 | `key`, `mode` | C, major | The key; `search` lets the solver choose |

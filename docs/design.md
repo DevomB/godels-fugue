@@ -225,7 +225,8 @@ changes which steps are strong for every voice), and form as a state machine.
   last support found cached per value; a counting propagator for the rest limit; a
   queue of constraints to revisit.
 - **Backtracking** with snapshots on the heap (one per depth). A trail would use less
-  memory; at up to about a hundred variables, snapshots are simple and fast enough.
+  memory; at up to about 160 variables (a 64-note melody with ties, a chord per
+  bar and two keys), snapshots are simple and fast enough.
 - **Conflict-directed backjumping**: every variable carries the set of decisions its
   domain depends on. A dead end jumps straight back to the latest decision in that
   set, and the failed value is removed with that set as its reason.
