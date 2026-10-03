@@ -65,22 +65,27 @@ static bool locked(const Model *m, int var) {
 }
 
 /* A second solver that replays chosen decisions from the root fixpoint,
- * under the same model and rules, with no search. */
+ * under the same model and rules, with no search. below[l] holds the
+ * fixpoint of the decisions under level l in the reason being minimized. */
 typedef struct ExplainReplay {
     SolverState state;
     Snapshot root;
+    Snapshot *below; /* one per decision level */
 } Replay;
 
 static Replay *replay_open(const SolverState *s) {
     Replay *r = malloc(sizeof(*r));
     if (r == NULL) return NULL;
-    if (!solver_init(&r->state, s->model)) {
+    r->below = malloc((size_t)(s->level + 1) * sizeof(Snapshot));
+    if (r->below == NULL || !solver_init(&r->state, s->model)) {
+        free(r->below);
         free(r);
         return NULL;
     }
     memcpy(r->state.skip, s->skip, sizeof(r->state.skip));
     if (!solver_propagate(&r->state)) {
         solver_free(&r->state);
+        free(r->below);
         free(r);
         return NULL;
     }
@@ -90,14 +95,42 @@ static Replay *replay_open(const SolverState *s) {
 
 static void replay_close(Replay *r) {
     solver_free(&r->state);
+    free(r->below);
     free(r);
 }
 
+/* Fixes the value the search chose at level l, unless propagation has
+ * already removed it. */
+static bool replay_decide(SolverState *t, const SolverState *s, int l) {
+    const Decision *d = &s->decisions[l];
+    if (!domain_contains(&t->domains[d->var], d->value)) return false;
+    domain_clear(&t->domains[d->var]);
+    domain_add(&t->domains[d->var], d->value);
+    solver_touch(t, d->var);
+    return true;
+}
+
 /* Do the decisions in set, and nothing else the search did, leave var
- * with only value? Starting from the root fixpoint reaches the same
- * fixpoint as starting from the initial domains with every rule queued,
- * whatever earlier replays left in the support caches. */
-static bool replay_forces(ExplainContext *ctx, const LevelSet *set, int var, int value) {
+ * with only value? The ones from level `from` up are fixed on top of
+ * start, the fixpoint of those below. Propagation reaches the same
+ * fixpoint whatever order the decisions and rules come in, and whatever
+ * earlier replays left in the support caches, so this agrees with fixing
+ * them all on the initial domains with every rule queued. */
+static bool replay_forces(ExplainContext *ctx, const Snapshot *start, int from,
+                          const LevelSet *set, int var, int value) {
+    const SolverState *s = ctx->state;
+    SolverState *t = &ctx->replay->state;
+    ctx->budget--;
+    solver_restore(t, start);
+    for (int l = from; l <= s->level; l++) {
+        if (levelset_has(set, l) && !replay_decide(t, s, l)) return false;
+    }
+    return solver_propagate(t) && solver_value(t, var) == value;
+}
+
+/* replay_forces for the whole set from the root, one decision at a time,
+ * keeping in below[l] the fixpoint reached before decision l. */
+static bool replay_all(ExplainContext *ctx, const LevelSet *set, int var, int value) {
     const SolverState *s = ctx->state;
     Replay *r = ctx->replay;
     SolverState *t = &r->state;
@@ -105,13 +138,10 @@ static bool replay_forces(ExplainContext *ctx, const LevelSet *set, int var, int
     solver_restore(t, &r->root);
     for (int l = 1; l <= s->level; l++) {
         if (!levelset_has(set, l)) continue;
-        const Decision *d = &s->decisions[l];
-        if (!domain_contains(&t->domains[d->var], d->value)) return false;
-        domain_clear(&t->domains[d->var]);
-        domain_add(&t->domains[d->var], d->value);
-        solver_touch(t, d->var);
+        solver_save(t, &r->below[l]);
+        if (!replay_decide(t, s, l) || !solver_propagate(t)) return false;
     }
-    return solver_propagate(t) && solver_value(t, var) == value;
+    return solver_value(t, var) == value;
 }
 
 void explain_begin(ExplainContext *ctx, const SolverState *s) {
@@ -128,8 +158,10 @@ void explain_end(ExplainContext *ctx) {
 
 /* Deletion over the reason, latest decision first: a decision goes when
  * the rest still force the value. More decisions only ever remove more
- * values, so each one kept is needed by the final set as well. A value
- * whose replays would overrun the budget is left alone. */
+ * values, so each one kept is needed by the final set as well. The
+ * decisions below the one tried are all still in the set, so each trial
+ * starts from their fixpoint. A value whose replays would overrun the
+ * budget is left alone. */
 static void minimize(ExplainContext *ctx, Explanation *e) {
     const SolverState *s = ctx->state;
     if (ctx->unavailable || levelset_count(&e->reason) + 1 > ctx->budget) return;
@@ -139,11 +171,11 @@ static void minimize(ExplainContext *ctx, Explanation *e) {
         if (ctx->unavailable) return;
     }
     LevelSet set = e->reason;
-    if (!replay_forces(ctx, &set, e->var, e->value)) return;
+    if (!replay_all(ctx, &set, e->var, e->value)) return;
     for (int l = s->level; l >= 1; l--) {
         if (!levelset_has(&set, l)) continue;
-        levelset_remove(&set, l);
-        if (!replay_forces(ctx, &set, e->var, e->value)) levelset_add(&set, l);
+        if (replay_forces(ctx, &ctx->replay->below[l], l + 1, &set, e->var, e->value))
+            levelset_remove(&set, l);
     }
     e->minimal = set;
     e->minimized = true;

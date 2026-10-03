@@ -258,9 +258,12 @@ changes which steps are strong for every voice), and form as a state machine.
   of its decisions it does not. When all of them together do not force the value
   (the search's refutations or learned conflicts did part of the work), the full
   set is shown, marked as not minimized (`"minimal": false` in JSON). The cost is
-  one propagation per decision in the reason, from a root fixpoint built once per
-  pass over the variables; a pass spends at most 1000, and forced values past that
-  keep their full set, marked the same way.
+  one replay per decision in the reason, plus one of the whole reason. That one
+  fixes its decisions in turn from a root fixpoint built once per pass over the
+  variables and keeps the fixpoint before each, so the replay without a decision
+  starts from the fixpoint of the decisions below it, which are all still in the
+  set. A pass spends at most 1000 replays, and forced values past that keep their
+  full set, marked the same way.
 - **Unsat core**: deletion over the rules in use. A rule stays in the core only if
   the problem becomes solvable without it.
 - **Counterfactual**: with a lock or given notes, the same rules are solved without
