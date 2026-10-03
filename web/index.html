@@ -167,6 +167,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
         <button id="undo" type="button" hidden>Undo</button>
         <button id="listen" type="button" disabled>Play</button>
         <button id="watch" type="button" disabled>Watch it collapse</button>
+        <button id="share" type="button" disabled title="Copy a link to this piece">Share</button>
       </span>
     </div>
     <div id="files" class="files"></div>
@@ -229,12 +230,12 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   const compose = $("compose"), shuffle = $("shuffle");
   const badge = $("badge"), badgeText = $("badge-text"), summary = $("summary");
   const files = $("files"), log = $("log"), frame = $("score"), empty = $("empty");
-  const undo = $("undo"), listen = $("listen"), watch = $("watch");
+  const undo = $("undo"), listen = $("listen"), watch = $("watch"), share = $("share");
 
   let worker = null, runId = 0, urls = [], observer = null;
   // What-if state: earlier configs to undo to, the note being tried, the
   // variable to show once the new score loads, and the last solved melody.
-  let history = [], trying = null, pendingSelect = null, lastMelody = null;
+  let undoStack = [], trying = null, pendingSelect = null, lastMelody = null, composed = null;
 
   function setBadge(kind, text) {
     badge.className = "badge " + kind;
@@ -273,6 +274,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   function run() {
     if (!worker && !startWorker()) return;
     runId += 1;
+    composed = { config: config.value, seed: String(Math.max(0, Math.floor(Number(seed.value) || 0))) };
     busy(true);
     setBadge("busy", "Composing");
     summary.textContent = "";
@@ -350,7 +352,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
       summary.textContent = "Trying other values works with text configs, not JSON.";
       return;
     }
-    history.push({ config: config.value, seed: seed.value, melody: lastMelody });
+    undoStack.push({ config: config.value, seed: seed.value, melody: lastMelody });
     undo.hidden = false;
     config.value = withMelody(config.value, m.melody);
     trying = { var: m.var, label: m.label, index: Number(m.var.slice(1)) };
@@ -358,12 +360,12 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     run();
   });
   undo.addEventListener("click", function () {
-    const h = history.pop();
+    const h = undoStack.pop();
     if (!h) return;
     config.value = h.config;
     seed.value = h.seed;
     lastMelody = h.melody;
-    undo.hidden = history.length === 0;
+    undo.hidden = undoStack.length === 0;
     run();
   });
   listen.addEventListener("click", function () {
@@ -396,7 +398,33 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     }
     listen.disabled = !out["canon.mid"];
     watch.disabled = !out["score.html"];
+    share.disabled = false;
+    share.textContent = "Share";
+    try {
+      history.replaceState(null, "", "#piece=" + encode(composed.config) + (composed.seed !== "0" ? "&v=" + composed.seed : ""));
+    } catch (_) {
+      // A page opened from a file cannot rewrite its address.
+    }
   }
+
+  // The config travels in the address as URL-safe base64 of its UTF-8 bytes.
+  function encode(text) {
+    let bin = "";
+    new TextEncoder().encode(text).forEach(function (b) { bin += String.fromCharCode(b); });
+    return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function decode(token) {
+    const bin = atob(token.replace(/-/g, "+").replace(/_/g, "/"));
+    return new TextDecoder().decode(Uint8Array.from(bin, function (c) { return c.charCodeAt(0); }));
+  }
+  share.addEventListener("click", function () {
+    const done = function () { share.textContent = "Link copied"; };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(location.href).then(done, function () { prompt("Copy this link:", location.href); });
+    } else {
+      prompt("Copy this link:", location.href);
+    }
+  });
 
   // The score page is same-origin (a blob URL from this page), so its height
   // can follow its content.
@@ -445,7 +473,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
 
   select.addEventListener("change", function () {
     seed.value = "0";
-    history = [];
+    undoStack = [];
     undo.hidden = true;
     load(Number(select.value), true);
   });
@@ -459,7 +487,21 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
   });
 
-  load(0, true);
+  // A shared link carries the config and the variation; otherwise start with the first example.
+  function fromLink() {
+    const m = /^#piece=([A-Za-z0-9_-]+)(?:&v=(\d+))?$/.exec(location.hash);
+    if (!m) return false;
+    try { config.value = decode(m[1]); } catch (_) { return false; }
+    seed.value = m[2] || "0";
+    const o = document.createElement("option");
+    o.value = "";
+    o.textContent = "A shared piece";
+    select.insertBefore(o, select.firstChild);
+    select.value = "";
+    run();
+    return true;
+  }
+  if (!fromLink()) load(0, true);
 })();
 </script>
 </body>
