@@ -9,6 +9,7 @@
 
 enum { CONSONANCE_OFF, CONSONANCE_STRONG, CONSONANCE_ALL };
 enum { ORDER_MRV, ORDER_ENTROPY, ORDER_COLLAPSE, ORDER_INDEX };
+enum { INSTRUMENT_PLUCK, INSTRUMENT_ORGAN, INSTRUMENT_SINE, INSTRUMENT_COUNT };
 enum { KEY_SEARCH = -1 };
 enum { TRANSPOSE_SAME = -128 };
 
@@ -110,7 +111,7 @@ typedef struct PieceConfig {
     int delay_max;
     /* output */
     int tempo;
-    int sample;
+    int instrument;
 } PieceConfig;
 
 void config_defaults(PieceConfig *config);

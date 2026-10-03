@@ -4,6 +4,7 @@
 #include "theory.h"
 
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -220,43 +221,135 @@ static double midi_hz(int pitch) {
     return 440.0 * pow(2.0, ((double)pitch - 69.0) / 12.0);
 }
 
-/* One cycle of a triangle wave, 256 samples. */
-static double wavetable(double phase) {
-    int i = (int)(phase * 256.0) & 255;
-    int rise = i < 128 ? i : 255 - i;
-    return (rise - 64) / 64.0;
+enum { WAV_RATE = 44100, PLUCK_LINE_MAX = 8192 };
+
+/* Rises from 0 over attack samples and falls back to 0 over the last
+ * release samples of a note len samples long. */
+static double envelope(long i, long len, long attack, long release) {
+    double env = 1.0;
+    if (i < attack) env = (double)i / (double)attack;
+    if (len - i < release) env *= (double)(len - i) / (double)release;
+    return env;
 }
 
-bool export_wav(const char *path, const Score *score, int sample) {
+/* A fixed-seed generator, so a piece always gets the same noise. */
+static double noise(uint32_t *state) {
+    *state = *state * 1664525u + 1013904223u;
+    return (double)(*state >> 8) / 8388608.0 - 1.0;
+}
+
+/* Karplus-Strong: a burst of noise circulates through a delay line one
+ * period long, and averaging neighbouring samples on each pass dulls and
+ * decays it like a plucked string. The string is damped when the note ends. */
+static void pluck(float *out, long len, int pitch, uint32_t seed, double *line) {
+    double hz = midi_hz(pitch);
+    double period = WAV_RATE / hz;
+    /* the average delays half a sample, and an allpass adds the fraction left */
+    int n = (int)floor(period - 0.6);
+    if (n < 3) n = 3;
+    if (n > PLUCK_LINE_MAX) n = PLUCK_LINE_MAX;
+    double frac = period - 0.5 - n;
+    if (frac < 0.1) frac = 0.1;
+    double coef = (1.0 - frac) / (1.0 + frac);
+    /* falls 60 dB in 3 s at 110 Hz, down to 1 s from 1760 Hz up */
+    double ring = 3.0 * pow(110.0 / hz, 0.4);
+    if (ring > 3.0) ring = 3.0;
+    if (ring < 1.0) ring = 1.0;
+    double decay = pow(10.0, -3.0 / (ring * hz)) / cos(M_PI * hz / WAV_RATE);
+    if (decay > 1.0) decay = 1.0;
+
+    /* lightly low-passed noise with no offset, at the same level for every note */
+    uint32_t state = seed;
+    for (int k = 0; k < n; k++) line[k] = noise(&state);
+    double first = line[0];
+    double mean = 0.0;
+    for (int k = 0; k < n; k++) {
+        line[k] = 0.5 * (line[k] + (k + 1 < n ? line[k + 1] : first));
+        mean += line[k];
+    }
+    mean /= n;
+    double power = 0.0;
+    for (int k = 0; k < n; k++) {
+        line[k] -= mean;
+        power += line[k] * line[k];
+    }
+    double gain = power > 0.0 ? 0.5 / sqrt(power / n) : 0.0;
+    for (int k = 0; k < n; k++) line[k] *= gain;
+
+    const long attack = WAV_RATE * 2 / 1000;
+    const long damp = WAV_RATE * 30 / 1000;
+    /* starting the filters at rest keeps the circulating sum, and so the
+     * offset, at zero */
+    double last = 0.0;
+    double in1 = 0.0;
+    double out1 = 0.0;
+    int pos = 0;
+    for (long i = 0; i < len; i++) {
+        double s = line[pos];
+        double avg = 0.5 * (s + last);
+        last = s;
+        out1 = coef * avg + in1 - coef * out1;
+        in1 = avg;
+        line[pos] = decay * out1;
+        if (++pos == n) pos = 0;
+        out[i] += (float)(s * envelope(i, len, attack, damp));
+    }
+}
+
+/* Organ: the first four harmonics; sine: the fundamental alone. The phase
+ * runs on across a voice's notes, so a re-attack does not click. */
+static void tone(float *out, long len, int pitch, bool organ, double *phase) {
+    static const double partials[4] = {1.0, 0.5, 0.25, 0.12};
+    const int count = organ ? 4 : 1;
+    const double norm = organ ? 1.0 / 1.87 : 1.0;
+    const long attack = WAV_RATE * (organ ? 15 : 10) / 1000;
+    const long release = WAV_RATE * (organ ? 60 : 40) / 1000;
+    double step = midi_hz(pitch) / WAV_RATE;
+    for (long i = 0; i < len; i++) {
+        double wave = 0.0;
+        for (int h = 0; h < count; h++) {
+            if ((h + 1) * step < 0.5) wave += partials[h] * sin(2.0 * M_PI * (h + 1) * *phase);
+        }
+        out[i] += (float)(wave * norm * envelope(i, len, attack, release));
+        *phase += step;
+        if (*phase >= 1.0) *phase -= floor(*phase);
+    }
+}
+
+bool export_wav(const char *path, const Score *score, int instrument) {
     if (path == NULL || score == NULL) return false;
-    const int rate = 44100;
+    const int rate = WAV_RATE;
     int tempo = score->tempo > 0 ? score->tempo : 120;
     double per_step = (double)rate * 60.0 / tempo;
     long total = lround(per_step * (score->span > 0 ? score->span : 1));
     float *mix = calloc((size_t)total, sizeof(float));
-    if (mix == NULL) return false;
+    double *line = malloc(PLUCK_LINE_MAX * sizeof(double));
+    if (mix == NULL || line == NULL) {
+        free(mix);
+        free(line);
+        return false;
+    }
 
-    const long attack = rate / 200; /* 5 ms */
-    const long release = rate / 40; /* 25 ms */
     for (int v = 0; v < score->voices; v++) {
-        double phase = 0.0; /* continuous per voice, so re-attacks do not click */
+        double phase = 0.0;
         for (int k = 0; k < score->voice[v].count; k++) {
             const ScoreNote *n = &score->voice[v].notes[k];
             if (n->pitch == SOUND_REST) continue;
             long start = lround(per_step * n->start);
             long len = lround(per_step * (n->start + n->length)) - start;
-            double step = midi_hz(n->pitch) / rate;
-            for (long i = 0; i < len && start + i < total; i++) {
-                double env = 1.0;
-                if (i < attack) env = (double)i / (double)attack;
-                if (len - i < release) env *= (double)(len - i) / (double)release;
-                double wave = sample ? wavetable(phase) : sin(2.0 * M_PI * phase);
-                mix[start + i] += (float)(wave * env);
-                phase += step;
-                if (phase >= 1.0) phase -= floor(phase);
+            if (start + len > total) len = total - start;
+            if (len <= 0) continue;
+            if (instrument == INSTRUMENT_PLUCK) {
+                uint32_t seed = 0x9E3779B9u * (uint32_t)(v + 1) ^
+                                0x85EBCA6Bu * (uint32_t)n->pitch ^
+                                0xC2B2AE35u * (uint32_t)(n->start + 1);
+                pluck(mix + start, len, n->pitch, seed, line);
+            } else {
+                tone(mix + start, len, n->pitch, instrument == INSTRUMENT_ORGAN, &phase);
             }
         }
     }
+    free(line);
 
     FILE *f = fopen(path, "wb");
     if (f == NULL) {

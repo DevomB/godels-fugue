@@ -64,6 +64,55 @@ static void test_score(void) {
     test_close(r);
 }
 
+static unsigned read_u16(const char *p) {
+    const unsigned char *b = (const unsigned char *)p;
+    return b[0] | (unsigned)b[1] << 8;
+}
+
+static unsigned long read_u32(const char *p) {
+    const unsigned char *b = (const unsigned char *)p;
+    return b[0] | (unsigned long)b[1] << 8 | (unsigned long)b[2] << 16 |
+           (unsigned long)b[3] << 24;
+}
+
+/* Every instrument writes a well-formed WAV of its own, the same each time. */
+static void test_wav(const Score *s, int tempo) {
+    static const char *const paths[INSTRUMENT_COUNT] = {
+        "output/tests/pluck.wav", "output/tests/organ.wav", "output/tests/sine.wav"};
+    char *wav[INSTRUMENT_COUNT];
+    long size[INSTRUMENT_COUNT];
+    long per_step = 44100L * 60 / tempo;
+    for (int i = 0; i < INSTRUMENT_COUNT; i++) {
+        CHECK(export_wav(paths[i], s, i));
+        wav[i] = test_slurp(paths[i], &size[i]);
+        const char *w = wav[i];
+        CHECK(memcmp(w, "RIFF", 4) == 0 && memcmp(w + 8, "WAVE", 4) == 0);
+        CHECK(read_u32(w + 4) == (unsigned long)size[i] - 8);
+        CHECK(memcmp(w + 12, "fmt ", 4) == 0 && read_u32(w + 16) == 16);
+        CHECK(read_u16(w + 20) == 1);  /* PCM */
+        CHECK(read_u16(w + 22) == 1);  /* channels */
+        CHECK(read_u32(w + 24) == 44100);
+        CHECK(read_u32(w + 28) == 44100 * 2);
+        CHECK(read_u16(w + 32) == 2);  /* block align */
+        CHECK(read_u16(w + 34) == 16); /* bits */
+        CHECK(memcmp(w + 36, "data", 4) == 0);
+        CHECK(read_u32(w + 40) == (unsigned long)size[i] - 44);
+        CHECK(size[i] == 44 + 2 * per_step * s->span);
+    }
+    for (int i = 0; i < INSTRUMENT_COUNT; i++) {
+        for (int j = i + 1; j < INSTRUMENT_COUNT; j++) {
+            CHECK(size[i] != size[j] || memcmp(wav[i], wav[j], (size_t)size[i]) != 0);
+        }
+    }
+    /* the same score and instrument give the same bytes */
+    CHECK(export_wav("output/tests/pluck_again.wav", s, INSTRUMENT_PLUCK));
+    long again_size = 0;
+    char *again = test_slurp("output/tests/pluck_again.wav", &again_size);
+    CHECK(again_size == size[0] && memcmp(again, wav[0], (size_t)again_size) == 0);
+    free(again);
+    for (int i = 0; i < INSTRUMENT_COUNT; i++) free(wav[i]);
+}
+
 static void test_musicxml(void) {
     test_output_dir();
     PieceConfig c = test_config();
@@ -113,20 +162,7 @@ static void test_musicxml(void) {
     CHECK(strstr(svg, "polyline") != NULL);
     free(svg);
 
-    long size = 0;
-    long table_size = 0;
-    CHECK(export_wav("output/tests/voices.wav", &s, 0));
-    CHECK(export_wav("output/tests/table.wav", &s, 1));
-    char *wav = test_slurp("output/tests/voices.wav", &size);
-    char *table = test_slurp("output/tests/table.wav", &table_size);
-    long per_step = 44100L * 60 / c.tempo;
-    CHECK(size == 44 + 2 * per_step * s.span);
-    CHECK(table_size == size);
-    CHECK(memcmp(wav, "RIFF", 4) == 0 && memcmp(wav + 8, "WAVE", 4) == 0);
-    CHECK(memcmp(wav + 36, "data", 4) == 0);
-    CHECK(memcmp(wav + 44, table + 44, (size_t)(size - 44)) != 0);
-    free(wav);
-    free(table);
+    test_wav(&s, c.tempo);
     test_close(r);
 }
 
