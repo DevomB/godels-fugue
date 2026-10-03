@@ -268,14 +268,23 @@ static bool levelset_same(const LevelSet *a, const LevelSet *b) {
     return memcmp(a, b, sizeof(LevelSet)) == 0;
 }
 
-/* The decisions "depends on:" lists, counted by their " = ". */
-static int printed_depends(const TestRun *r, const Explanation *e) {
+/* What explain_print writes, or explain_json with json; the caller frees it. */
+static char *rendered(const TestRun *r, const Explanation *e, bool json) {
     test_output_dir();
     FILE *f = fopen("output/tests/minimal.txt", "w");
     CHECK(f != NULL);
-    explain_print(f, &r->state, e);
+    if (json) {
+        explain_json(f, &r->state, e);
+    } else {
+        explain_print(f, &r->state, e);
+    }
     CHECK(fclose(f) == 0);
-    char *text = test_slurp("output/tests/minimal.txt", NULL);
+    return test_slurp("output/tests/minimal.txt", NULL);
+}
+
+/* The decisions "depends on:" lists, counted by their " = ". */
+static int printed_depends(const TestRun *r, const Explanation *e) {
+    char *text = rendered(r, e, false);
     char *line = strstr(text, "depends on: ");
     CHECK(line != NULL);
     int n = 0;
@@ -320,6 +329,42 @@ static void check_minimal(const TestRun *r, int *smaller, int *kept) {
     }
 }
 
+/* Every field explain_var fills in. */
+static bool same_explanation(const Explanation *a, const Explanation *b) {
+    if (a->var != b->var || a->value != b->value || a->status != b->status ||
+        a->event != b->event || a->level != b->level || a->decision != b->decision ||
+        a->minimized != b->minimized || a->nrejected != b->nrejected ||
+        !levelset_same(&a->reason, &b->reason) || !levelset_same(&a->minimal, &b->minimal))
+        return false;
+    for (int k = 0; k < a->nrejected; k++) {
+        if (a->rejected[k].value != b->rejected[k].value ||
+            a->rejected[k].event != b->rejected[k].event)
+            return false;
+    }
+    return true;
+}
+
+/* One context for every variable explains each one exactly as a context
+ * of its own does: every replay starts again from the same root fixpoint,
+ * whatever the replays before it left behind. Returns the values it
+ * minimized. */
+static int check_context(const TestRun *r) {
+    ExplainContext ctx;
+    explain_begin(&ctx, &r->state);
+    int minimized = 0;
+    for (int v = 0; v < r->model.nvars; v++) {
+        Explanation shared;
+        Explanation alone;
+        explain_var_with(&ctx, v, &shared);
+        explain_var(&r->state, v, &alone);
+        CHECK(same_explanation(&shared, &alone));
+        minimized += shared.minimized;
+    }
+    explain_end(&ctx);
+    CHECK(ctx.replay == NULL);
+    return minimized;
+}
+
 static void test_minimal(void) {
     int smaller;
     int kept;
@@ -331,6 +376,7 @@ static void test_minimal(void) {
     check_minimal(r, &smaller, &kept);
     CHECK(smaller >= 1);
     CHECK(kept == 0);
+    CHECK(check_context(r) >= 1);
     test_close(r);
 
     c = test_config();
@@ -339,6 +385,7 @@ static void test_minimal(void) {
     CHECK(r->status == SOLVE_SAT);
     check_minimal(r, &smaller, &kept);
     CHECK(smaller >= 1);
+    CHECK(check_context(r) >= 2);
     test_close(r);
 
     /* the search's refutations did part of the work for some forced values,
@@ -356,6 +403,74 @@ static void test_minimal(void) {
     check_minimal(r, &smaller, &kept);
     CHECK(smaller >= 1);
     CHECK(kept >= 1);
+    CHECK(check_context(r) >= 2);
+    test_close(r);
+}
+
+/* A pass minimizes a forced value only while the budget covers all its
+ * replays. The rest keep their whole reason, and the text and JSON say
+ * the list was not cut down. */
+static void test_budget(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "rhythm=1");
+    TestRun *r = test_solve(&c);
+    CHECK(r->status == SOLVE_SAT);
+    const int n = r->model.nvars;
+    int cut = -1; /* a forced value minimized to fewer decisions than its reason */
+    for (int v = 0; v < n && cut < 0; v++) {
+        Explanation e;
+        explain_var(&r->state, v, &e);
+        if (e.minimized && levelset_count(&e.minimal) < levelset_count(&e.reason)) cut = v;
+    }
+    CHECK(cut >= 0);
+
+    /* nothing to spend: no replay at all, and every forced value says so */
+    ExplainContext ctx;
+    explain_begin(&ctx, &r->state);
+    ctx.budget = 0;
+    for (int v = 0; v < n; v++) {
+        Explanation e;
+        explain_var_with(&ctx, v, &e);
+        if (e.status != WHY_FORCED) continue;
+        CHECK(!e.minimized);
+        CHECK(levelset_same(&e.minimal, &e.reason));
+        if (v != cut) continue;
+        char *text = rendered(r, &e, false);
+        CHECK(strstr(text, "  depends on: ") != NULL);
+        CHECK(strstr(text, " (full reason, not minimized)") != NULL);
+        free(text);
+        CHECK(printed_depends(r, &e) == levelset_count(&e.reason));
+        text = rendered(r, &e, true);
+        CHECK(strstr(text, "\"minimal\":false") != NULL);
+        free(text);
+    }
+    CHECK(ctx.replay == NULL);
+    explain_end(&ctx);
+
+    /* a budget for that value's replays and no more */
+    Explanation alone;
+    explain_var(&r->state, cut, &alone);
+    char *text = rendered(r, &alone, false);
+    CHECK(strstr(text, "not minimized") == NULL);
+    free(text);
+    text = rendered(r, &alone, true);
+    CHECK(strstr(text, "\"minimal\":true") != NULL);
+    free(text);
+    explain_begin(&ctx, &r->state);
+    ctx.budget = 0;
+    for (int v = 0; v < n; v++) {
+        Explanation e;
+        if (v == cut) ctx.budget = levelset_count(&alone.reason) + 1;
+        explain_var_with(&ctx, v, &e);
+        if (v == cut) {
+            CHECK(same_explanation(&e, &alone));
+            CHECK(ctx.budget == 0); /* one replay per decision, plus one */
+        } else if (e.status == WHY_FORCED) {
+            CHECK(!e.minimized);
+            CHECK(levelset_same(&e.minimal, &e.reason));
+        }
+    }
+    explain_end(&ctx);
     test_close(r);
 }
 
@@ -366,6 +481,7 @@ int main(void) {
     test_explanations();
     test_refutation();
     test_minimal();
+    test_budget();
     test_breakdowns();
     test_open_variables();
     printf("ok\n");

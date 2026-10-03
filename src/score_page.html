@@ -628,6 +628,7 @@ const PIECE = /*PIECE_DATA*/;
         if (i) p.appendChild(document.createTextNode(", "));
         p.appendChild(varLink(d.id, d.var + " = " + d.label));
       });
+      if (v.minimal === false) p.appendChild(document.createTextNode(" (full reason, not minimized)"));
       inspector.appendChild(p);
     }
     const all = el("button", { type: "button" }, "Show its proof events");

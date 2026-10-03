@@ -103,8 +103,10 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   neighbourhood optimizer that lowers the energy after the first solution.
 - **Explanations**: a proof log of every removal with its parent events, the decisions
   each forced value rests on (a minimal set whenever propagation from them forces it:
-  dropping any one leaves the value unforced), an unsat core for impossible rule sets,
-  and a counterfactual for given notes.
+  dropping any one leaves the value unforced; a set left whole, because propagation
+  alone does not force the value or a very large piece ran out of budget, is marked
+  "full reason, not minimized"), an unsat core for impossible rule sets, and a
+  counterfactual for given notes.
 - **Style presets**: `renaissance`, `baroque`, `classical`, `minimalist`,
   `experimental`.
 - **A SAT cross-check** (`--sat`) that encodes the same rules for a separate DPLL

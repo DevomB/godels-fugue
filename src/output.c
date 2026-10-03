@@ -445,12 +445,15 @@ bool output_write_report(const char *path, const Run *run) {
 bool output_write_explanations(const char *path, const Run *run) {
     FILE *f = fopen(path, "w");
     if (f == NULL) return false;
+    ExplainContext ctx;
+    explain_begin(&ctx, &run->state);
     for (int v = 0; v < run->model.nvars; v++) {
         Explanation e;
-        explain_var(&run->state, v, &e);
+        explain_var_with(&ctx, v, &e);
         explain_print(f, &run->state, &e);
         fprintf(f, "\n");
     }
+    explain_end(&ctx);
     bool ok = !ferror(f);
     return fclose(f) == 0 && ok;
 }

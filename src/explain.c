@@ -66,7 +66,7 @@ static bool locked(const Model *m, int var) {
 
 /* A second solver that replays chosen decisions from the root fixpoint,
  * under the same model and rules, with no search. */
-typedef struct Replay {
+typedef struct ExplainReplay {
     SolverState state;
     Snapshot root;
 } Replay;
@@ -95,10 +95,13 @@ static void replay_close(Replay *r) {
 
 /* Do the decisions in set, and nothing else the search did, leave var
  * with only value? Starting from the root fixpoint reaches the same
- * fixpoint as starting from the initial domains with every rule queued. */
-static bool replay_forces(Replay *r, const SolverState *s, const LevelSet *set, int var,
-                          int value) {
+ * fixpoint as starting from the initial domains with every rule queued,
+ * whatever earlier replays left in the support caches. */
+static bool replay_forces(ExplainContext *ctx, const LevelSet *set, int var, int value) {
+    const SolverState *s = ctx->state;
+    Replay *r = ctx->replay;
     SolverState *t = &r->state;
+    ctx->budget--;
     solver_restore(t, &r->root);
     for (int l = 1; l <= s->level; l++) {
         if (!levelset_has(set, l)) continue;
@@ -111,26 +114,50 @@ static bool replay_forces(Replay *r, const SolverState *s, const LevelSet *set, 
     return solver_propagate(t) && solver_value(t, var) == value;
 }
 
+void explain_begin(ExplainContext *ctx, const SolverState *s) {
+    ctx->state = s;
+    ctx->replay = NULL;
+    ctx->unavailable = false;
+    ctx->budget = EXPLAIN_BUDGET;
+}
+
+void explain_end(ExplainContext *ctx) {
+    if (ctx->replay != NULL) replay_close(ctx->replay);
+    ctx->replay = NULL;
+}
+
 /* Deletion over the reason, latest decision first: a decision goes when
  * the rest still force the value. More decisions only ever remove more
- * values, so each one kept is needed by the final set as well. */
-static void minimize(const SolverState *s, Explanation *e) {
-    Replay *r = replay_open(s);
-    if (r == NULL) return;
-    LevelSet set = e->reason;
-    if (replay_forces(r, s, &set, e->var, e->value)) {
-        for (int l = s->level; l >= 1; l--) {
-            if (!levelset_has(&set, l)) continue;
-            levelset_remove(&set, l);
-            if (!replay_forces(r, s, &set, e->var, e->value)) levelset_add(&set, l);
-        }
-        e->minimal = set;
-        e->minimized = true;
+ * values, so each one kept is needed by the final set as well. A value
+ * whose replays would overrun the budget is left alone. */
+static void minimize(ExplainContext *ctx, Explanation *e) {
+    const SolverState *s = ctx->state;
+    if (ctx->unavailable || levelset_count(&e->reason) + 1 > ctx->budget) return;
+    if (ctx->replay == NULL) {
+        ctx->replay = replay_open(s);
+        ctx->unavailable = ctx->replay == NULL;
+        if (ctx->unavailable) return;
     }
-    replay_close(r);
+    LevelSet set = e->reason;
+    if (!replay_forces(ctx, &set, e->var, e->value)) return;
+    for (int l = s->level; l >= 1; l--) {
+        if (!levelset_has(&set, l)) continue;
+        levelset_remove(&set, l);
+        if (!replay_forces(ctx, &set, e->var, e->value)) levelset_add(&set, l);
+    }
+    e->minimal = set;
+    e->minimized = true;
 }
 
 void explain_var(const SolverState *s, int var, Explanation *e) {
+    ExplainContext ctx;
+    explain_begin(&ctx, s);
+    explain_var_with(&ctx, var, e);
+    explain_end(&ctx);
+}
+
+void explain_var_with(ExplainContext *ctx, int var, Explanation *e) {
+    const SolverState *s = ctx->state;
     const Model *m = s->model;
     const ProofLog *log = &s->proof;
     memset(e, 0, sizeof(*e));
@@ -177,7 +204,7 @@ void explain_var(const SolverState *s, int var, Explanation *e) {
         }
     }
     e->minimal = e->reason;
-    if (e->status == WHY_FORCED) minimize(s, e);
+    if (e->status == WHY_FORCED) minimize(ctx, e);
 }
 
 static size_t append(char *buf, size_t cap, size_t used, const char *text) {
@@ -355,7 +382,10 @@ void explain_print(FILE *f, const SolverState *s, const Explanation *e) {
     if (e->status == WHY_FORCED) {
         char deps[EXPLAIN_TEXT_MAX];
         append_decisions(s, &e->minimal, deps, sizeof(deps), 0);
-        fprintf(f, "  depends on: %s\n", deps);
+        fprintf(f, "  depends on: %s%s\n", deps,
+                e->minimized || levelset_count(&e->minimal) == 0
+                    ? ""
+                    : " (full reason, not minimized)");
     }
 }
 
@@ -410,7 +440,8 @@ void explain_json(FILE *f, const SolverState *s, const Explanation *e) {
             first = false;
         }
     }
-    fprintf(f, "]");
+    /* true when no decision listed can go: cut down by propagation, or none */
+    fprintf(f, "],\"minimal\":%s", first || e->minimized ? "true" : "false");
 
     fprintf(f, ",\"candidates\":[");
     if (e->status == WHY_DECIDED) {

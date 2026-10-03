@@ -8,6 +8,14 @@
 /* Room for any removal reason: a refutation can list every decision. */
 enum { EXPLAIN_TEXT_MAX = 4096 };
 
+/* Propagations one pass over the variables may spend minimizing forced
+ * values. Each costs at most one per decision in its reason, plus one, and
+ * is minimized only if that much is left; the others keep their whole
+ * reason, which is still sound. The largest pieces tried, 32 notes in four
+ * voices, need up to about 500; the cap keeps a worse one from holding up
+ * its own output. One variable (at most VAR_MAX decisions) always fits. */
+enum { EXPLAIN_BUDGET = 1000 };
+
 /* How a variable reached its final value. */
 enum {
     WHY_CONFIG,  /* the config left one value from the start */
@@ -33,15 +41,32 @@ typedef struct Explanation {
     /* For a forced value, a part of reason that forces it by propagation
      * alone and no longer does without any one of its decisions. Equal to
      * reason when all of reason cannot (the search's refutations did part
-     * of the work) and for any other status. */
+     * of the work), when the pass's budget is spent, and for any other
+     * status. */
     LevelSet minimal;
     bool minimized; /* minimal was checked by propagation */
     int nrejected;
     Rejection rejected[128];
 } Explanation;
 
+struct ExplainReplay;
+
+/* Explains the variables of one solved state in turn with a single replay
+ * solver: it reaches the root fixpoint once, on the first forced value,
+ * and every later replay starts again from there. explain_end frees it. */
+typedef struct ExplainContext {
+    const SolverState *state;
+    struct ExplainReplay *replay; /* NULL until a forced value needs it */
+    bool unavailable; /* out of memory, or the rules fail before any decision */
+    int budget;       /* propagations left */
+} ExplainContext;
+
+void explain_begin(ExplainContext *ctx, const SolverState *s);
 /* Propagates once per decision in a forced value's reason to find the
  * minimal set. */
+void explain_var_with(ExplainContext *ctx, int var, Explanation *e);
+void explain_end(ExplainContext *ctx);
+/* One variable on its own: begin, explain, end. */
 void explain_var(const SolverState *s, int var, Explanation *e);
 /* A value's name, spelled and numbered in the key the solver settled on. */
 void explain_label(const SolverState *s, int var, int value, char *buf, size_t cap);

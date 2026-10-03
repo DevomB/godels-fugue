@@ -291,22 +291,24 @@ void trace_write_json(FILE *f, const Run *run) {
 
     fprintf(f, ",\"chords\":[");
     for (int b = 0; b < m->nbars && m->chord[b] >= 0; b++) {
-        Explanation e;
-        explain_var(s, m->chord[b], &e);
         char name[16] = "?";
+        int chord = run->values[m->chord[b]];
         int key = run->values[m->key[model_section_at(m, b * 4)]];
-        if (e.value >= 0 && key >= 0) degree_name(key, e.value, name, sizeof(name));
+        if (chord >= 0 && key >= 0) degree_name(key, chord, name, sizeof(name));
         fprintf(f, "%s{\"bar\":%d,\"var\":%d,\"label\":", b ? "," : "", b + 1, m->chord[b]);
         json_string(f, name);
         fprintf(f, "}");
     }
     fprintf(f, "],\"variables\":[");
+    ExplainContext ctx;
+    explain_begin(&ctx, s);
     for (int v = 0; v < m->nvars; v++) {
         Explanation e;
-        explain_var(s, v, &e);
+        explain_var_with(&ctx, v, &e);
         fprintf(f, "%s", v ? "," : "");
         explain_json(f, s, &e);
     }
+    explain_end(&ctx);
     fprintf(f, "],");
     write_events(f, run);
 
