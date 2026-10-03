@@ -1,0 +1,16 @@
+# The demo's opening piece: a three-voice canon in D minor over a chord
+# per bar. Each voice enters three bars after the one before, which lines
+# the entries up with a i-iv-V-i cycle; leading tones rise to the tonic and
+# voices that move the same way cost a little, so the lines stay apart.
+length 32
+voices 3
+delay 12
+key D
+mode minor
+harmony 1
+rhythm 1
+range_low 50
+range_high 77
+leading_tone 1
+w_contrary 1
+tempo 96
