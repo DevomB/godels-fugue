@@ -130,6 +130,7 @@ svg text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
 .note { cursor: pointer; }
 .note rect.body { stroke: none; }
 .note.dim rect.body { opacity: 0.45; }
+.note.sounding rect.body { opacity: 1; filter: brightness(1.45); }
 .note rect.ring { fill: none; stroke: none; }
 .note.selected rect.ring { stroke: var(--select); stroke-width: 2; }
 .chord-label { fill: var(--text-secondary); font-size: 12px; font-weight: 600; }
@@ -1195,6 +1196,7 @@ const PIECE = /*PIECE_DATA*/;
     cancelAnimationFrame(raf);
     const head = document.getElementById("playhead");
     if (head) head.setAttribute("visibility", "hidden");
+    for (const n of noteNodes) n.node.classList.remove("sounding");
     play.textContent = "Play";
   }
   instrument.addEventListener("change", function () { if (playing.length) stop(); });
@@ -1254,6 +1256,9 @@ const PIECE = /*PIECE_DATA*/;
       if (t > total + 0.2) { stop(); return; }
       const head = document.getElementById("playhead");
       const left = Number(roll.dataset.left), stepW = Number(roll.dataset.stepW);
+      const step = t / beat;
+      for (const n of noteNodes)
+        n.node.classList.toggle("sounding", step >= n.start && step < n.start + n.length);
       if (head && t >= 0) {
         const x = left + (t / beat) * stepW;
         head.setAttribute("x1", x);
