@@ -211,6 +211,14 @@ run(bad_transpose_1 1 ERROR "transpose_1 must be -24\\.\\.24 or same: 30"
 run(bad_transpose_same 1 ERROR "transpose_1 must be -24\\.\\.24 or same: -128"
     ARGS --set transpose_1=-128)
 run(bad_motif 1 ERROR "motif_a must be -24\\.\\.24 or off: -30" ARGS --set motif_a=-30)
+run(instrument 0 MATCH "melody:" ARGS --set instrument=organ)
+expect_file("${last_dir}/voices.wav" "RIFF")
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\ninstrument organ\r?\n")
+  fail("instrument: report.txt lacks the instrument")
+endif()
+run(bad_instrument 1 ERROR "config value for instrument is not valid: kazoo"
+    ARGS --set instrument=kazoo)
 run(help 0 MATCH "usage: canon-collapse" ARGS --help)
 run(version 0 MATCH "canon-collapse [0-9]" ARGS --version)
 run(presets 0 MATCH "baroque" ARGS --list-presets)

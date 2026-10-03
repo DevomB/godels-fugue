@@ -338,6 +338,10 @@ already expose the research data: entropy, statistics, and removals by rule.
 - Outputs: MIDI, MusicXML, LilyPond, ABC, WAV, SVG, text and JSON traces, and the
   HTML page. The notation exports share one spelling (`key_spell`), cut notes at
   barlines and at the key change with ties, and pad the last bar with a rest.
+  The WAV plays each note on a Karplus-Strong plucked string (or an organ of four
+  harmonics, or a sine), pans the voices with equal power from left to right, and
+  runs the mix through a small Schroeder reverb; the noise that excites each string
+  is seeded from the note, so the same piece always gives the same file.
 
 ## 15. Research directions
 

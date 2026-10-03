@@ -45,6 +45,16 @@ static void test_defaults_and_set(void) {
     CHECK(c.rhythm == 0);
     CHECK(config_set(&c, "var_order", "entropy", err, sizeof(err)));
     CHECK(c.var_order == ORDER_ENTROPY);
+    CHECK(c.instrument == INSTRUMENT_PLUCK);
+    CHECK(config_set(&c, "instrument", "organ", err, sizeof(err)));
+    CHECK(c.instrument == INSTRUMENT_ORGAN);
+    CHECK(config_set(&c, "instrument", "sine", err, sizeof(err)));
+    CHECK(c.instrument == INSTRUMENT_SINE);
+    CHECK(config_set(&c, "instrument", "pluck", err, sizeof(err)));
+    CHECK(c.instrument == INSTRUMENT_PLUCK);
+    CHECK(!config_set(&c, "instrument", "kazoo", err, sizeof(err)));
+    CHECK(strstr(err, "instrument") != NULL);
+    CHECK(!config_set(&c, "sample", "1", err, sizeof(err)));
     CHECK(config_set(&c, "modulate_at", "off", err, sizeof(err)));
     CHECK(c.modulate_at == -1);
     CHECK(config_set(&c, "pc_weight", "0,1,2,3,4,5,6,7,8,9,10,11", err, sizeof(err)));
@@ -270,12 +280,14 @@ static void test_files(void) {
     CHECK(c.pc_weight[11] == 2);
     CHECK(c.max_leap == 5); /* from the preset */
 
-    write_file("output/tests/tension.json", "{\"tension\": [0, \"?\", 4], \"mirror\": true}");
+    write_file("output/tests/tension.json",
+               "{\"tension\": [0, \"?\", 4], \"mirror\": true, \"instrument\": \"organ\"}");
     config_defaults(&c);
     CHECK(config_load_file(&c, "output/tests/tension.json", err, sizeof(err)));
     CHECK(c.tension[0] == 0 && c.tension[1] == TENSION_FREE && c.tension[2] == 4);
     CHECK(c.tension[3] == TENSION_UNLISTED);
     CHECK(c.mirror == 1);
+    CHECK(c.instrument == INSTRUMENT_ORGAN);
 
     write_file("output/tests/bad.json", "{\"voices\": 2.5}");
     CHECK(!config_load_file(&c, "output/tests/bad.json", err, sizeof(err)));
@@ -305,6 +317,7 @@ static void test_round_trip(void) {
     test_set(&a, "tension=0,?,4,?"); /* a trailing ? survives the round trip */
     test_set(&a, "mirror=1");
     test_set(&a, "mirror_axis=62");
+    test_set(&a, "instrument=sine");
     FILE *f = fopen("output/tests/round.txt", "w");
     CHECK(f != NULL);
     config_write(f, &a);

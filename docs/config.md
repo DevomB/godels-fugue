@@ -141,4 +141,4 @@ style preset first, so every other key in the file overrides it.
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
 | `tempo` | 120 | 20..300 | Quarter notes per minute in MIDI and WAV. |
-| `sample` | 0 | 0..1 | Synthesize the WAV from a 256-sample wavetable instead of sine waves. |
+| `instrument` | pluck | see meaning | Sound of voices.wav: pluck (a plucked string, like a harpsichord), organ, or sine. |

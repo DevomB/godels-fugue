@@ -100,6 +100,7 @@ static void print_second_mode_word(int v, char *buf, size_t cap) {
 
 static const char *const consonance_words[] = {"off", "strong", "all"};
 static const char *const order_words[] = {"mrv", "entropy", "collapse", "index"};
+static const char *const instrument_words[] = {"pluck", "organ", "sine"};
 
 static bool parse_list_word(const char *w, const char *const *words, int n, int *out) {
     for (int i = 0; i < n; i++) {
@@ -125,6 +126,14 @@ static bool parse_order_word(const char *w, int *out) {
 
 static void print_order_word(int v, char *buf, size_t cap) {
     snprintf(buf, cap, "%s", v >= 0 && v < 4 ? order_words[v] : "?");
+}
+
+static bool parse_instrument_word(const char *w, int *out) {
+    return parse_list_word(w, instrument_words, INSTRUMENT_COUNT, out);
+}
+
+static void print_instrument_word(int v, char *buf, size_t cap) {
+    snprintf(buf, cap, "%s", v >= 0 && v < INSTRUMENT_COUNT ? instrument_words[v] : "?");
 }
 
 static bool parse_off_word(const char *w, int *out) {
@@ -448,8 +457,9 @@ static const KeyDef keys[] = {
 
     {"tempo", F(tempo), 1, 20, 300, 120, NULL, NULL, "output",
      "Quarter notes per minute in MIDI and WAV."},
-    {"sample", F(sample), 1, 0, 1, 0, NULL, NULL, "output",
-     "Synthesize the WAV from a 256-sample wavetable instead of sine waves."},
+    {"instrument", F(instrument), 1, 0, INSTRUMENT_COUNT - 1, INSTRUMENT_PLUCK,
+     parse_instrument_word, print_instrument_word, "output",
+     "Sound of voices.wav: pluck (a plucked string, like a harpsichord), organ, or sine."},
 };
 
 #undef F

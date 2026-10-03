@@ -98,7 +98,7 @@ static bool write_contour(const char *path, const Run *run) {
 }
 
 static bool write_wav(const char *path, const Run *run) {
-    return export_wav(path, &run->score, run->config.sample);
+    return export_wav(path, &run->score, run->config.instrument);
 }
 
 bool output_write_all(Run *run, const OutputPaths *paths) {
