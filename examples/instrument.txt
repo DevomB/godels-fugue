@@ -1,0 +1,11 @@
+# A three-voice canon played on the organ in voices.wav. instrument picks
+# pluck (a plucked string, the default), organ or sine; each voice sits
+# further right in the stereo field, so the imitation moves across it.
+length 12
+voices 3
+delay 4
+range_low 55
+range_high 76
+rhythm 1
+tempo 90
+instrument organ

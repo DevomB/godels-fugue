@@ -184,6 +184,7 @@ The keys you are most likely to change:
 | `melody` | all free | The notes to keep, `?` for the ones to choose |
 | `optimize` | 10000 | Nodes spent lowering the energy after the first solution |
 | `seed`, `temperature` | 1, 0 | Sampling instead of always taking the cheapest value |
+| `tempo`, `instrument` | 120, pluck | Quarter notes per minute; the sound of `voices.wav`: `pluck`, `organ` or `sine` |
 
 The `examples/` directory has a config for each feature. Each file starts with a
 comment saying what it shows.
@@ -237,7 +238,7 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 | `score.musicxml` | MusicXML 3.1 for notation software, with ties across barlines and key changes |
 | `score.ly` | LilyPond source: one staff per voice in a staff group, the same spelling, ties, clefs and key changes |
 | `score.abc` | ABC notation: one voice per canon voice, with accidentals written out relative to the key signature |
-| `voices.wav` | All voices mixed to mono, 16-bit, 44.1 kHz |
+| `voices.wav` | Stereo, 16-bit, 44.1 kHz: the voices on a plucked string, or the organ or sine that `instrument` picks, panned from left to right in a small reverb that rings on for 1.5 s after the last note |
 | `contour.svg` | Pitch over time for every voice |
 | `score.html` | Interactive score: piano roll per voice, playback, why each note is there, a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart), what the given notes changed, entropy and energy charts, and the proof log |
 | `explain.txt` | The explanation for every variable, as `--explain` prints it |
