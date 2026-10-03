@@ -132,7 +132,8 @@ svg text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
 .note.dim rect.body { opacity: 0.45; }
 .note.sounding rect.body { opacity: 1; filter: brightness(1.45); }
 .note rect.ring { fill: none; stroke: none; }
-.note.selected rect.ring { stroke: var(--select); stroke-width: 2; }
+.note.changed rect.ring { stroke: var(--series-4); stroke-width: 2; stroke-dasharray: 4 2; }
+.note.selected rect.ring { stroke: var(--select); stroke-width: 2; stroke-dasharray: none; }
 .chord-label { fill: var(--text-secondary); font-size: 12px; font-weight: 600; }
 .cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; }
 @media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
@@ -538,8 +539,10 @@ const PIECE = /*PIECE_DATA*/;
     const any = v && v.kind !== "key";
     for (const n of noteNodes) {
       const hit = match(n);
+      const moved = rippled.has(n.source);
       n.node.classList.toggle("selected", hit);
-      n.node.classList.toggle("dim", any && !hit);
+      n.node.classList.toggle("changed", moved);
+      n.node.classList.toggle("dim", any && !hit && !moved);
     }
     document.querySelectorAll(".chip").forEach(function (c) { c.classList.toggle("selected", Number(c.dataset.id) === selected); });
     cxMark();
@@ -580,6 +583,7 @@ const PIECE = /*PIECE_DATA*/;
      then offers every other value of a melody note, and the demo composes the
      piece again with the note fixed to the one picked. */
   let host = null;
+  let rippled = new Set(); /* melody notes the last what-if changed */
   const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   function givenMelody() {
     const tokens = String(cfg.melody || "").split(/[\s,]+/).filter(Boolean);
@@ -628,6 +632,9 @@ const PIECE = /*PIECE_DATA*/;
     } else if (m.type === "canon-collapse:select") {
       const v = vars.find(function (x) { return x.var === m.var; });
       if (v) select(v.id);
+    } else if (m.type === "canon-collapse:changed") {
+      rippled = new Set(m.notes || []);
+      markSelection();
     } else if (m.type === "canon-collapse:play") {
       play.click();
     } else if (m.type === "canon-collapse:collapse" && events.length) {

@@ -252,6 +252,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   // What-if state: earlier configs to undo to, the note being tried, the
   // variable to show once the new score loads, and the last solved melody.
   let undoStack = [], trying = null, pendingSelect = null, lastMelody = null, composed = null;
+  let pendingChanged = [];
 
   function setBadge(kind, text) {
     badge.className = "badge " + kind;
@@ -314,13 +315,15 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     const text = result.log || "";
     const tried = trying;
     trying = null;
+    pendingChanged = [];
     if (result.status === 0) {
       const key = line(text, "key:");
       const energy = line(text, "energy:").split(" ")[0];
       const melody = line(text, "melody:").split(/\s+/);
       setBadge("good", "Solved in " + secs);
+      pendingChanged = tried && lastMelody ? changedNotes(lastMelody, melody, tried.index) : [];
       summary.textContent = tried && lastMelody
-        ? tried.var + " = " + tried.label + ": " + ripple(lastMelody, melody, tried.index)
+        ? tried.var + " = " + tried.label + ": " + ripple(pendingChanged)
         : [key, energy && "energy " + energy].filter(Boolean).join(" · ");
       lastMelody = melody;
     } else if (result.status === 3) {
@@ -340,12 +343,16 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     showFiles(result.files || {});
   }
 
-  // How many other melody notes a what-if changed.
-  function ripple(before, after, index) {
+  // The other melody notes a what-if changed, and how to say so.
+  function changedNotes(before, after, index) {
     const changed = [];
-    for (let i = 0; i < after.length; i++) if (i !== index && before[i] !== after[i]) changed.push("x" + i);
+    for (let i = 0; i < after.length; i++) if (i !== index && before[i] !== after[i]) changed.push(i);
+    return changed;
+  }
+  function ripple(changed) {
     if (!changed.length) return "the rest of the piece stays the same";
-    return changed.length + " other note" + (changed.length === 1 ? "" : "s") + " changed to fit (" + changed.join(", ") + ")";
+    return changed.length + " other note" + (changed.length === 1 ? "" : "s") + " changed to fit, outlined in the score ("
+      + changed.map(function (i) { return "x" + i; }).join(", ") + ")";
   }
 
   // Replaces the config's melody line, or adds one; an all-free melody drops it.
@@ -487,8 +494,10 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     fit();
     // Tell the score page it can offer other values, then show the note just tried.
     frame.contentWindow.postMessage({ type: "canon-collapse:host" }, "*");
+    if (pendingChanged.length) frame.contentWindow.postMessage({ type: "canon-collapse:changed", notes: pendingChanged }, "*");
     if (pendingSelect) frame.contentWindow.postMessage({ type: "canon-collapse:select", var: pendingSelect }, "*");
     pendingSelect = null;
+    pendingChanged = [];
   });
 
   function load(index, thenRun) {
