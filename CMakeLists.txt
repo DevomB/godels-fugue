@@ -67,6 +67,17 @@ add_executable(canon-collapse src/main.c)
 target_link_libraries(canon-collapse PRIVATE canon)
 target_compile_definitions(canon-collapse PRIVATE CANON_COLLAPSE_VERSION="${PROJECT_VERSION}")
 
+if(EMSCRIPTEN)
+  # The web demo (web/) runs main() in a worker and reads the score files back
+  # from the in-memory file system. The tests need a native build.
+  target_link_options(canon-collapse PRIVATE
+    -sMODULARIZE=1 -sEXPORT_NAME=CanonCollapse -sENVIRONMENT=worker
+    -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1
+    -sINITIAL_MEMORY=64MB -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=8MB
+    -sEXPORTED_RUNTIME_METHODS=callMain,FS)
+  return()
+endif()
+
 enable_testing()
 foreach(name IN ITEMS
     test_domains

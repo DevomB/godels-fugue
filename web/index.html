@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canon Collapse</title>
+<meta name="description" content="Compose canons by constraint propagation and see why every note is there. The C solver runs in your browser as WebAssembly.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Cpath d='M9 22V9l14-3v13' stroke='%23fff' stroke-width='2.4' fill='none'/%3E%3Ccircle cx='7' cy='22' r='3' fill='%23fff'/%3E%3Ccircle cx='21' cy='19' r='3' fill='%23fff'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #6f6e69;
+  --border: rgba(11, 11, 11, 0.10);
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --good: #0ca30c;
+  --critical: #d03b3b;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --surface-2: #222220;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #9a998f;
+    --border: rgba(255, 255, 255, 0.10);
+    --accent: #3987e5;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --surface-2: #222220;
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #9a998f;
+  --border: rgba(255, 255, 255, 0.10);
+  --accent: #3987e5;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--text-primary);
+  font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+a { color: var(--accent); }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 24px 16px 0; }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+h1 { font-size: 26px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+.lede { margin: 6px 0 0; color: var(--text-secondary); max-width: 68ch; }
+nav { display: flex; gap: 16px; font-size: 14px; }
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-top: 16px;
+}
+.row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-secondary); }
+.field.grow { flex: 1 1 260px; }
+button, select, input, textarea {
+  font: inherit;
+  color: var(--text-primary);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+select { width: 100%; }
+input[type="number"] { width: 7.5em; }
+button { cursor: pointer; }
+button:hover { background: var(--surface-2); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; font-weight: 600; padding: 6px 18px; }
+button.primary:hover { filter: brightness(1.08); }
+button:disabled { opacity: 0.6; cursor: progress; }
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+textarea {
+  width: 100%;
+  min-height: 9.5em;
+  resize: vertical;
+  font: 13px/1.5 var(--mono);
+  background: var(--surface-2);
+  margin-top: 12px;
+}
+.hint { font-size: 13px; color: var(--text-muted); margin: 6px 0 0; }
+.status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 12px; font-size: 14px; min-height: 1.5em; }
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; padding: 2px 10px; border-radius: 999px;
+  border: 1px solid var(--border);
+}
+.badge .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); }
+.badge.good .dot { background: var(--good); }
+.badge.bad .dot { background: var(--critical); }
+.badge.busy .dot { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .badge.busy .dot { animation: none; } }
+.summary { color: var(--text-secondary); overflow-wrap: anywhere; }
+.files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.files a {
+  font-size: 13px; text-decoration: none; color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: 6px; padding: 3px 9px; background: var(--surface-2);
+}
+.files a:hover { border-color: var(--accent); }
+details { margin-top: 10px; font-size: 13px; }
+summary { cursor: pointer; color: var(--text-secondary); }
+pre {
+  margin: 8px 0 0; padding: 10px 12px; background: var(--surface-2); border-radius: 6px;
+  font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 22em; overflow: auto;
+}
+iframe { display: block; width: 100%; height: 1400px; border: 0; margin-top: 4px; background: var(--page); }
+.empty { padding: 48px 16px; text-align: center; color: var(--text-muted); }
+footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 13px; color: var(--text-muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Canon Collapse</h1>
+      <p class="lede">Composes canons as a constraint problem and proves why every note is there.
+        Pick a piece, press Compose, then click any note in the score to see the rules that forced it.
+        This is the C program compiled to WebAssembly, running in your browser.</p>
+    </div>
+    <nav>
+      <a href="https://github.com/DevomB/godels-fugue">Source</a>
+      <a href="https://github.com/DevomB/godels-fugue/blob/main/docs/config.md">Config keys</a>
+      <a href="https://github.com/DevomB/godels-fugue/blob/main/docs/design.md">Design notes</a>
+    </nav>
+  </header>
+
+  <section class="card" aria-label="Compose">
+    <div class="row">
+      <label class="field grow">Start from
+        <select id="example"></select>
+      </label>
+      <label class="field">Variation
+        <input id="seed" type="number" min="0" max="99999" value="0" title="0 is the cheapest piece; any other number samples a different one">
+      </label>
+      <button id="shuffle" type="button" title="Sample a different piece under the same rules">Shuffle</button>
+      <button id="compose" type="button" class="primary">Compose</button>
+    </div>
+    <label for="config" class="hint">Config: one <code>key value</code> per line, <code>#</code> starts a comment. Edit it and compose again.</label>
+    <textarea id="config" spellcheck="false" aria-label="Config"></textarea>
+    <div class="status" role="status" aria-live="polite">
+      <span id="badge" class="badge"><span class="dot"></span><span id="badge-text">Loading the solver</span></span>
+      <span id="summary" class="summary"></span>
+    </div>
+    <div id="files" class="files"></div>
+    <details>
+      <summary>Program output</summary>
+      <pre id="log"></pre>
+    </details>
+  </section>
+</div>
+
+<div class="wrap" style="padding-top:0">
+  <div id="empty" class="card empty">The score appears here.</div>
+</div>
+<iframe id="score" title="Score, playback and proof" hidden></iframe>
+
+<footer>
+  MIT licensed. The same program runs on the command line with <code>canon-collapse --config piece.txt</code>
+  and writes these files to disk.
+</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  const PIECES = [
+    { group: "Examples", label: "A rhythmic canon, ready to replay", file: "replay.txt" },
+    { group: "Examples", label: "The plain two-voice canon", file: "two_voice.txt" },
+    { group: "Examples", label: "A round that loops forever", file: "cyclic.txt" },
+    { group: "Examples", label: "A mirror melody (same backwards and upside down)", file: "mirror.txt" },
+    { group: "Examples", label: "Three voices, leading tones resolve", file: "counterpoint.txt" },
+    { group: "Examples", label: "Four voices entering off the beat", file: "four_voice.txt" },
+    { group: "Examples", label: "A canon at the third and fifth, in key", file: "diatonic.txt" },
+    { group: "Examples", label: "A chord under every bar", file: "harmony.txt" },
+    { group: "Examples", label: "Modulation mid-piece", file: "modulate.txt" },
+    { group: "Examples", label: "The follower upside down", file: "inversion.txt" },
+    { group: "Examples", label: "The follower backwards", file: "retrograde.txt" },
+    { group: "Examples", label: "A tension curve drawn by hand", file: "tension.txt" },
+    { group: "Examples", label: "Complete a melody given in part", file: "given.txt" },
+    { group: "Examples", label: "An impossible rule set, and why", file: "unsat.txt" },
+    { group: "Style presets", label: "Renaissance", text: "# Modal, stepwise lines in half and quarter notes with strict consonance.\npreset renaissance\n" },
+    { group: "Style presets", label: "Baroque", text: "# Three voices two bars apart over a functional chord progression, V-I at the end.\npreset baroque\n" },
+    { group: "Style presets", label: "Classical", text: "# Two voices in periodic phrases, clear cadence, long final note.\npreset classical\n" },
+    { group: "Style presets", label: "Minimalist", text: "# A three-note arpeggio looping against the 4/4 bar in a three-voice round.\npreset minimalist\n" },
+    { group: "Style presets", label: "Experimental", text: "# Lydian mirror canon with off-beat entries on a 3-against-4 grid.\npreset experimental\n" },
+  ];
+  const DOWNLOADS = [
+    ["canon.mid", "MIDI", "audio/midi"],
+    ["score.musicxml", "MusicXML", "application/vnd.recordare.musicxml+xml"],
+    ["score.ly", "LilyPond", "text/plain"],
+    ["score.abc", "ABC", "text/plain"],
+    ["voices.wav", "WAV", "audio/wav"],
+    ["proof.json", "proof.json", "application/json"],
+    ["report.txt", "report.txt", "text/plain"],
+    ["explain.txt", "explain.txt", "text/plain"],
+  ];
+  const SAMPLE_TEMPERATURE = 3;
+
+  const $ = function (id) { return document.getElementById(id); };
+  const select = $("example"), config = $("config"), seed = $("seed");
+  const compose = $("compose"), shuffle = $("shuffle");
+  const badge = $("badge"), badgeText = $("badge-text"), summary = $("summary");
+  const files = $("files"), log = $("log"), frame = $("score"), empty = $("empty");
+
+  let worker = null, runId = 0, urls = [], observer = null;
+
+  function setBadge(kind, text) {
+    badge.className = "badge " + kind;
+    badgeText.textContent = text;
+  }
+
+  function startWorker() {
+    try {
+      worker = new Worker("worker.js");
+    } catch (err) {
+      setBadge("bad", "Cannot start the solver");
+      summary.textContent = "Serve this folder over HTTP (for example: python -m http.server) and reload.";
+      return false;
+    }
+    worker.onmessage = function (e) { if (e.data.id === runId || e.data.id === undefined) finish(e.data); };
+    worker.onerror = function () {
+      setBadge("bad", "The solver failed to load");
+      summary.textContent = "Serve this folder over HTTP and reload.";
+      busy(false);
+    };
+    return true;
+  }
+
+  function busy(on) {
+    compose.disabled = on;
+    shuffle.disabled = on;
+  }
+
+  // The settings the run adds after the config: a variation samples instead of
+  // always taking the cheapest value.
+  function extraArgs() {
+    const n = Math.max(0, Math.floor(Number(seed.value) || 0));
+    return n === 0 ? [] : ["--set", "seed=" + n, "--set", "temperature=" + SAMPLE_TEMPERATURE];
+  }
+
+  function run() {
+    if (!worker && !startWorker()) return;
+    runId += 1;
+    busy(true);
+    setBadge("busy", "Composing");
+    summary.textContent = "";
+    worker.postMessage({ id: runId, config: config.value, args: extraArgs() });
+  }
+
+  function line(text, prefix) {
+    const hit = text.split("\n").find(function (l) { return l.startsWith(prefix); });
+    return hit ? hit.slice(prefix.length).trim() : "";
+  }
+
+  function finish(result) {
+    busy(false);
+    log.textContent = result.log || "";
+    if (result.error) {
+      setBadge("bad", "Error");
+      summary.textContent = result.error;
+      return;
+    }
+    const secs = (result.ms / 1000).toFixed(result.ms < 10000 ? 2 : 1) + " s";
+    const text = result.log || "";
+    if (result.status === 0) {
+      const key = line(text, "key:");
+      const energy = line(text, "energy:").split(" ")[0];
+      setBadge("good", "Solved in " + secs);
+      summary.textContent = [key, energy && "energy " + energy].filter(Boolean).join(" · ");
+    } else if (result.status === 3) {
+      setBadge("bad", "Search limit reached");
+      summary.textContent = "Raise max_nodes or time_limit, or loosen the rules.";
+    } else {
+      const core = line(text, "core:");
+      const first = text.split("\n").find(function (l) { return l.trim() !== ""; }) || "";
+      setBadge("bad", core ? "No piece fits these rules" : "Rejected");
+      summary.textContent = core ? "Rules that clash: " + core + ". Open the score below to see where." : first;
+    }
+    showFiles(result.files || {});
+  }
+
+  function showFiles(out) {
+    urls.forEach(URL.revokeObjectURL);
+    urls = [];
+    files.textContent = "";
+    DOWNLOADS.forEach(function (d) {
+      if (!out[d[0]]) return;
+      const url = URL.createObjectURL(new Blob([out[d[0]]], { type: d[2] }));
+      urls.push(url);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = d[0];
+      a.textContent = d[1];
+      files.appendChild(a);
+    });
+    if (out["score.html"]) {
+      const url = URL.createObjectURL(new Blob([out["score.html"]], { type: "text/html" }));
+      urls.push(url);
+      frame.hidden = false;
+      empty.hidden = true;
+      frame.src = url;
+    }
+  }
+
+  // The score page is same-origin (a blob URL from this page), so its height
+  // can follow its content.
+  frame.addEventListener("load", function () {
+    let doc;
+    try { doc = frame.contentDocument; } catch (_) { return; }
+    if (!doc || !doc.body) return;
+    const fit = function () { frame.style.height = doc.documentElement.scrollHeight + "px"; };
+    if (observer) observer.disconnect();
+    observer = new ResizeObserver(fit);
+    observer.observe(doc.body);
+    fit();
+  });
+
+  function load(index, thenRun) {
+    const p = PIECES[index];
+    const done = function (text) {
+      config.value = text;
+      if (thenRun) run();
+    };
+    if (p.text) return done(p.text);
+    fetch("examples/" + p.file)
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(done)
+      .catch(function () {
+        setBadge("bad", "Could not load " + p.file);
+      });
+  }
+
+  let group = null;
+  PIECES.forEach(function (p, i) {
+    if (!group || group.label !== p.group) {
+      group = document.createElement("optgroup");
+      group.label = p.group;
+      select.appendChild(group);
+    }
+    const o = document.createElement("option");
+    o.value = String(i);
+    o.textContent = p.label;
+    group.appendChild(o);
+  });
+
+  select.addEventListener("change", function () { seed.value = "0"; load(Number(select.value), true); });
+  compose.addEventListener("click", run);
+  shuffle.addEventListener("click", function () {
+    seed.value = String(1 + Math.floor(Math.random() * 99999));
+    run();
+  });
+  seed.addEventListener("keydown", function (e) { if (e.key === "Enter") run(); });
+  config.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
+  });
+
+  load(0, true);
+})();
+</script>
+</body>
+</html>
