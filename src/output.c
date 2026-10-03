@@ -101,8 +101,9 @@ static bool write_wav(const char *path, const Run *run) {
     return export_wav(path, &run->score, run->config.sample);
 }
 
-bool output_write_all(const Run *run, const OutputPaths *paths) {
+bool output_write_all(Run *run, const OutputPaths *paths) {
     bool ok = true;
+    run_explain(run); /* proof.json, score.html and explain.txt share one pass */
     ensure_parent_dir(paths->proof);
     ensure_parent_dir(paths->entropy);
     ensure_parent_dir(paths->midi);
@@ -449,7 +450,7 @@ bool output_write_explanations(const char *path, const Run *run) {
     explain_begin(&ctx, &run->state);
     for (int v = 0; v < run->model.nvars; v++) {
         Explanation e;
-        explain_var_with(&ctx, v, &e);
+        run_explanation(run, &ctx, v, &e);
         explain_print(f, &run->state, &e);
         fprintf(f, "\n");
     }

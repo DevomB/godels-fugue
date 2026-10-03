@@ -3,6 +3,7 @@
 #include "canon.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* Solves one config on its own model and reports status and energy, and
@@ -107,7 +108,32 @@ bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap) {
     return true;
 }
 
+bool run_explain(Run *run) {
+    if (run->explained != NULL) return true;
+    int n = run->model.nvars;
+    Explanation *all = malloc((size_t)(n > 0 ? n : 1) * sizeof(Explanation));
+    if (all == NULL) return false;
+    ExplainContext ctx;
+    explain_begin(&ctx, &run->state);
+    for (int v = 0; v < n; v++) explain_var_with(&ctx, v, &all[v]);
+    explain_end(&ctx);
+    run->explained = all;
+    return true;
+}
+
+void run_explanation(const Run *run, ExplainContext *ctx, int var, Explanation *e) {
+    if (run->explained != NULL) {
+        *e = run->explained[var];
+    } else if (ctx != NULL) {
+        explain_var_with(ctx, var, e);
+    } else {
+        explain_var(&run->state, var, e);
+    }
+}
+
 void run_free(Run *run) {
+    free(run->explained);
+    run->explained = NULL;
     solver_free(&run->state);
     model_free(&run->model);
 }

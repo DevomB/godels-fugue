@@ -1,6 +1,7 @@
 #include "canon.h"
 #include "export.h"
 #include "json.h"
+#include "output.h"
 #include "page.h"
 #include "run.h"
 #include "score.h"
@@ -300,10 +301,45 @@ static void test_documents(void) {
     free(run);
 }
 
+/* Explaining every variable once and sharing it changes no output: the
+ * files match the ones written while explaining as they go. */
+static void test_shared_explanations(void) {
+    test_output_dir();
+    Run *run = malloc(sizeof(Run));
+    CHECK(run != NULL);
+    char err[200];
+    PieceConfig c = test_config();
+    test_set(&c, "voices=3");
+    test_set(&c, "rhythm=1");
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->explained == NULL);
+    CHECK(output_write_explanations("output/tests/explain_each.txt", run));
+    CHECK(trace_save_json("output/tests/each.json", run));
+    CHECK(run_explain(run));
+    CHECK(run->explained != NULL);
+    CHECK(output_write_explanations("output/tests/explain_shared.txt", run));
+    CHECK(trace_save_json("output/tests/shared.json", run));
+    char *a = test_slurp("output/tests/explain_each.txt", NULL);
+    char *b = test_slurp("output/tests/explain_shared.txt", NULL);
+    CHECK(strcmp(a, b) == 0);
+    CHECK(strstr(a, "forced") != NULL); /* the piece has forced values to minimize */
+    free(a);
+    free(b);
+    a = test_slurp("output/tests/each.json", NULL);
+    b = test_slurp("output/tests/shared.json", NULL);
+    CHECK(strcmp(a, b) == 0);
+    free(a);
+    free(b);
+    run_free(run);
+    CHECK(run->explained == NULL);
+    free(run);
+}
+
 int main(void) {
     test_score();
     test_musicxml();
     test_documents();
+    test_shared_explanations();
     printf("ok\n");
     return 0;
 }

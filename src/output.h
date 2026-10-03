@@ -14,7 +14,7 @@ typedef struct OutputPaths {
 
 /* Writes every output file the run produced. Returns false if any
  * write failed. */
-bool output_write_all(const Run *run, const OutputPaths *paths);
+bool output_write_all(Run *run, const OutputPaths *paths);
 /* False, with a message, when two output files would share a path. */
 bool output_paths_distinct(const OutputPaths *paths, char *err, size_t cap);
 bool output_write_report(const char *path, const Run *run);

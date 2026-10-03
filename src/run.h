@@ -2,6 +2,7 @@
 #define RUN_H
 
 #include "check.h"
+#include "explain.h"
 #include "score.h"
 #include "solver.h"
 
@@ -33,9 +34,15 @@ typedef struct Run {
     SolveStatus unlocked_status;
     int unlocked_pitch[MELODY_MAX];
     int unlocked_key[SECTION_MAX]; /* the key per section it solved in */
+    Explanation *explained; /* one per variable once run_explain has run, else NULL */
 } Run;
 
 bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap);
+/* Explains every variable once, so the outputs share one pass. False when
+ * out of memory; the writers then explain as they go. */
+bool run_explain(Run *run);
+/* The shared explanation of var, or a fresh one through ctx (NULL: on its own). */
+void run_explanation(const Run *run, ExplainContext *ctx, int var, Explanation *e);
 void run_free(Run *run);
 
 #endif

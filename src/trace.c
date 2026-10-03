@@ -304,7 +304,7 @@ void trace_write_json(FILE *f, const Run *run) {
     explain_begin(&ctx, s);
     for (int v = 0; v < m->nvars; v++) {
         Explanation e;
-        explain_var_with(&ctx, v, &e);
+        run_explanation(run, &ctx, v, &e);
         fprintf(f, "%s", v ? "," : "");
         explain_json(f, s, &e);
     }

@@ -477,7 +477,7 @@ int main(int argc, char **argv) {
             if (exit_code == 0) exit_code = EXIT_UNSAT;
         } else {
             Explanation e;
-            explain_var(&run->state, var, &e);
+            run_explanation(run, NULL, var, &e);
             explain_print(stdout, &run->state, &e);
         }
     }
