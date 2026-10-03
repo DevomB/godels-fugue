@@ -136,6 +136,9 @@ svg text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
 .cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; }
 @media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tries { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.try { font-size: 13px; padding: 3px 9px; border-color: var(--accent); }
+.try.removed { border-color: var(--border); color: var(--text-muted); }
 .chip {
   display: inline-flex; flex-direction: column; align-items: center; min-width: 44px;
   padding: 3px 6px; border-radius: 8px; border: 1px solid var(--border);
@@ -217,23 +220,6 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
     <div class="scroll"><svg id="roll" role="img" aria-label="Piano roll of every voice"></svg></div>
   </section>
 
-  <section class="card" id="collapse-card">
-    <h2>Collapse</h2>
-    <p class="muted">Replay the proof one event at a time: each column is a melody note, each row a pitch it could still take. Filled cells are still possible; the value a note was decided or forced to is highlighted, and the cell the current event removed is marked with a cross. Pick a column to inspect that note.</p>
-    <div class="replay-controls">
-      <button id="cx-back" type="button" aria-label="Back one event">&#9664;&#9664;</button>
-      <button id="cx-play" type="button">Play</button>
-      <button id="cx-fwd" type="button" aria-label="Forward one event">&#9654;&#9654;</button>
-      <label for="cx-pos" class="muted">Event</label>
-      <input id="cx-pos" type="range" min="0" max="0" step="1" value="0">
-      <span class="replay-pos" id="cx-count"></span>
-      <label>Speed <select id="cx-speed"><option value="5">5 events/s</option><option value="20" selected>20 events/s</option><option value="80">80 events/s</option><option value="400">400 events/s</option></select></label>
-    </div>
-    <div class="legend"><span><span class="swatch" style="background:var(--series-1)"></span>still possible</span><span><span class="swatch" style="background:var(--series-2)"></span>only value left</span><span><span class="swatch" style="box-shadow:inset 0 0 0 2px var(--critical)"></span>removed by this event</span></div>
-    <div class="scroll"><table class="cgrid" id="cx-grid" aria-label="Candidate pitches of each melody note at the selected event"></table></div>
-    <div class="cx-event" id="cx-event"></div>
-  </section>
-
   <section class="card" id="cf-card" hidden>
     <h2>Without the given notes</h2>
     <div id="cf"></div>
@@ -270,6 +256,23 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
       </section>
     </div>
   </div>
+
+  <section class="card" id="collapse-card">
+    <h2>Collapse</h2>
+    <p class="muted">Replay the proof one event at a time: each column is a melody note, each row a pitch it could still take. Filled cells are still possible; the value a note was decided or forced to is highlighted, and the cell the current event removed is marked with a cross. Pick a column to inspect that note.</p>
+    <div class="replay-controls">
+      <button id="cx-back" type="button" aria-label="Back one event">&#9664;&#9664;</button>
+      <button id="cx-play" type="button">Play</button>
+      <button id="cx-fwd" type="button" aria-label="Forward one event">&#9654;&#9654;</button>
+      <label for="cx-pos" class="muted">Event</label>
+      <input id="cx-pos" type="range" min="0" max="0" step="1" value="0">
+      <span class="replay-pos" id="cx-count"></span>
+      <label>Speed <select id="cx-speed"><option value="5">5 events/s</option><option value="20" selected>20 events/s</option><option value="80">80 events/s</option><option value="400">400 events/s</option></select></label>
+    </div>
+    <div class="legend"><span><span class="swatch" style="background:var(--series-1)"></span>still possible</span><span><span class="swatch" style="background:var(--series-2)"></span>only value left</span><span><span class="swatch" style="box-shadow:inset 0 0 0 2px var(--critical)"></span>removed by this event</span></div>
+    <div class="scroll"><table class="cgrid" id="cx-grid" aria-label="Candidate pitches of each melody note at the selected event"></table></div>
+    <div class="cx-event" id="cx-event"></div>
+  </section>
 
   <section class="card">
     <h2>Proof log</h2>
@@ -568,6 +571,75 @@ const PIECE = /*PIECE_DATA*/;
       default: return "Still open: the search did not finish.";
     }
   }
+  /* ---------- what if? ----------
+     When the web demo hosts this page it says so with a message; the inspector
+     then offers every other value of a melody note, and the demo composes the
+     piece again with the note fixed to the one picked. */
+  let host = null;
+  const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  function givenMelody() {
+    const tokens = String(cfg.melody || "").split(/[\s,]+/).filter(Boolean);
+    const out = [];
+    for (let i = 0; i < (P.length || 0); i++) out.push(tokens[i] || "?");
+    return out;
+  }
+  function whatIf(v) {
+    const labels = {}, removed = {};
+    for (const c of v.candidates || []) labels[c.value] = c.label;
+    for (const r of v.rejected || []) {
+      labels[r.value] = r.label;
+      if (r.rule !== "lock") removed[r.value] = r.why; /* not the note's own given value */
+    }
+    const given = givenMelody();
+    function ask(token, label) {
+      const melody = given.slice();
+      melody[v.index] = token;
+      host.postMessage({ type: "canon-collapse:what-if", var: v.var, label: label,
+                         melody: melody.join(" ") }, "*");
+    }
+    inspector.appendChild(el("h3", {}, "What if it were…"));
+    const box = el("div", { class: "tries" });
+    for (const p of v.initial) {
+      if (p === v.value) continue;
+      const label = labels[p] || (p === 0 ? "rest" : NAMES[p % 12] + (Math.floor(p / 12) - 1));
+      const b = el("button", { type: "button", class: removed[p] ? "try removed" : "try" }, label);
+      b.title = removed[p] ? "Removed in this piece: " + removed[p] : "Still possible here; compose with it";
+      b.addEventListener("click", function () { ask(p === 0 ? "rest" : String(p), label); });
+      box.appendChild(b);
+    }
+    if (given[v.index] !== "?") {
+      const free = el("button", { type: "button", class: "try" }, "Let the solver choose");
+      free.addEventListener("click", function () { ask("?", "free"); });
+      box.appendChild(free);
+    }
+    inspector.appendChild(box);
+    inspector.appendChild(el("p", { class: "muted" }, "Pick a value to compose the piece again with this note fixed to it. Dimmed values were removed by a rule in this piece; picking one shows whether the rest of the piece can work around it."));
+  }
+  window.addEventListener("message", function (e) {
+    const m = e.data || {};
+    if (e.source !== window.parent || window.parent === window) return;
+    if (m.type === "canon-collapse:host") {
+      host = e.source;
+      if (selected >= 0) select(selected);
+    } else if (m.type === "canon-collapse:select") {
+      const v = vars.find(function (x) { return x.var === m.var; });
+      if (v) select(v.id);
+    } else if (m.type === "canon-collapse:play") {
+      play.click();
+    } else if (m.type === "canon-collapse:collapse" && events.length) {
+      /* replay the whole proof in about seven seconds */
+      const speed = document.getElementById("cx-speed");
+      let best = speed.options[0];
+      for (const o of speed.options)
+        if (Math.abs(events.length / Number(o.value) - 7) < Math.abs(events.length / Number(best.value) - 7)) best = o;
+      speed.value = best.value;
+      cxStop();
+      cxGo(0);
+      document.getElementById("collapse-card").scrollIntoView({ behavior: "smooth", block: "start" });
+      cxPlay.click();
+    }
+  });
+
   function select(id) {
     selected = id;
     markSelection();
@@ -636,6 +708,7 @@ const PIECE = /*PIECE_DATA*/;
       if (v.minimal === false) p.appendChild(document.createTextNode(" (full reason, not minimized)"));
       inspector.appendChild(p);
     }
+    if (host && v.kind === "pitch" && (v.initial || []).length > 1) whatIf(v);
     const all = el("button", { type: "button" }, "Show its proof events");
     all.addEventListener("click", function () {
       const select = document.getElementById("f-var");

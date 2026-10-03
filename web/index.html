@@ -109,6 +109,8 @@ textarea {
 @keyframes pulse { 50% { opacity: 0.3; } }
 @media (prefers-reduced-motion: reduce) { .badge.busy .dot { animation: none; } }
 .summary { color: var(--text-secondary); overflow-wrap: anywhere; }
+.status-text { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; flex: 1 1 320px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .files a {
   font-size: 13px; text-decoration: none; color: var(--text-primary);
@@ -132,8 +134,9 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     <div>
       <h1>Canon Collapse</h1>
       <p class="lede">Composes canons as a constraint problem and proves why every note is there.
-        Pick a piece, press Compose, then click any note in the score to see the rules that forced it.
-        This is the C program compiled to WebAssembly, running in your browser.</p>
+        Pick a piece and press Compose. Click any note to see the rules that put it there, or give it
+        another pitch and hear the piece re-compose around your choice. This is the C program compiled
+        to WebAssembly, running in your browser.</p>
     </div>
     <nav>
       <a href="https://github.com/DevomB/godels-fugue">Source</a>
@@ -155,9 +158,16 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     </div>
     <label for="config" class="hint">Config: one <code>key value</code> per line, <code>#</code> starts a comment. Edit it and compose again.</label>
     <textarea id="config" spellcheck="false" aria-label="Config"></textarea>
-    <div class="status" role="status" aria-live="polite">
-      <span id="badge" class="badge"><span class="dot"></span><span id="badge-text">Loading the solver</span></span>
-      <span id="summary" class="summary"></span>
+    <div class="status">
+      <span role="status" aria-live="polite" class="status-text">
+        <span id="badge" class="badge"><span class="dot"></span><span id="badge-text">Loading the solver</span></span>
+        <span id="summary" class="summary"></span>
+      </span>
+      <span class="actions">
+        <button id="undo" type="button" hidden>Undo</button>
+        <button id="listen" type="button" disabled>Play</button>
+        <button id="watch" type="button" disabled>Watch it collapse</button>
+      </span>
     </div>
     <div id="files" class="files"></div>
     <details>
@@ -219,8 +229,12 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   const compose = $("compose"), shuffle = $("shuffle");
   const badge = $("badge"), badgeText = $("badge-text"), summary = $("summary");
   const files = $("files"), log = $("log"), frame = $("score"), empty = $("empty");
+  const undo = $("undo"), listen = $("listen"), watch = $("watch");
 
   let worker = null, runId = 0, urls = [], observer = null;
+  // What-if state: earlier configs to undo to, the note being tried, the
+  // variable to show once the new score loads, and the last solved melody.
+  let history = [], trying = null, pendingSelect = null, lastMelody = null;
 
   function setBadge(kind, text) {
     badge.className = "badge " + kind;
@@ -280,22 +294,84 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     }
     const secs = (result.ms / 1000).toFixed(result.ms < 10000 ? 2 : 1) + " s";
     const text = result.log || "";
+    const tried = trying;
+    trying = null;
     if (result.status === 0) {
       const key = line(text, "key:");
       const energy = line(text, "energy:").split(" ")[0];
+      const melody = line(text, "melody:").split(/\s+/);
       setBadge("good", "Solved in " + secs);
-      summary.textContent = [key, energy && "energy " + energy].filter(Boolean).join(" · ");
+      summary.textContent = tried && lastMelody
+        ? tried.var + " = " + tried.label + ": " + ripple(lastMelody, melody, tried.index)
+        : [key, energy && "energy " + energy].filter(Boolean).join(" · ");
+      lastMelody = melody;
     } else if (result.status === 3) {
       setBadge("bad", "Search limit reached");
       summary.textContent = "Raise max_nodes or time_limit, or loosen the rules.";
     } else {
       const core = line(text, "core:");
+      const broken = line(text, "violation:");
       const first = text.split("\n").find(function (l) { return l.trim() !== ""; }) || "";
       setBadge("bad", core ? "No piece fits these rules" : "Rejected");
-      summary.textContent = core ? "Rules that clash: " + core + ". Open the score below to see where." : first;
+      if (tried && (broken || core)) {
+        summary.textContent = tried.var + " = " + tried.label + " cannot work: " + (broken || "the rules that clash are " + core) + ". Undo to go back.";
+      } else {
+        summary.textContent = core ? "Rules that clash: " + core + ". Open the score below to see where." : first;
+      }
     }
     showFiles(result.files || {});
   }
+
+  // How many other melody notes a what-if changed.
+  function ripple(before, after, index) {
+    const changed = [];
+    for (let i = 0; i < after.length; i++) if (i !== index && before[i] !== after[i]) changed.push("x" + i);
+    if (!changed.length) return "the rest of the piece stays the same";
+    return changed.length + " other note" + (changed.length === 1 ? "" : "s") + " changed to fit (" + changed.join(", ") + ")";
+  }
+
+  // Replaces the config's melody line, or adds one; an all-free melody drops it.
+  function withMelody(text, melody) {
+    const lines = text.replace(/\s+$/, "").split("\n");
+    const at = lines.findIndex(function (l) { return /^\s*melody(\s|$)/.test(l); });
+    const free = melody.split(" ").every(function (t) { return t === "?"; });
+    if (at >= 0) {
+      if (free) lines.splice(at, 1); else lines[at] = "melody " + melody;
+    } else if (!free) {
+      lines.push("melody " + melody);
+    }
+    return lines.join("\n") + "\n";
+  }
+
+  window.addEventListener("message", function (e) {
+    const m = e.data || {};
+    if (e.source !== frame.contentWindow || m.type !== "canon-collapse:what-if") return;
+    if (config.value.trim().startsWith("{")) {
+      summary.textContent = "Trying other values works with text configs, not JSON.";
+      return;
+    }
+    history.push({ config: config.value, seed: seed.value, melody: lastMelody });
+    undo.hidden = false;
+    config.value = withMelody(config.value, m.melody);
+    trying = { var: m.var, label: m.label, index: Number(m.var.slice(1)) };
+    pendingSelect = m.var;
+    run();
+  });
+  undo.addEventListener("click", function () {
+    const h = history.pop();
+    if (!h) return;
+    config.value = h.config;
+    seed.value = h.seed;
+    lastMelody = h.melody;
+    undo.hidden = history.length === 0;
+    run();
+  });
+  listen.addEventListener("click", function () {
+    frame.contentWindow.postMessage({ type: "canon-collapse:play" }, "*");
+  });
+  watch.addEventListener("click", function () {
+    frame.contentWindow.postMessage({ type: "canon-collapse:collapse" }, "*");
+  });
 
   function showFiles(out) {
     urls.forEach(URL.revokeObjectURL);
@@ -318,6 +394,8 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
       empty.hidden = true;
       frame.src = url;
     }
+    listen.disabled = !out["canon.mid"];
+    watch.disabled = !out["score.html"];
   }
 
   // The score page is same-origin (a blob URL from this page), so its height
@@ -331,6 +409,10 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     observer = new ResizeObserver(fit);
     observer.observe(doc.body);
     fit();
+    // Tell the score page it can offer other values, then show the note just tried.
+    frame.contentWindow.postMessage({ type: "canon-collapse:host" }, "*");
+    if (pendingSelect) frame.contentWindow.postMessage({ type: "canon-collapse:select", var: pendingSelect }, "*");
+    pendingSelect = null;
   });
 
   function load(index, thenRun) {
@@ -361,7 +443,12 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     group.appendChild(o);
   });
 
-  select.addEventListener("change", function () { seed.value = "0"; load(Number(select.value), true); });
+  select.addEventListener("change", function () {
+    seed.value = "0";
+    history = [];
+    undo.hidden = true;
+    load(Number(select.value), true);
+  });
   compose.addEventListener("click", run);
   shuffle.addEventListener("click", function () {
     seed.value = String(1 + Math.floor(Math.random() * 99999));
