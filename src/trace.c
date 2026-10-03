@@ -192,7 +192,7 @@ static long forced_count(const ProofLog *log) {
 static void write_violations(FILE *f, const Run *run) {
     const Model *m = &run->model;
     fprintf(f, ",\"violations\":[");
-    for (int i = 0; i < run->nviolations; i++) {
+    for (int i = 0; i < check_stored(run->nviolations); i++) {
         const Violation *v = &run->violations[i];
         const Constraint *c = &m->cons[v->con];
         char why[256];
@@ -210,7 +210,8 @@ static void write_violations(FILE *f, const Run *run) {
         }
         fprintf(f, "]}");
     }
-    fprintf(f, "]");
+    /* the list stops at CHECK_MAX; this many more were found */
+    fprintf(f, "],\"violationsMore\":%d", run->nviolations - check_stored(run->nviolations));
 }
 
 static void write_stats(FILE *f, const Run *run) {

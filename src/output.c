@@ -419,11 +419,13 @@ bool output_write_report(const char *path, const Run *run) {
     }
     if (run->nviolations > 0) {
         fprintf(f, "violations:\n");
-        for (int i = 0; i < run->nviolations; i++) {
+        for (int i = 0; i < check_stored(run->nviolations); i++) {
             char text[CHECK_TEXT_MAX];
             check_text(&run->model, &run->violations[i], text, sizeof(text));
             fprintf(f, "  %s\n", text);
         }
+        if (run->nviolations > CHECK_MAX)
+            fprintf(f, "  ... and %d more\n", run->nviolations - CHECK_MAX);
     }
     if (run->ndelays > 0) {
         fprintf(f, "delays tried:\n");

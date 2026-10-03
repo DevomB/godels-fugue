@@ -269,11 +269,13 @@ changes which steps are strong for every voice), and form as a state machine.
   to each value left by root propagation and solved. One viable value makes the note
   frozen, several make it a bifurcation point.
 - **Violations** (`--check`, a failed run's stderr, `report.txt`, `proof.json`):
-  every rule instance whose variables are all fixed before the search (given notes,
-  locks, a fixed key) is judged on those values, and each one broken is named with
-  its notes, e.g. `consonance: voices 1,2 must be consonant at step 4 (bar 2) (x4 =
-  D4, x0 = C4)`. A rule that touches a note still to be chosen is never judged, so
-  nothing is reported that a completion could still satisfy.
+  every rule instance on a variable fixed before the search (given notes, locks,
+  `rest_at`, a fixed key) is broken when no values of its free variables, each from its
+  initial domain (a tie between two different given notes can only start a new note),
+  satisfy it; each one broken is named with its fixed notes, e.g. `consonance: voices
+  1,2 must be consonant at step 4 (bar 2) (x4 = D4, x0 = C4)`, so nothing is reported
+  that a completion could still satisfy. Past 64 the rest are counted ("... and N
+  more", `violationsMore` in `proof.json`).
 
 **Built**, with forced values explained minimally under propagation. **Partly
 built**: contradiction certificates are the unsat core plus the last removal, naming

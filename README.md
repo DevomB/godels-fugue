@@ -191,9 +191,9 @@ rules the melody breaks.
 takes the highest note where notes overlap, and rests where none sounds (rests need
 `rhythm 1`).
 
-`--check` judges the given notes without a search and writes no files. Every rule whose
-notes are all given is checked, and each broken one is named with the notes involved
-(exit 1); a rule that touches a `?` note is left to the solver:
+`--check` judges the given notes without a search and writes no files. A rule on a given
+note is broken when no values of its `?` notes (and ties) could satisfy it, and each broken
+one is named with the given notes involved (exit 1):
 
 ```text
 $ canon-collapse --set melody=60,61,?,?,62 --check
