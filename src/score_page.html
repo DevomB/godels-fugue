@@ -200,6 +200,11 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
       <div class="subtitle" id="subtitle"></div>
     </div>
     <span class="badge" id="status"></span>
+    <select id="instrument" aria-label="Instrument">
+      <option value="pluck">Harpsichord</option>
+      <option value="organ">Organ</option>
+      <option value="sine">Sine</option>
+    </select>
     <button id="play" type="button">Play</button>
     <button id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
   </div>
@@ -1043,8 +1048,74 @@ const PIECE = /*PIECE_DATA*/;
   document.getElementById("config").appendChild(ctable);
 
   /* ---------- playback ---------- */
+  /* The same instruments as voices.wav: a Karplus-Strong plucked string, an
+     additive organ and a sine, each voice panned across the stereo field, with
+     a little reverb. */
   const play = document.getElementById("play");
-  let audio = null, playing = [], raf = 0;
+  const instrument = document.getElementById("instrument");
+  if (["pluck", "organ", "sine"].indexOf(cfg.instrument) >= 0) instrument.value = cfg.instrument;
+  let audio = null, playing = [], raf = 0, bus = null;
+  const plucks = {};
+  function hz(pitch) { return 440 * Math.pow(2, (pitch - 69) / 12); }
+  function noise(seed) {
+    let s = seed >>> 0 || 1;
+    return function () {
+      s ^= s << 13; s >>>= 0;
+      s ^= s >>> 17;
+      s ^= s << 5; s >>>= 0;
+      return s / 2147483648 - 1;
+    };
+  }
+  function pluckBuffer(pitch, seconds) {
+    const key = pitch + ":" + seconds;
+    if (plucks[key]) return plucks[key];
+    const rate = audio.sampleRate;
+    const period = Math.max(2, Math.round(rate / hz(pitch)));
+    const line = new Float32Array(period);
+    const rand = noise(pitch * 7919 + 17);
+    for (let i = 0; i < period; i++) line[i] = rand();
+    for (let i = 0; i < period; i++) line[i] = 0.5 * (line[i] + line[(i + 1) % period]);
+    const buf = audio.createBuffer(1, Math.ceil(rate * seconds), rate);
+    const out = buf.getChannelData(0);
+    for (let i = 0, p = 0; i < out.length; i++) {
+      const next = p + 1 === period ? 0 : p + 1;
+      out[i] = line[p];
+      line[p] = 0.996 * 0.5 * (line[p] + line[next]);
+      p = next;
+    }
+    plucks[key] = buf;
+    return buf;
+  }
+  function reverbBuffer() {
+    const rate = audio.sampleRate, len = Math.floor(rate * 1.6);
+    const buf = audio.createBuffer(2, len, rate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c), rand = noise(c ? 101 : 202);
+      for (let i = 0; i < len; i++) d[i] = rand() * Math.pow(1 - i / len, 3);
+    }
+    return buf;
+  }
+  function makeBus() {
+    const limiter = audio.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.ratio.value = 12;
+    limiter.connect(audio.destination);
+    const dry = audio.createGain();
+    dry.gain.value = 0.9;
+    dry.connect(limiter);
+    const wet = audio.createGain();
+    wet.gain.value = 0.18;
+    const verb = audio.createConvolver();
+    verb.buffer = reverbBuffer();
+    verb.connect(wet);
+    wet.connect(limiter);
+    return { dry: dry, verb: verb };
+  }
+  function organWave() {
+    const real = new Float32Array([0, 0, 0, 0, 0]);
+    const imag = new Float32Array([0, 1, 0.5, 0.25, 0.12]);
+    return audio.createPeriodicWave(real, imag);
+  }
   function stop() {
     for (const o of playing) { try { o.stop(); } catch (err) { /* already stopped */ } }
     playing = [];
@@ -1053,35 +1124,54 @@ const PIECE = /*PIECE_DATA*/;
     if (head) head.setAttribute("visibility", "hidden");
     play.textContent = "Play";
   }
+  instrument.addEventListener("change", function () { if (playing.length) stop(); });
   play.addEventListener("click", function () {
     if (playing.length) { stop(); return; }
     if (!score.length) return;
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) { play.textContent = "No audio"; return; }
     audio = audio || new Ctx();
+    if (audio.state === "suspended") audio.resume();
+    bus = bus || makeBus();
     const beat = 60 / (P.tempo || 120);
-    const t0 = audio.currentTime + 0.1;
-    const master = audio.createGain();
-    master.gain.value = 0.18 / Math.max(1, voices);
-    master.connect(audio.destination);
-    const waves = ["triangle", "sine", "triangle", "sine"];
+    const t0 = audio.currentTime + 0.12;
+    const kind = instrument.value;
+    const wave = kind === "organ" ? organWave() : null;
+    const level = (kind === "pluck" ? 1.3 : 0.45) / Math.sqrt(Math.max(1, voices));
     score.forEach(function (voice, v) {
+      const pan = audio.createStereoPanner();
+      pan.pan.value = voices > 1 ? -0.6 + (1.2 * v) / (voices - 1) : 0;
+      const gain = audio.createGain();
+      gain.gain.value = level;
+      gain.connect(pan);
+      pan.connect(bus.dry);
+      pan.connect(bus.verb);
       for (const n of voice) {
-        if (n.pitch < 0) continue;
-        const osc = audio.createOscillator();
-        const env = audio.createGain();
-        osc.type = waves[v % 4];
-        osc.frequency.value = 440 * Math.pow(2, (n.pitch - 69) / 12);
+        if (n.pitch <= 0) continue;
         const on = t0 + n.start * beat, off = on + n.length * beat;
-        env.gain.setValueAtTime(0, on);
-        env.gain.linearRampToValueAtTime(1, on + 0.01);
-        env.gain.setValueAtTime(1, off - 0.04);
-        env.gain.linearRampToValueAtTime(0, off);
-        osc.connect(env);
-        env.connect(master);
-        osc.start(on);
-        osc.stop(off + 0.02);
-        playing.push(osc);
+        const env = audio.createGain();
+        let src;
+        if (kind === "pluck") {
+          src = audio.createBufferSource();
+          src.buffer = pluckBuffer(n.pitch, Math.min(8, Math.ceil(n.length * beat + 0.5)));
+          env.gain.setValueAtTime(1, on);
+          env.gain.setValueAtTime(1, off - 0.03);
+          env.gain.linearRampToValueAtTime(0, off);
+        } else {
+          src = audio.createOscillator();
+          if (wave) src.setPeriodicWave(wave); else src.type = "sine";
+          src.frequency.value = hz(n.pitch);
+          const attack = wave ? 0.015 : 0.01, release = wave ? 0.06 : 0.04;
+          env.gain.setValueAtTime(0, on);
+          env.gain.linearRampToValueAtTime(1, on + attack);
+          env.gain.setValueAtTime(1, Math.max(on + attack, off - release));
+          env.gain.linearRampToValueAtTime(0, off);
+        }
+        src.connect(env);
+        env.connect(gain);
+        src.start(on);
+        src.stop(off + 0.02);
+        playing.push(src);
       }
     });
     play.textContent = "Stop";
