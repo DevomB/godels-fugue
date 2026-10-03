@@ -32,6 +32,7 @@ typedef struct Run {
     bool counterfactual; /* the config gives notes, by lock or melody */
     SolveStatus unlocked_status;
     int unlocked_pitch[MELODY_MAX];
+    int unlocked_key[SECTION_MAX]; /* the key per section it solved in */
 } Run;
 
 bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap);

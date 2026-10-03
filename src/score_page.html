@@ -936,7 +936,7 @@ const PIECE = /*PIECE_DATA*/;
         const td = cxCells[c][p];
         const removedNow = c === nowCol && gone.has(p);
         td.className = removedNow ? "gone" : dom.has(p) ? (one ? "fixed" : "on") : "out";
-        td.textContent = removedNow ? "×" : "";
+        td.textContent = removedNow ? "\u00d7" : "";
       }
       cxHeads[c].classList.toggle("now", c === nowCol);
     });

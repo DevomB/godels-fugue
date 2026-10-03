@@ -129,6 +129,27 @@ static void test_musicxml(void) {
     test_close(r);
 }
 
+/* Is the text well-formed UTF-8: no stray, truncated, overlong or surrogate sequences? */
+static bool utf8_valid(const unsigned char *p, long n) {
+    long i = 0;
+    while (i < n) {
+        unsigned char c = p[i];
+        int extra = c < 0x80 ? 0 : (c & 0xE0) == 0xC0 ? 1 : (c & 0xF0) == 0xE0 ? 2
+                    : (c & 0xF8) == 0xF0 ? 3 : -1;
+        if (extra < 0 || i + extra >= n) return false;
+        long code = extra == 0 ? c : c & (0x3F >> extra);
+        for (int k = 1; k <= extra; k++) {
+            if ((p[i + k] & 0xC0) != 0x80) return false;
+            code = (code << 6) | (p[i + k] & 0x3F);
+        }
+        static const long least[4] = {0, 0x80, 0x800, 0x10000};
+        if (code < least[extra] || code > 0x10FFFF || (code >= 0xD800 && code <= 0xDFFF))
+            return false;
+        i += extra + 1;
+    }
+    return true;
+}
+
 static void test_documents(void) {
     test_output_dir();
     Run *run = malloc(sizeof(Run));
@@ -187,7 +208,9 @@ static void test_documents(void) {
     json_free(&doc);
 
     CHECK(page_write("output/tests/score.html", run));
-    char *html = test_slurp("output/tests/score.html", NULL);
+    long html_size = 0;
+    char *html = test_slurp("output/tests/score.html", &html_size);
+    CHECK(utf8_valid((const unsigned char *)html, html_size));
     CHECK(strncmp(html, "<!DOCTYPE html>", 15) == 0);
     CHECK(strstr(html, "/*PIECE_DATA*/") == NULL);
     CHECK(strstr(html, "\"events\":[") != NULL);
@@ -239,6 +262,39 @@ static void test_documents(void) {
             CHECK(run->values[run->model.pitch[i]] != (int)pitch->items[i].number);
         }
     }
+    json_free(&doc);
+    run_free(run);
+
+    /* the unlocked piece is spelled in its own keys, not the main run's: the
+     * given note moves the second key */
+    c = test_config();
+    test_set(&c, "key=D");
+    test_set(&c, "mode=minor");
+    test_set(&c, "modulate_at=6");
+    test_set(&c, "lock=1");
+    test_set(&c, "lock_index=9");
+    test_set(&c, "lock_pitch=60");
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->status == SOLVE_SAT && run->unlocked_status == SOLVE_SAT);
+    CHECK(run->values[run->model.key[1]] != run->unlocked_key[1]);
+    CHECK(trace_save_json("output/tests/unlocked.json", run));
+    text = test_slurp("output/tests/unlocked.json", NULL);
+    CHECK(json_parse(text, &doc, why, sizeof(why)));
+    free(text);
+    const JsonValue *labels = json_get(json_get(&doc, "counterfactual"), "unlockedLabel");
+    CHECK(labels != NULL && labels->count == c.length);
+    int respelled = 0;
+    for (int i = 0; i < c.length; i++) {
+        int p = run->unlocked_pitch[i];
+        if (p == PITCH_REST) continue;
+        int section = model_section_at(&run->model, i);
+        char want[32], main_name[32];
+        key_pitch_name(run->unlocked_key[section], p, want, sizeof(want));
+        key_pitch_name(run->values[run->model.key[section]], p, main_name, sizeof(main_name));
+        CHECK(strcmp(labels->items[i].string, want) == 0);
+        respelled += strcmp(want, main_name) != 0;
+    }
+    CHECK(respelled > 0);
     json_free(&doc);
     run_free(run);
     free(run);

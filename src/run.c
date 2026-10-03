@@ -5,9 +5,10 @@
 #include <stdio.h>
 #include <string.h>
 
-/* Solves one config on its own model and reports status and energy. */
+/* Solves one config on its own model and reports status and energy, and
+ * when asked the melody and the key of each section. */
 static SolveStatus trial(const PieceConfig *config, int *energy, long *nodes,
-                         int *pitches) {
+                         int *pitches, int *keys) {
     Model m;
     char err[160];
     *energy = 0;
@@ -24,6 +25,9 @@ static SolveStatus trial(const PieceConfig *config, int *energy, long *nodes,
             *energy = model_energy(&m, values, NULL);
             if (pitches != NULL) {
                 for (int i = 0; i < config->length; i++) pitches[i] = values[m.pitch[i]];
+            }
+            if (keys != NULL) {
+                for (int k = 0; k < m.nsections; k++) keys[k] = values[m.key[k]];
             }
         }
         solver_free(&s);
@@ -49,7 +53,7 @@ static void search_delay(Run *run) {
         DelayTrial *dt = &run->delays[run->ndelays++];
         dt->delay = d;
         if (first_tried < 0) first_tried = d;
-        dt->status = trial(&t, &dt->energy, &dt->nodes, NULL);
+        dt->status = trial(&t, &dt->energy, &dt->nodes, NULL, NULL);
         if (dt->status == SOLVE_SAT && (best < 0 || dt->energy < best_energy)) {
             best = d;
             best_energy = dt->energy;
@@ -97,7 +101,8 @@ bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap) {
         int energy;
         long nodes;
         run->counterfactual = true;
-        run->unlocked_status = trial(&unlocked, &energy, &nodes, run->unlocked_pitch);
+        run->unlocked_status =
+            trial(&unlocked, &energy, &nodes, run->unlocked_pitch, run->unlocked_key);
     }
     return true;
 }

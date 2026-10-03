@@ -257,7 +257,13 @@ static void write_counterfactual(FILE *f, const Run *run) {
     fprintf(f, "],\"unlockedLabel\":[");
     for (int i = 0; solved && i < run->config.length; i++) {
         char name[32];
-        explain_label(&run->state, m->pitch[i], run->unlocked_pitch[i], name, sizeof(name));
+        int pitch = run->unlocked_pitch[i];
+        /* spelled in the unlocked piece's own key, which may not be the main run's */
+        int key = run->unlocked_key[model_section_at(m, m->vars[m->pitch[i]].index)];
+        if (pitch != PITCH_REST)
+            key_pitch_name(key, pitch, name, sizeof(name));
+        else
+            explain_label(&run->state, m->pitch[i], pitch, name, sizeof(name));
         fprintf(f, "%s", i ? "," : "");
         json_string(f, name);
     }
