@@ -10,6 +10,8 @@
 #include "sat.h"
 #include "theory.h"
 
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -139,17 +141,26 @@ static int run_analysis(const PieceConfig *config, long count_max, bool sensitiv
 }
 
 /* An inversion or mirror axis that maps the key onto other notes leaves
- * the scale rule few pitches to choose from; say so, and suggest the axis
- * better (-1 for none) that keeps them all. */
-static void warn_axis(int key, const char *verb, int axis, int kept, int better) {
+ * the scale rule few pitches to choose from, and an odd-length mirror's
+ * middle note is the axis itself; say so, and suggest the axis better
+ * (-1 for none) that keeps them all. */
+static void warn_axis(int key, const char *verb, int axis, int kept, bool middle_off,
+                      int better) {
     int size = key_scale_size(key);
-    if (kept == size) return;
+    if (kept == size && !middle_off) return;
     char name[32];
     key_name(key, name, sizeof(name));
-    fprintf(stderr, "note: %s around axis %d keeps %d of %d notes of %s in the key", verb,
-            axis, kept, size, name);
-    if (better >= 0) fprintf(stderr, "; axis %d keeps them all", better);
-    fprintf(stderr, "\n");
+    fprintf(stderr, "note: %s around axis %d", verb, axis);
+    if (kept < size) fprintf(stderr, " keeps %d of %d notes of %s in the key", kept, size, name);
+    if (middle_off) {
+        fprintf(stderr, "%s the middle note must be the axis, which is not in %s",
+                kept < size ? ";" : ":", name);
+    }
+    if (better >= 0) {
+        fprintf(stderr, "; axis %d keeps them all\n", better);
+    } else {
+        fprintf(stderr, "; no axis keeps them all\n");
+    }
 }
 
 /* Judges the given notes without a search; exit 1 if any rule breaks. */
@@ -202,32 +213,58 @@ static bool melody_from_midi(PieceConfig *c, const char *path, char *err, size_t
     return true;
 }
 
+/* The notes of the key every follower keeps in it, at the fewest, with
+ * the canon inverted around axis; transposition, diatonic or not, counts. */
+static int followers_kept(const PieceConfig *c, int key, int axis) {
+    PieceConfig t = *c;
+    t.axis = axis;
+    int kept = key_scale_size(key);
+    for (int v = 1; v < config_voice_count(&t); v++) {
+        int k = 0;
+        for (int pc = 0; pc < 12; pc++) {
+            if (key_has_pitch(key, pc) && key_has_pitch(key, canon_sounding(&t, v, 60 + pc)))
+                k++;
+        }
+        if (k < kept) kept = k;
+    }
+    return kept;
+}
+
+static int axis_kept(const PieceConfig *c, int key, bool mirror, int axis) {
+    return mirror ? inversion_kept(key, axis, 0) : followers_kept(c, key, axis);
+}
+
+/* The axis nearest the configured one that keeps every note of the key, or
+ * -1. A mirror axis must lie in range_low..range_high, and in the key when
+ * the length is odd, since the middle note is the axis. */
+static int better_axis(const PieceConfig *c, int key, bool mirror) {
+    int near = mirror ? c->mirror_axis : c->axis;
+    int lo = mirror ? c->range_low : 0;
+    int hi = mirror ? c->range_high : 127;
+    bool in_key = mirror && c->length % 2 == 1;
+    for (int d = 0; d < 128; d++) {
+        for (int sign = -1; sign <= 1; sign += 2) {
+            int axis = near + sign * d;
+            if (axis >= lo && axis <= hi && (!in_key || key_has_pitch(key, axis)) &&
+                axis_kept(c, key, mirror, axis) == key_scale_size(key))
+                return axis;
+            if (d == 0) break;
+        }
+    }
+    return -1;
+}
+
 static void warn_about_axis(const PieceConfig *c) {
     if (c->key < 0 || c->mode < 0) return;
     int key = key_id(c->key, c->mode);
     if (c->invert) {
-        /* count for the follower that keeps the fewest; an axis that keeps
-         * them all untransposed also does after a diatonic transposition, so
-         * an axis is suggested only when every follower shares one shift */
-        int shift = c->diatonic ? 0 : canon_transpose(c, 1);
-        bool one_shift = true;
-        int kept = key_scale_size(key);
-        for (int v = 1; v < config_voice_count(c); v++) {
-            if (!c->diatonic && canon_transpose(c, v) != shift) one_shift = false;
-            int k = 0;
-            for (int pc = 0; pc < 12; pc++) {
-                if (key_has_pitch(key, pc) && key_has_pitch(key, canon_sounding(c, v, 60 + pc)))
-                    k++;
-            }
-            if (k < kept) kept = k;
-        }
-        warn_axis(key, "inverting", c->axis, kept,
-                  one_shift ? inversion_nearest_axis(key, c->axis, shift) : -1);
+        warn_axis(key, "inverting", c->axis, followers_kept(c, key, c->axis), false,
+                  better_axis(c, key, false));
     }
     if (c->mirror) {
+        bool middle_off = c->length % 2 == 1 && !key_has_pitch(key, c->mirror_axis);
         warn_axis(key, "mirroring the melody", c->mirror_axis,
-                  inversion_kept(key, c->mirror_axis, 0),
-                  inversion_nearest_axis(key, c->mirror_axis, 0));
+                  inversion_kept(key, c->mirror_axis, 0), middle_off, better_axis(c, key, true));
     }
 }
 
@@ -320,6 +357,21 @@ int main(int argc, char **argv) {
         config_print_reference(stdout, markdown);
         return 0;
     }
+    /* --check judges the given notes alone and --explain a solved piece, so
+     * a mode either would ignore is refused rather than dropped */
+    const char *mode = count_text != NULL ? "--count"
+                       : sensitivity      ? "--sensitivity"
+                       : sat_mode         ? "--sat"
+                                          : NULL;
+    if (check_mode && (mode != NULL || explain != NULL || corpus_dir != NULL)) {
+        fprintf(stderr, "--check cannot be combined with %s\n",
+                mode != NULL ? mode : explain != NULL ? "--explain" : "--corpus");
+        return EXIT_UNSAT;
+    }
+    if (explain != NULL && mode != NULL) {
+        fprintf(stderr, "--explain needs a solved piece; it cannot be combined with %s\n", mode);
+        return EXIT_UNSAT;
+    }
 
     char err[300];
     if (preset != NULL && !config_apply_preset(&config, preset, err, sizeof(err))) {
@@ -360,9 +412,11 @@ int main(int argc, char **argv) {
     long count_max = 0;
     if (count_text != NULL) {
         char *end = NULL;
+        errno = 0;
         count_max = strtol(count_text, &end, 10);
-        if (end == count_text || *end != '\0' || count_max < 1) {
-            fprintf(stderr, "--count needs a positive number, not %s\n", count_text);
+        if (end == count_text || *end != '\0' || errno == ERANGE || count_max < 1) {
+            fprintf(stderr, "--count needs a positive number up to %ld, not %s\n", LONG_MAX,
+                    count_text);
             return EXIT_UNSAT;
         }
     }

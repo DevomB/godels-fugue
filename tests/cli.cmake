@@ -102,6 +102,10 @@ endforeach()
 run(explain 0 MATCH "x3 = " "candidates by cost|removed" ARGS --explain 3)
 run(explain_key 0 MATCH "key = C major" ARGS --explain key)
 run(explain_bad 1 ERROR "no variable named" ARGS --explain nope)
+run(explain_count 1 ERROR "--explain needs a solved piece; it cannot be combined with --count"
+    ARGS --explain 3 --count 5)
+run(explain_sensitivity 1 ERROR "cannot be combined with --sensitivity"
+    ARGS --explain 3 --sensitivity)
 # the README's example: x11 narrowed x0 before x0 was chosen, yet x0 and x4 alone force x8
 run(explain_minimal 0 MATCH "depends on: x0 = C4, x4 = G4\r?\n"
     ARGS --config "${SRC}/examples/cyclic.txt" --set time_limit=0 --explain x8)
@@ -120,6 +124,10 @@ if(EXISTS "${last_dir}")
   fail("check_bad: --check wrote output files")
 endif()
 run(check_given 0 MATCH "violations: none" ARGS --config "${SRC}/examples/given.txt" --check)
+run(check_count 1 ERROR "--check cannot be combined with --count" ARGS --check --count 5)
+run(check_sensitivity 1 ERROR "--check cannot be combined with --sensitivity"
+    ARGS --check --sensitivity)
+run(check_explain 1 ERROR "--check cannot be combined with --explain" ARGS --check --explain 3)
 run(check_fail 1 ERROR "violation: consonance: voices 1,2 must be consonant at step 4.*core:"
     ARGS --set "melody=60,?,?,?,62")
 file(READ "${last_dir}/report.txt" report)
@@ -133,6 +141,13 @@ endif()
 run(mirror_note 0 MATCH "melody:" ERROR "mirroring the melody around axis 66 keeps 3 of 7 notes"
     ARGS --set mirror=1)
 run(mirror_range 1 ERROR "invalid mirror_axis" ARGS --set mirror=1 --set mirror_axis=80)
+# an odd length puts the axis itself in the middle, so only an axis in the key will do
+run(mirror_odd 1
+    ERROR "axis 66 keeps 3 of 7 notes of C major in the key; the middle note must be the axis, which is not in C major; axis 62 keeps them all"
+    ARGS --set mirror=1 --set length=11)
+run(mirror_odd_off_key 1
+    ERROR "axis 68: the middle note must be the axis, which is not in C major; axis 62 keeps them all"
+    ARGS --config "${SRC}/examples/mirror.txt" --set length=11 --set mirror_axis=68)
 run(set 0 MATCH "voice 3:" ARGS --set voices=3)
 run(sat 0 MATCH "melody:" ARGS --sat)
 run(sat_unsat 1 MATCH "unsat" ARGS --config "${SRC}/examples/unsat.txt" --sat)
@@ -141,6 +156,8 @@ run(count_max 0 MATCH "count: at least 5 \\(stopped at 5\\)" ARGS --count 5)
 run(count_limit 3 MATCH "stopped at the search limit" ARGS --count 100000 --max-nodes 3)
 run(count_unsat 0 MATCH "count: 0 \\(exact\\)" ARGS --config "${SRC}/examples/unsat.txt" --count 10)
 run(count_bad 1 ERROR "positive number" ARGS --count 0)
+run(count_huge 1 ERROR "positive number up to" ARGS --count 99999999999999999999)
+run(count_negative 1 ERROR "positive number up to" ARGS --count -5)
 run(count_sat 1 ERROR "fixed delay" ARGS --count 5 --sat)
 run(sensitivity 0 MATCH "x0 +frozen +1/1: E4" "x4 +bifurcation point" "x11 +frozen +1/1: C4"
     ARGS --config "${SRC}/examples/given.txt" --sensitivity)
@@ -184,7 +201,16 @@ run(voice_transpose_cli 0 MATCH "voice 2: rest rest rest rest 67 69 71 72 rest"
 run(diatonic_search 1 ERROR "invalid diatonic: needs a fixed key" ARGS --set diatonic=1 --set key=search)
 run(diatonic_modulate 1 ERROR "invalid diatonic: cannot be used with modulate_at"
     ARGS --set diatonic=1 --set modulate_at=8)
-run(bad_transpose_1 1 ERROR "transpose_1" ARGS --set transpose_1=30)
+# a fourth up in A minor takes the raised 7th off the scale whatever the axis
+run(invert_diatonic_minor 0
+    ERROR "axis 62 keeps 7 of 8 notes of A minor in the key; no axis keeps them all"
+    ARGS --set key=A --set mode=minor --set diatonic=1 --set invert=1 --set axis=62
+         --set transpose=3 --count 1)
+run(bad_transpose_1 1 ERROR "transpose_1 must be -24\\.\\.24 or same: 30"
+    ARGS --set transpose_1=30)
+run(bad_transpose_same 1 ERROR "transpose_1 must be -24\\.\\.24 or same: -128"
+    ARGS --set transpose_1=-128)
+run(bad_motif 1 ERROR "motif_a must be -24\\.\\.24 or off: -30" ARGS --set motif_a=-30)
 run(help 0 MATCH "usage: canon-collapse" ARGS --help)
 run(version 0 MATCH "canon-collapse [0-9]" ARGS --version)
 run(presets 0 MATCH "baroque" ARGS --list-presets)

@@ -510,9 +510,19 @@ static bool set_scalar(const KeyDef *def, int *slot, const char *value, char *er
         snprintf(err, cap, "config value for %s is not valid: %s", def->name, value);
         return false;
     }
-    if (v < def->min || v > def->max) {
-        snprintf(err, cap, "config value for %s must be %d..%d: %s", def->name,
-                 def->min, def->max, value);
+    /* -128 is only the stored form of a transposition's "same" or a motif
+     * interval's "off"; as numbers these take -24 and up */
+    int low = def->parse != NULL && def->min == TRANSPOSE_SAME ? -24 : def->min;
+    if (v < low || v > def->max) {
+        if (low != def->min) {
+            char word[16];
+            def->print(def->min, word, sizeof(word));
+            snprintf(err, cap, "config value for %s must be %d..%d or %s: %s", def->name, low,
+                     def->max, word, value);
+        } else {
+            snprintf(err, cap, "config value for %s must be %d..%d: %s", def->name, def->min,
+                     def->max, value);
+        }
         return false;
     }
     *slot = (int)v;
