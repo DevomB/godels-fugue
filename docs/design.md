@@ -303,8 +303,12 @@ the final search path, so the replay is exact, and it works for unsolved runs to
 When the config gives notes, a panel shows the piece solved without them and which
 notes changed.
 
-**Built.** **Not built**: a constraint-graph view, editing a note in the browser and
-re-solving, a counterfactual inspector that tries other values, and weight sliders.
+The web demo (`web/`, published with GitHub Pages) runs the same program compiled to
+WebAssembly in a web worker: it edits a config, composes, and shows this page with
+every output file to download.
+
+**Built.** **Not built**: a constraint-graph view, editing a single note in the score
+and re-solving, a counterfactual inspector that tries other values, and weight sliders.
 
 ## 13. Presets and modes
 
@@ -317,7 +321,8 @@ already expose the research data: entropy, statistics, and removals by rule.
 
 ## 14. Implementation
 
-- C11, no dependencies, builds warning-free with GCC, Clang and MSVC.
+- C11, no dependencies, builds warning-free with GCC, Clang and MSVC, and with
+  Emscripten for the browser.
 - Config: one table of keys drives text and JSON configs, `--set`, validation,
   presets and [config.md](config.md). `report.txt` records every key used, so a piece
   can be reproduced from it.

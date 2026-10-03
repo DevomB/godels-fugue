@@ -1,8 +1,18 @@
 # Canon Collapse
 
+[![CI](https://github.com/DevomB/godels-fugue/actions/workflows/ci.yml/badge.svg)](https://github.com/DevomB/godels-fugue/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/DevomB/godels-fugue)](https://github.com/DevomB/godels-fugue/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Canon Collapse writes canons, pieces where one melody is played against delayed
 copies of itself, by solving them as a constraint problem, and it can tell you why
 every note is there.
+
+**[Try it in your browser](https://devomb.github.io/godels-fugue/)**: the same C
+program compiled to WebAssembly. Pick a piece, press Compose, play it, and click any
+note to see the rules that put it there.
+
+![The score page: three voices of a canon over a chord progression, with energy, search statistics and timing above](docs/images/score.png)
 
 Each melody note starts with every pitch in range. Musical rules (stay in the key,
 no large leaps, consonant strong beats, no parallel fifths, end with a cadence) remove
@@ -15,11 +25,21 @@ on. That record answers "why is this note here?" for any note in the finished pi
 It is written in C11 with no dependencies and writes MIDI, MusicXML, LilyPond, ABC,
 WAV, an SVG contour, a proof trace, and an interactive HTML score.
 
-## Quick start
+## Install
+
+Download an archive for Linux (x86_64, static), macOS (universal) or Windows (x86_64)
+from the [latest release](https://github.com/DevomB/godels-fugue/releases/latest).
+Each one holds the `canon-collapse` program, the examples and the docs. Or build it
+yourself with a C11 compiler and CMake:
 
 ```sh
 cmake -S . -B build
 cmake --build build
+```
+
+## Quick start
+
+```sh
 ./build/canon-collapse
 ```
 
@@ -283,6 +303,12 @@ straight back to the latest of those, and remembers the combination so it never 
 it again. After the first solution, the optimizer re-solves six-note windows for a
 lower total energy, then replays the best piece so the proof describes it.
 
+The Collapse card in `score.html` replays that proof. Each column is a melody note and
+each row a pitch it could still take; decisions and forced values turn orange, and
+every removal is marked as it happens:
+
+![The collapse replay: a grid of candidate pitches per melody note shrinking event by event until each note has one pitch](docs/images/collapse.gif)
+
 [docs/design.md](docs/design.md) covers the ideas behind the project and which of
 them are built.
 
@@ -339,6 +365,24 @@ property test solves hundreds of random configurations, checks each piece with a
 separate rule checker, and checks that the SAT backend agrees on which ones can be
 solved.
 
+### The web demo
+
+`web/` holds the browser page. With [Emscripten](https://emscripten.org) installed,
+build the WebAssembly program and serve the page beside it:
+
+```sh
+emcmake cmake -S . -B build-web
+cmake --build build-web
+mkdir -p site/examples
+cp web/* build-web/canon-collapse.js build-web/canon-collapse.wasm site/
+cp examples/*.txt examples/*.json site/examples/
+python -m http.server --directory site
+```
+
+The page runs `main()` in a web worker with the config written to an in-memory file
+system and reads the output files back, so it composes exactly what the command line
+does. Every push to `main` publishes it with GitHub Pages.
+
 ## Layout
 
 ```text
@@ -360,8 +404,12 @@ tests/        unit, property and command-line tests
 examples/     one config per feature
 corpus/       sample pitch files for --corpus
 docs/         config reference and design notes
+web/          the browser demo
 ```
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+The repository keeps the project's working title, *Gödel's Fugue*, after Douglas
+Hofstadter's *Gödel, Escher, Bach*, whose dialogues are written as canons and fugues.
