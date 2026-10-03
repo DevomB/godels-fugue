@@ -6,10 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum {
-    FILE_LIMIT = 1 << 24, /* bytes; far more than any melody needs */
-    PERCUSSION = 9        /* channel 10, counting from 1 */
-};
+enum { PERCUSSION = 9 }; /* channel 10, counting from 1 */
 
 /* Later ticks are refused, so tick + ppq / 2 fits in a long. */
 #define TICK_LIMIT 0x3FFFFFFFUL
@@ -56,14 +53,30 @@ static bool add_note(MidiTrack *t, long on, int pitch, int channel) {
     return true;
 }
 
+/* Ends the oldest of the *sounding notes of a pitch and channel, the one at
+ * *oldest, and moves *oldest to the next of them. */
+static void end_oldest(MidiTrack *t, int *oldest, int *sounding, long tick) {
+    MidiNote *ended = &t->notes[*oldest];
+    ended->off = tick;
+    if (--*sounding == 0) return;
+    for (int k = *oldest + 1; k < t->count; k++) {
+        if (t->notes[k].pitch == ended->pitch && t->notes[k].channel == ended->channel) {
+            *oldest = k;
+            return;
+        }
+    }
+}
+
 /* Parses the events in data[pos..end). Meta and sysex events are skipped
  * and, as most readers allow, leave running status in force. */
 static bool parse_track(MidiTrack *t, int number, const unsigned char *data, size_t pos,
                         size_t end, char *err, size_t cap) {
-    int sounding[16][128]; /* the note sounding on each channel and pitch, or -1 */
-    for (int c = 0; c < 16; c++) {
-        for (int p = 0; p < 128; p++) sounding[c][p] = -1;
-    }
+    /* The notes sounding on each channel and pitch, first in first out: the
+     * oldest, and how many. Ended notes always started before sounding ones,
+     * so the next of the pitch and channel after the oldest is the next to end. */
+    int oldest[16][128];
+    int sounding[16][128];
+    memset(sounding, 0, sizeof(sounding));
     unsigned long tick = 0;
     unsigned char running = 0;
     const char *problem = NULL;
@@ -126,17 +139,14 @@ static bool parse_track(MidiTrack *t, int number, const unsigned char *data, siz
         }
         int channel = status & 0x0F;
         if ((kind != 0x80 && kind != 0x90) || channel == PERCUSSION) continue;
-        int *slot = &sounding[channel][key];
-        if (*slot >= 0) {
-            t->notes[*slot].off = (long)tick;
-            *slot = -1;
-        }
         if (kind == 0x90 && velocity > 0) {
             if (!add_note(t, (long)tick, key, channel)) {
                 snprintf(err, cap, "out of memory");
                 return false;
             }
-            *slot = t->count - 1;
+            if (sounding[channel][key]++ == 0) oldest[channel][key] = t->count - 1;
+        } else if (sounding[channel][key] > 0) {
+            end_oldest(t, &oldest[channel][key], &sounding[channel][key], (long)tick);
         }
     }
     if (problem != NULL) {
@@ -228,7 +238,7 @@ bool midi_read_bytes(MidiFile *file, const unsigned char *data, size_t size, cha
     return true;
 }
 
-/* The whole file, or NULL; too_big says it passed FILE_LIMIT. */
+/* The whole file, or NULL; too_big says it is longer than MIDI_FILE_LIMIT. */
 static unsigned char *read_all(const char *path, size_t *size, bool *too_big) {
     *size = 0;
     *too_big = false;
@@ -240,7 +250,8 @@ static unsigned char *read_all(const char *path, size_t *size, bool *too_big) {
     while (data != NULL) {
         len += fread(data + len, 1, cap - len, f);
         if (len < cap) break;
-        if (cap >= (size_t)FILE_LIMIT) {
+        if (cap >= (size_t)MIDI_FILE_LIMIT) {
+            if (fgetc(f) == EOF) break; /* exactly the limit */
             *too_big = true;
             free(data);
             data = NULL;

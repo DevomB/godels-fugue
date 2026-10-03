@@ -18,6 +18,8 @@ typedef struct MidiTrack {
     MidiNote *notes; /* in the order they start */
 } MidiTrack;
 
+enum { MIDI_FILE_LIMIT = 1 << 24 }; /* bytes; a larger file is refused */
+
 /* The notes of every track of a format 0, 1 or 2 file. */
 typedef struct MidiFile {
     int format;
@@ -26,12 +28,13 @@ typedef struct MidiFile {
     MidiTrack *tracks;
 } MidiFile;
 
-/* Reads the notes of every track. A note runs from its note-on to the next
- * note-off (or note-on with velocity 0) of its pitch and channel, or to the
- * end of its track. Notes on channel 10, General MIDI percussion, are drum
- * sounds rather than pitches and are skipped. Returns false and fills err for
- * anything that is not a well-formed file, leaving the file empty; free a
- * file that was read with midi_file_free. */
+/* Reads the notes of every track. A note runs from its note-on to a note-off
+ * (or note-on with velocity 0) of its pitch and channel, or to the end of its
+ * track; when one pitch sounds more than once, each note-off ends the oldest.
+ * Notes on channel 10, General MIDI percussion, are drum sounds rather than
+ * pitches and are skipped. Returns false and fills err for anything that is
+ * not a well-formed file, leaving the file empty; free a file that was read
+ * with midi_file_free. */
 bool midi_read_file(MidiFile *file, const char *path, char *err, size_t cap);
 bool midi_read_bytes(MidiFile *file, const unsigned char *data, size_t size, char *err,
                      size_t cap);

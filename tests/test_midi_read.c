@@ -278,6 +278,82 @@ static void test_malformed(void) {
     expect_steps(&b, 0, one, 1);
 }
 
+/* A note-off ends the oldest sounding note of its pitch and channel. */
+static void test_repeated_pitch(void) {
+    Bytes b;
+    header(&b, 0, 1, 480);
+    /* a repeated note whose next note-on comes before the note-off at the
+     * same tick: two quarters, no rest between them */
+    static const unsigned char same_tick[] = {
+        0, 0x90, 60, 80, 0x83, 0x60, 0x90, 60, 80, 0, 0x80, 60, 0,
+        0x83, 0x60, 0x80, 60, 0, 0, 0xFF, 0x2F, 0};
+    track(&b, same_tick, sizeof(same_tick));
+    MidiFile f;
+    read_ok(&b, &f);
+    CHECK(f.tracks[0].count == 2);
+    CHECK(f.tracks[0].notes[0].on == 0 && f.tracks[0].notes[0].off == 480);
+    CHECK(f.tracks[0].notes[1].on == 480 && f.tracks[0].notes[1].off == 960);
+    midi_file_free(&f);
+    static const int two[2] = {60, 60};
+    expect_steps(&b, 0, two, 2);
+
+    /* two overlapping notes of one pitch, the first held two beats and the
+     * second from beat two to beat four; a third never released */
+    header(&b, 0, 1, 480);
+    static const unsigned char overlap[] = {
+        0, 0x90, 62, 80, 0x83, 0x60, 0x90, 62, 80, 0x83, 0x60, 0x80, 62, 0,
+        0x83, 0x60, 0x90, 62, 0, 0, 0x90, 62, 80, 0x83, 0x60, 0xFF, 0x2F, 0};
+    track(&b, overlap, sizeof(overlap));
+    read_ok(&b, &f);
+    CHECK(f.tracks[0].count == 3);
+    CHECK(f.tracks[0].notes[0].off == 960 && f.tracks[0].notes[1].off == 1440);
+    CHECK(f.tracks[0].notes[2].on == 1440 && f.tracks[0].notes[2].off == 1920);
+    midi_file_free(&f);
+    static const int four[4] = {62, 62, 62, 62};
+    expect_steps(&b, 0, four, 4);
+}
+
+/* Writes a file of size bytes: a one-note file padded by a chunk of another
+ * type. */
+static void write_padded(const char *path, long size) {
+    Bytes b;
+    header(&b, 0, 1, 480);
+    static const unsigned char note[] = {0,  0x90, 60, 80, 0x83, 0x60, 0x80,
+                                         60, 0,    0,  0xFF, 0x2F, 0};
+    track(&b, note, sizeof(note));
+    unsigned long pad = (unsigned long)size - b.size - 8;
+    unsigned char head[8] = {'X',
+                             'F',
+                             'I',
+                             'H',
+                             (unsigned char)(pad >> 24),
+                             (unsigned char)(pad >> 16),
+                             (unsigned char)(pad >> 8),
+                             (unsigned char)pad};
+    FILE *out = fopen(path, "wb");
+    CHECK(out != NULL);
+    CHECK(fwrite(b.data, 1, 14, out) == 14);
+    CHECK(fwrite(head, 1, 8, out) == 8);
+    for (unsigned long k = 0; k < pad; k++) CHECK(fputc(0, out) != EOF);
+    CHECK(fwrite(b.data + 14, 1, b.size - 14, out) == b.size - 14);
+    CHECK(fclose(out) == 0);
+}
+
+/* A file of exactly MIDI_FILE_LIMIT bytes reads; one byte more does not. */
+static void test_file_limit(void) {
+    const char *path = "output/tests/limit.mid";
+    MidiFile f;
+    char err[200];
+    write_padded(path, MIDI_FILE_LIMIT);
+    CHECK(midi_read_file(&f, path, err, sizeof(err)));
+    CHECK(f.ntracks == 1 && f.tracks[0].count == 1);
+    midi_file_free(&f);
+    write_padded(path, MIDI_FILE_LIMIT + 1L);
+    CHECK(!midi_read_file(&f, path, err, sizeof(err)));
+    CHECK(strstr(err, "too large") != NULL);
+    remove(path);
+}
+
 /* Every truncated copy of a valid file fails, and corrupted copies either
  * fail with a message or read as some file; none may crash or read out of
  * bounds (the sanitizer build checks the latter). */
@@ -339,6 +415,8 @@ int main(void) {
     test_running_status();
     test_format0();
     test_malformed();
+    test_repeated_pitch();
+    test_file_limit();
     test_fuzz();
     printf("ok\n");
     return 0;
