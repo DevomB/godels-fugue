@@ -381,6 +381,44 @@ static void test_optimize(void) {
     test_close(r);
 }
 
+/* Canons of the longest melody solve and keep every rule; with rhythm and
+ * harmony the decisions go past level 64, and every forced value is still
+ * explained by a minimal set of them. */
+static void test_longest_melody(void) {
+    static const char *const cases[][5] = {
+        {"length=64", NULL},
+        {"length=64", "voices=3", "rhythm=1", "harmony=1", NULL},
+    };
+    Run *run = malloc(sizeof(Run));
+    CHECK(run != NULL);
+    char err[200];
+    for (size_t k = 0; k < sizeof(cases) / sizeof(cases[0]); k++) {
+        PieceConfig c = test_config();
+        for (int j = 0; cases[k][j] != NULL; j++) test_set(&c, cases[k][j]);
+        CHECK(run_piece(run, &c, err, sizeof(err)));
+        CHECK(run->status == SOLVE_SAT);
+        CHECK(run->model.config.length == MELODY_MAX);
+        CHECK(satisfies_model(&run->model, run->values));
+        CHECK(run->model.span == MELODY_MAX + (c.voices - 1) * c.delay);
+        if (c.rhythm) CHECK(run->state.level > 64);
+        CHECK(run_explain(run));
+        int forced = 0;
+        for (int v = 0; v < run->model.nvars; v++) {
+            const Explanation *e = &run->explained[v];
+            CHECK(e->status != WHY_OPEN);
+            if (e->status != WHY_FORCED) continue;
+            forced++;
+            CHECK(e->minimized);
+            LevelSet both = e->minimal;
+            levelset_union(&both, &e->reason);
+            CHECK(memcmp(&both, &e->reason, sizeof(both)) == 0);
+        }
+        if (c.rhythm) CHECK(forced > 0);
+        run_free(run);
+    }
+    free(run);
+}
+
 static void test_run_pipeline(void) {
     Run *run = malloc(sizeof(Run));
     CHECK(run != NULL);
@@ -443,6 +481,7 @@ int main(void) {
     test_unsat_core();
     test_sat_backend();
     test_optimize();
+    test_longest_melody();
     test_run_pipeline();
     printf("ok\n");
     return 0;
