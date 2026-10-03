@@ -137,6 +137,8 @@ svg text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
 .cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 14px; }
 @media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.loop { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--text-secondary); }
+.loop input { padding: 0; }
 .tries { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .try { font-size: 13px; padding: 3px 9px; border-color: var(--accent); }
 .try.removed { border-color: var(--border); color: var(--text-muted); }
@@ -209,6 +211,7 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
       <option value="organ">Organ</option>
       <option value="sine">Sine</option>
     </select>
+    <label class="loop"><input id="loop" type="checkbox"> Loop</label>
     <button id="play" type="button">Play</button>
     <button id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
   </div>
@@ -1200,6 +1203,10 @@ const PIECE = /*PIECE_DATA*/;
     play.textContent = "Play";
   }
   instrument.addEventListener("change", function () { if (playing.length) stop(); });
+  /* A cyclic canon is a round: Loop schedules each next pass ahead of time,
+     so it repeats without a gap. */
+  const loop = document.getElementById("loop");
+  loop.checked = String(cfg.cyclic) === "1";
   play.addEventListener("click", function () {
     if (playing.length) { stop(); return; }
     if (!score.length) return;
@@ -1213,7 +1220,7 @@ const PIECE = /*PIECE_DATA*/;
     const kind = instrument.value;
     const wave = kind === "organ" ? organWave() : null;
     const level = (kind === "pluck" ? 1.3 : 0.45) / Math.sqrt(Math.max(1, voices));
-    score.forEach(function (voice, v) {
+    const lanes = score.map(function (voice, v) {
       const pan = audio.createStereoPanner();
       pan.pan.value = voices > 1 ? -0.6 + (1.2 * v) / (voices - 1) : 0;
       const gain = audio.createGain();
@@ -1221,46 +1228,54 @@ const PIECE = /*PIECE_DATA*/;
       gain.connect(pan);
       pan.connect(bus.dry);
       pan.connect(bus.verb);
-      for (const n of voice) {
-        if (n.pitch <= 0) continue;
-        const on = t0 + n.start * beat, off = on + n.length * beat;
-        const env = audio.createGain();
-        let src;
-        if (kind === "pluck") {
-          src = audio.createBufferSource();
-          src.buffer = pluckBuffer(n.pitch, Math.min(8, Math.ceil(n.length * beat + 0.5)));
-          env.gain.setValueAtTime(1, on);
-          env.gain.setValueAtTime(1, off - 0.03);
-          env.gain.linearRampToValueAtTime(0, off);
-        } else {
-          src = audio.createOscillator();
-          if (wave) src.setPeriodicWave(wave); else src.type = "sine";
-          src.frequency.value = hz(n.pitch);
-          const attack = wave ? 0.015 : 0.01, release = wave ? 0.06 : 0.04;
-          env.gain.setValueAtTime(0, on);
-          env.gain.linearRampToValueAtTime(1, on + attack);
-          env.gain.setValueAtTime(1, Math.max(on + attack, off - release));
-          env.gain.linearRampToValueAtTime(0, off);
-        }
-        src.connect(env);
-        env.connect(gain);
-        src.start(on);
-        src.stop(off + 0.02);
-        playing.push(src);
-      }
+      return gain;
     });
-    play.textContent = "Stop";
+    function schedule(begin) {
+      score.forEach(function (voice, v) {
+        for (const n of voice) {
+          if (n.pitch <= 0) continue;
+          const on = begin + n.start * beat, off = on + n.length * beat;
+          const env = audio.createGain();
+          let src;
+          if (kind === "pluck") {
+            src = audio.createBufferSource();
+            src.buffer = pluckBuffer(n.pitch, Math.min(8, Math.ceil(n.length * beat + 0.5)));
+            env.gain.setValueAtTime(1, on);
+            env.gain.setValueAtTime(1, off - 0.03);
+            env.gain.linearRampToValueAtTime(0, off);
+          } else {
+            src = audio.createOscillator();
+            if (wave) src.setPeriodicWave(wave); else src.type = "sine";
+            src.frequency.value = hz(n.pitch);
+            const attack = wave ? 0.015 : 0.01, release = wave ? 0.06 : 0.04;
+            env.gain.setValueAtTime(0, on);
+            env.gain.linearRampToValueAtTime(1, on + attack);
+            env.gain.setValueAtTime(1, Math.max(on + attack, off - release));
+            env.gain.linearRampToValueAtTime(0, off);
+          }
+          src.connect(env);
+          env.connect(lanes[v]);
+          src.start(on);
+          src.stop(off + 0.02);
+          playing.push(src);
+        }
+      });
+    }
     const total = P.span * beat;
+    let passes = 1;
+    schedule(t0);
+    play.textContent = "Stop";
     function tick() {
       const t = audio.currentTime - t0;
-      if (t > total + 0.2) { stop(); return; }
+      if (loop.checked && t > passes * total - 1) schedule(t0 + total * passes++);
+      if (t > passes * total + 0.2) { stop(); return; }
       const head = document.getElementById("playhead");
       const left = Number(roll.dataset.left), stepW = Number(roll.dataset.stepW);
-      const step = t / beat;
+      const step = t >= 0 ? (t % total) / beat : -1;
       for (const n of noteNodes)
         n.node.classList.toggle("sounding", step >= n.start && step < n.start + n.length);
       if (head && t >= 0) {
-        const x = left + (t / beat) * stepW;
+        const x = left + step * stepW;
         head.setAttribute("x1", x);
         head.setAttribute("x2", x);
         head.setAttribute("visibility", "visible");
