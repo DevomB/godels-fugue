@@ -9,8 +9,10 @@ copies of itself, by solving them as a constraint problem, and it can tell you w
 every note is there.
 
 **[Try it in your browser](https://devomb.github.io/godels-fugue/)**: the same C
-program compiled to WebAssembly. Pick a piece, press Compose, play it, and click any
-note to see the rules that put it there.
+program compiled to WebAssembly. Pick a piece, press Compose, and listen. Click any note
+to see the rules that put it there, or give it another pitch and hear the piece
+re-compose around your choice (or learn which rule forbids it). The demo also shows the
+canon as sheet music, replays the collapse, and gives every piece a link you can share.
 
 ![The score page: three voices of a canon over a chord progression, with energy, search statistics and timing above](docs/images/score.png)
 
@@ -239,7 +241,7 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 | `score.abc` | ABC notation: one voice per canon voice, with accidentals written out relative to the key signature |
 | `voices.wav` | All voices mixed to mono, 16-bit, 44.1 kHz |
 | `contour.svg` | Pitch over time for every voice |
-| `score.html` | Interactive score: piano roll per voice, playback, why each note is there, a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart), what the given notes changed, entropy and energy charts, and the proof log |
+| `score.html` | Interactive score: piano roll per voice, playback (harpsichord, organ or sine, each voice panned in stereo), why each note is there, a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart), what the given notes changed, entropy and energy charts, and the proof log |
 | `explain.txt` | The explanation for every variable, as `--explain` prints it |
 | `report.txt` | Keys, search statistics, energy by rule, values removed by each rule, the unsat core, the rules given notes break, and every config key used |
 | `proof.txt` | Every proof event in order: removals, decisions, forced collapses, and entropy after each round of propagation |
@@ -381,7 +383,16 @@ python -m http.server --directory site
 
 The page runs `main()` in a web worker with the config written to an in-memory file
 system and reads the output files back, so it composes exactly what the command line
-does. Every push to `main` publishes it with GitHub Pages.
+does. On top of `score.html` it adds:
+
+- **What if?** The inspector offers every other value of a melody note. Picking one
+  writes it into the config's `melody` line and composes again; the page reports how
+  many other notes changed to fit, or the rule the value breaks, and can undo.
+- **Sheet music**, engraved from `score.abc` by [abcjs](https://www.abcjs.net).
+- **Share links**: the address carries the config and the variation, so a link
+  composes the same piece again.
+
+Every push to `main` publishes it with GitHub Pages.
 
 ## Layout
 

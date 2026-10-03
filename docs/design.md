@@ -305,10 +305,13 @@ notes changed.
 
 The web demo (`web/`, published with GitHub Pages) runs the same program compiled to
 WebAssembly in a web worker: it edits a config, composes, and shows this page with
-every output file to download.
+every output file to download, staff notation engraved from the ABC export, and a link
+that composes the same piece again. Hosted there, the inspector becomes a
+counterfactual tool: it offers every other value of a melody note, and picking one
+fixes the note in the config and composes again, reporting the notes that changed to
+fit or the rule the value breaks.
 
-**Built.** **Not built**: a constraint-graph view, editing a single note in the score
-and re-solving, a counterfactual inspector that tries other values, and weight sliders.
+**Built.** **Not built**: a constraint-graph view, and weight sliders.
 
 ## 13. Presets and modes
 
