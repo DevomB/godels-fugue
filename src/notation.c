@@ -236,8 +236,10 @@ bool export_abc(const char *path, const Score *score) {
                 signature(score->key[1], sig);
             }
             abc_segment(f, &segs[k], sig, marked);
-            if ((segs[k].start + segs[k].steps) % score_bar_steps(score) != 0) {
-                fputc(' ', f);
+            int end = segs[k].start + segs[k].steps;
+            if (end % score_bar_steps(score) != 0) {
+                /* no space inside a beat, so the eighths of a beat are beamed */
+                if (end % score_beat_steps(score) == 0) fputc(' ', f);
                 continue;
             }
             fputs(k + 1 < n ? " |\n" : " |]\n", f);

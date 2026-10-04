@@ -255,8 +255,9 @@ static void test_eighth_grid(void) {
     CHECK(export_abc("output/tests/eighths.abc", &s));
     char *abc = test_slurp("output/tests/eighths.abc", NULL);
     CHECK(strstr(abc, "M:4/4\nL:1/8\nQ:1/4=90\n") != NULL);
-    CHECK(strstr(abc, "\nV:1\nC D3 E4- |\nE F4 z3 |]\n") != NULL);
-    CHECK(strstr(abc, "\nV:2\nG,6- G, A, |\nB,4- B, z3 |]\n") != NULL);
+    /* notes that share a beat are written together, so their eighths are beamed */
+    CHECK(strstr(abc, "\nV:1\nCD3 E4- |\nEF4z3 |]\n") != NULL);
+    CHECK(strstr(abc, "\nV:2\nG,6- G,A, |\nB,4- B,z3 |]\n") != NULL);
     free(abc);
 
     /* a whole bar's rest and a whole note */
