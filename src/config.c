@@ -106,6 +106,10 @@ static const char *const consonance_words[] = {"off", "strong", "all"};
 static const char *const order_words[] = {"mrv", "entropy", "collapse", "index"};
 static const char *const instrument_words[] = {"pluck", "organ", "sine"};
 static const char *const grid_words[] = {"quarter", "eighth", "sixteenth"};
+static const char *const ensemble_words[] = {
+    "none", "chamber", "strings", "winds", "saxes", "brass", "band",
+    "orchestra", "piano", "harpsichord", "organ", "harp", "mallets"};
+static const char *const written_words[] = {"transposed", "concert"};
 
 static bool parse_list_word(const char *w, const char *const *words, int n, int *out) {
     for (int i = 0; i < n; i++) {
@@ -139,6 +143,22 @@ static bool parse_instrument_word(const char *w, int *out) {
 
 static void print_instrument_word(int v, char *buf, size_t cap) {
     snprintf(buf, cap, "%s", v >= 0 && v < INSTRUMENT_COUNT ? instrument_words[v] : "?");
+}
+
+static bool parse_ensemble_word(const char *w, int *out) {
+    return parse_list_word(w, ensemble_words, ENSEMBLE_COUNT, out);
+}
+
+static void print_ensemble_word(int v, char *buf, size_t cap) {
+    snprintf(buf, cap, "%s", v >= 0 && v < ENSEMBLE_COUNT ? ensemble_words[v] : "?");
+}
+
+static bool parse_written_word(const char *w, int *out) {
+    return parse_list_word(w, written_words, WRITTEN_COUNT, out);
+}
+
+static void print_written_word(int v, char *buf, size_t cap) {
+    snprintf(buf, cap, "%s", v >= 0 && v < WRITTEN_COUNT ? written_words[v] : "?");
 }
 
 static bool parse_grid_word(const char *w, int *out) {
@@ -507,6 +527,20 @@ static const KeyDef keys[] = {
     {"instrument", F(instrument), 1, 0, INSTRUMENT_COUNT - 1, INSTRUMENT_PLUCK,
      parse_instrument_word, print_instrument_word, "output",
      "Sound of voices.wav: pluck (a plucked string, like a harpsichord), organ, or sine."},
+    {"ensemble", F(ensemble), 1, 0, ENSEMBLE_COUNT - 1, ENSEMBLE_NONE, parse_ensemble_word,
+     print_ensemble_word, "output",
+     "Instruments the score files are written for, one per voice from the highest voice "
+     "down: none, chamber (flute, violin, clarinet, cello), strings, winds (flute, oboe, "
+     "clarinet, bassoon), saxes (soprano, alto, tenor, baritone), brass (trumpet, horn, "
+     "trombone, euphonium), band (flute, alto sax, euphonium, baritone sax), orchestra, "
+     "piano, harpsichord, organ, harp or mallets. Each part gets its name, clef and MIDI "
+     "program, and report.txt counts notes outside an instrument's range."},
+    {"written", F(written), 1, 0, WRITTEN_COUNT - 1, WRITTEN_TRANSPOSED, parse_written_word,
+     print_written_word, "output",
+     "How an ensemble's transposing instruments are written: transposed, each in its own "
+     "key (B-flat clarinet, trumpet and soprano sax a step above the sound, E-flat alto sax "
+     "a sixth, B-flat tenor sax a ninth, E-flat baritone sax an octave and a sixth, horn in "
+     "F a fifth, double bass an octave), or concert, at sounding pitch."},
 };
 
 #undef F

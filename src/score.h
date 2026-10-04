@@ -28,6 +28,8 @@ typedef struct Score {
     int modulate_at;
     int line[VOICE_MAX][SPAN_MAX]; /* sounding pitch at each step */
     ScoreVoice voice[VOICE_MAX];   /* notes covering steps 0..span-1 */
+    int part[VOICE_MAX];           /* each voice's instrument, PART_* (parts.h) */
+    bool concert;                  /* transposing parts written at sounding pitch */
 } Score;
 
 /* values holds one collapsed value per model variable. */

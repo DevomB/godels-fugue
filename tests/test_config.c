@@ -60,6 +60,17 @@ static void test_defaults_and_set(void) {
     CHECK(!config_set(&c, "instrument", "kazoo", err, sizeof(err)));
     CHECK(strstr(err, "instrument") != NULL);
     CHECK(!config_set(&c, "sample", "1", err, sizeof(err)));
+    CHECK(c.ensemble == ENSEMBLE_NONE && c.written == WRITTEN_TRANSPOSED);
+    CHECK(config_set(&c, "ensemble", "saxes", err, sizeof(err)));
+    CHECK(c.ensemble == ENSEMBLE_SAXES);
+    CHECK(config_set(&c, "ensemble", "mallets", err, sizeof(err)));
+    CHECK(c.ensemble == ENSEMBLE_MALLETS);
+    CHECK(config_set(&c, "written", "concert", err, sizeof(err)));
+    CHECK(c.written == WRITTEN_CONCERT);
+    CHECK(!config_set(&c, "ensemble", "kazoo", err, sizeof(err)));
+    CHECK(!config_set(&c, "written", "sideways", err, sizeof(err)));
+    CHECK(config_set(&c, "ensemble", "none", err, sizeof(err)));
+    CHECK(config_set(&c, "written", "transposed", err, sizeof(err)));
     CHECK(config_set(&c, "modulate_at", "off", err, sizeof(err)));
     CHECK(c.modulate_at == -1);
     CHECK(config_set(&c, "pc_weight", "0,1,2,3,4,5,6,7,8,9,10,11", err, sizeof(err)));

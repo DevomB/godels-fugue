@@ -1,6 +1,7 @@
 #include "score.h"
 
 #include "canon.h"
+#include "parts.h"
 
 #include <string.h>
 
@@ -49,6 +50,7 @@ void score_build(Score *score, const Model *m, const int *values) {
             prev_attack = attack;
         }
     }
+    parts_assign(score, m->config.ensemble, m->config.written);
 }
 
 int score_beat_steps(const Score *score) {

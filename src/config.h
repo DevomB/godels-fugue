@@ -11,6 +11,25 @@ enum { CONSONANCE_OFF, CONSONANCE_STRONG, CONSONANCE_ALL };
 enum { ORDER_MRV, ORDER_ENTROPY, ORDER_COLLAPSE, ORDER_INDEX };
 enum { INSTRUMENT_PLUCK, INSTRUMENT_ORGAN, INSTRUMENT_SINE, INSTRUMENT_COUNT };
 enum { GRID_QUARTER, GRID_EIGHTH, GRID_SIXTEENTH, GRID_COUNT };
+/* The instruments the score files are written for (parts.c gives each voice
+ * one), and whether transposing instruments are written in their own key. */
+enum {
+    ENSEMBLE_NONE,
+    ENSEMBLE_CHAMBER,
+    ENSEMBLE_STRINGS,
+    ENSEMBLE_WINDS,
+    ENSEMBLE_SAXES,
+    ENSEMBLE_BRASS,
+    ENSEMBLE_BAND,
+    ENSEMBLE_ORCHESTRA,
+    ENSEMBLE_PIANO,
+    ENSEMBLE_HARPSICHORD,
+    ENSEMBLE_ORGAN,
+    ENSEMBLE_HARP,
+    ENSEMBLE_MALLETS,
+    ENSEMBLE_COUNT
+};
+enum { WRITTEN_TRANSPOSED, WRITTEN_CONCERT, WRITTEN_COUNT };
 enum { KEY_SEARCH = -1 };
 enum { TRANSPOSE_SAME = -128 };
 
@@ -117,6 +136,8 @@ typedef struct PieceConfig {
     /* output */
     int tempo;
     int instrument;
+    int ensemble;
+    int written;
 } PieceConfig;
 
 void config_defaults(PieceConfig *config);

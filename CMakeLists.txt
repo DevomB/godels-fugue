@@ -58,6 +58,7 @@ add_library(canon STATIC
   src/notation.c
   src/output.c
   src/page.c
+  src/parts.c
   src/proof.c
   src/run.c
   src/sat.c
