@@ -251,7 +251,44 @@ file(READ "${last_dir}/proof.json" json)
 if(NOT json MATCHES "\"stepsPerBeat\":2,\"stepsPerBar\":8,\"strong\":\\[0,8,16,24\\]")
   fail("grid_eighth: proof.json lacks the grid's steps and strong steps")
 endif()
-run(bad_grid 1 ERROR "config value for grid is not valid: sixteenth" ARGS --set grid=sixteenth)
+run(bad_grid 1 ERROR "config value for grid is not valid: thirtysecond"
+    ARGS --set grid=thirtysecond)
+# The sixteenth grid: four steps to a beat and sixteen to a bar.
+run(grid_sixteenth 0 MATCH "melody:" "rhythm: " "chords:( [^ \r\n]+)( [^ \r\n]+)( [^ \r\n]+)\r?\n"
+    ARGS --set grid=sixteenth --set rhythm=1 --set harmony=1 --set length=32 --set delay=16
+         --set max_hold=3)
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\ngrid sixteenth\r?\n")
+  fail("grid_sixteenth: report.txt lacks the grid")
+endif()
+file(READ "${last_dir}/proof.json" json)
+if(NOT json MATCHES "\"stepsPerBeat\":4,\"stepsPerBar\":16,\"strong\":\\[0,16,32\\]")
+  fail("grid_sixteenth: proof.json lacks the grid's steps and strong steps")
+endif()
+if(NOT json MATCHES "\"grid\":\"sixteenth\"")
+  fail("grid_sixteenth: proof.json lacks the grid in its config")
+endif()
+foreach(name IN ITEMS canon.mid score.musicxml score.ly score.abc voices.wav score.html)
+  expect_file("${last_dir}/${name}" "")
+endforeach()
+file(READ "${last_dir}/score.abc" abc)
+if(NOT abc MATCHES "\nL:1/16\nQ:1/4=120\n")
+  fail("grid_sixteenth: score.abc does not count in sixteenths")
+endif()
+file(READ "${last_dir}/score.musicxml" xml)
+if(NOT xml MATCHES "<divisions>4</divisions>" OR NOT xml MATCHES "<measure number=\"3\">"
+   OR xml MATCHES "<measure number=\"4\">")
+  fail("grid_sixteenth: score.musicxml lacks three bars of sixteenths")
+endif()
+# its MIDI file gives back its melody on the same grid
+string(REGEX MATCH "melody:( [0-9]+| rest)+" melody_line "${last_out}")
+run(melody_midi_sixteenths 0 MATCH "${melody_line}[^ 0-9a-z]"
+    ARGS --set grid=sixteenth --set rhythm=1 --set delay=16 --set max_hold=3
+         --melody-midi "${OUT}/grid_sixteenth/canon.mid")
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\nlength 32\r?\n")
+  fail("melody_midi_sixteenths: the melody read back is not 32 sixteenths long")
+endif()
 # An eighth-grid piece writes its score files in eighths, and its MIDI file
 # gives back its melody on the same grid.
 run(midi_eighths 0 MATCH "melody:" ARGS --set grid=eighth --set rhythm=1 --set length=20

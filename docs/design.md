@@ -115,8 +115,8 @@ can be broken down by rule (`report.txt`, `score.html`):
 - **contrary motion** – each pair of voices both moving up or both moving down from
   one step to the next (`w_contrary`), the motion balance between voices;
 - **rest**, **hold**, **syncopation**, **rhythm**, **final** – rhythm preferences, and
-  **run** – two eighth notes in a row that leap more than a whole step, on the eighth
-  grid (`w_run`);
+  **run** – two notes shorter than a beat in a row that leap more than a whole step,
+  on the eighth and sixteenth grids (`w_run`);
 - **chord**, **chord motion**, **non-chord tone** – harmony preferences;
 - **key**, **key distance** – accidentals of a searched key, and the distance between
   the two keys of a modulation;
@@ -222,34 +222,45 @@ With `rhythm`, each note has a tie variable and the pitch domain gains a rest, s
 durations from a quarter to a whole note appear on the one-step grid. MIDI, MusicXML,
 LilyPond, ABC and WAV carry the real durations.
 
-**The step grid.** A step is a quarter note, or with `grid eighth` an eighth: a beat
-is two steps and a 4/4 bar eight, so ties give eighths, quarters, dotted quarters,
-halves and longer (`max_hold` reaches 7, a whole note). Everything that thinks in bars
-or beats follows the grid:
+**The step grid.** A step is a quarter note; with `grid eighth` an eighth, so a beat
+is two steps and a 4/4 bar eight; with `grid sixteenth` a sixteenth, four to a beat
+and sixteen to a bar. Ties give the longer values: eighths, quarters, dotted quarters,
+halves and longer on the eighth grid (`max_hold` reaches 7, a whole note), and
+eighths, dotted eighths, quarters, dotted quarters and halves on the sixteenth grid.
+Everything that thinks in bars or beats follows the grid, through one count of steps
+to a beat (`config_beat_steps`):
 
 - a step is strong only where a strong beat starts (the bar's first beat, and every
   third beat with `poly_meter`), so `consonance strong` and the chord tones still
-  fall on the downbeat and an off-beat eighth is always weak;
-- each bar of eight steps has one chord;
+  fall on the downbeat and an off-beat eighth or sixteenth is always weak;
+- each bar has one chord;
 - **syncopation** costs a note attacked on beat 2 or 4 and held over the next beat,
-  as on the quarter grid, and also a note attacked on an off-beat eighth and held
-  across the next beat;
-- **rhythm** costs a bar with no rhythmic variety, eight plain eighths or four plain
-  quarters;
-- **run** costs two eighth notes in a row that leap more than a whole step, since
-  fast notes move by step.
+  as on the quarter grid, and also a note attacked off the beat and held across the
+  next one: on the "and" on the eighth grid, and on the "e", the "and" or the "a" on
+  the sixteenth grid;
+- **rhythm** costs a bar with no rhythmic variety: eight plain eighths or four plain
+  quarters, and on the sixteenth grid also sixteen plain sixteenths;
+- **run** costs two notes in a row that are both shorter than a beat and leap more
+  than a whole step, since fast notes move by step: two eighths on the eighth grid,
+  and any pair of sixteenths, eighths and dotted eighths on the sixteenth grid. It
+  looks at the tie of the second note's first step and at the ties of the steps less
+  than a beat away on either side: an attack among those before makes the first note
+  short, and one among those after the second.
 
 Keys counted in steps (`length`, `delay`, `phase`, `modulate_at`, `rest_at`,
 `max_hold`, `max_rests`) count grid steps, and their defaults are not rescaled: on the
 eighth grid `max_hold 1` allows quarter notes at most and `max_rests 2` two eighth
-rests, so `examples/eighths.txt` sets `max_hold 3` for half notes. A melody is at
-most 128 steps (sixteen bars of eighths) and a piece 256. `tempo` counts quarter notes
-on either grid. The score files write eighths (MusicXML with two divisions to the
-quarter, LilyPond `8`, ABC `L:1/8`), tie a length no single value writes, such as five
-eighths, and pad the last bar to its eight steps; `proof.json` and the page data carry
-`stepsPerBeat` and `stepsPerBar`.
+rests, so `examples/eighths.txt` sets `max_hold 3` for half notes; on the sixteenth
+grid `max_hold 3` allows a quarter note and 7 a half note. A melody is at most 128
+steps (sixteen bars of eighths, eight of sixteenths) and a piece 256. `tempo` counts
+quarter notes on every grid. The score files write the grid's values (MusicXML with
+two or four divisions to the quarter and types down to `16th`, LilyPond `8` or `16`
+and dotted values, ABC `L:1/8` or `L:1/16` with the notes of each beat beamed), tie a
+length no single value writes, such as five eighths or five sixteenths, and pad the
+last bar to its eight or sixteen steps; MIDI gives a step 240 or 120 ticks, and
+`proof.json` and the page data carry `stepsPerBeat` and `stepsPerBar`.
 
-**Built.** The quarter and eighth grids. **Not built**: cadence type as a variable
+**Built.** The quarter, eighth and sixteenth grids. **Not built**: cadence type as a variable
 (authentic, half, deceptive), phrase boundaries as variables, meter as a variable
 (4/4 and the grid are fixed for the piece), per-voice meters (`poly_meter` changes
 which steps are strong for every voice), and form as a state machine.
@@ -395,8 +406,8 @@ already expose the research data: entropy, statistics, and removals by rule.
   can be reproduced from it.
 - Inputs: text and JSON configs, and Standard MIDI files of format 0, 1 or 2
   (`midi_read.c`). `--melody-midi` reads a melody from the first track with notes,
-  rounding onsets and ends to the nearest step (a quarter note, or an eighth on the
-  eighth grid): a held note gives its pitch
+  rounding onsets and ends to the nearest step (a quarter note, or an eighth or a
+  sixteenth on the finer grids): a held note gives its pitch
   on every step it covers, the highest of overlapping notes wins, and a gap is a rest.
   `--corpus` counts the pitch classes of their notes as it does for lists of pitches;
   notes on channel 10, the General MIDI drums, are skipped.

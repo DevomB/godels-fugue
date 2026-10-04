@@ -1207,9 +1207,9 @@ const PIECE = /*PIECE_DATA*/;
   const instrument = document.getElementById("instrument");
   const bassBox = document.getElementById("bass");
   const SPB = P.stepsPerBeat || 1, BAR = 4 * SPB;
-  if (SPB === 2) {
+  if (SPB > 1) {
     const help = document.getElementById("score-help");
-    help.textContent = help.textContent.replace("quarter-note steps", "eighth-note steps");
+    help.textContent = help.textContent.replace("quarter-note steps", SPB === 4 ? "sixteenth-note steps" : "eighth-note steps");
   }
   const SMPLR = "https://cdn.jsdelivr.net/npm/smplr@1.1.0/+esm";
   const ENSEMBLES = {

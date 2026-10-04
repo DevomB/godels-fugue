@@ -98,18 +98,22 @@ static void ly_key(FILE *f, int key) {
     fprintf(f, "\\key %c%s \\%s", "cdefgab"[letter], ly_alter(alter), mode_name(key_mode(key)));
 }
 
-/* A segment's value: 1, 2, 3, 4, 6 or 8 eighths. */
+/* A segment's value: 1, 2, 3, 4, 6, 8, 12 or 16 sixteenths. */
 static const char *ly_duration(const Score *score, const Segment *s) {
-    switch (score_eighths(score, s->steps)) {
+    switch (score_sixteenths(score, s->steps)) {
     case 1:
-        return "8";
+        return "16";
     case 2:
-        return "4";
+        return "8";
     case 3:
-        return "4.";
+        return "8.";
     case 4:
-        return "2";
+        return "4";
     case 6:
+        return "4.";
+    case 8:
+        return "2";
+    case 12:
         return "2.";
     default:
         return "1";
@@ -238,7 +242,8 @@ bool export_abc(const char *path, const Score *score) {
             abc_segment(f, &segs[k], sig, marked);
             int end = segs[k].start + segs[k].steps;
             if (end % score_bar_steps(score) != 0) {
-                /* no space inside a beat, so the eighths of a beat are beamed */
+                /* no space inside a beat, so the eighths or sixteenths of a
+                 * beat are beamed */
                 if (end % score_beat_steps(score) == 0) fputc(' ', f);
                 continue;
             }

@@ -105,7 +105,7 @@ static void print_second_mode_word(int v, char *buf, size_t cap) {
 static const char *const consonance_words[] = {"off", "strong", "all"};
 static const char *const order_words[] = {"mrv", "entropy", "collapse", "index"};
 static const char *const instrument_words[] = {"pluck", "organ", "sine"};
-static const char *const grid_words[] = {"quarter", "eighth"};
+static const char *const grid_words[] = {"quarter", "eighth", "sixteenth"};
 
 static bool parse_list_word(const char *w, const char *const *words, int n, int *out) {
     for (int i = 0; i < n; i++) {
@@ -241,19 +241,21 @@ static void print_motif_word(int v, char *buf, size_t cap) {
 
 static const KeyDef keys[] = {
     {"length", F(length), 1, 1, MELODY_MAX, 12, NULL, NULL, "shape",
-     "Melody length in steps: quarter notes, four to a bar, or eighth notes, eight to a "
-     "bar, with grid eighth."},
+     "Melody length in steps: quarter notes, four to a bar, or eighth or sixteenth notes, "
+     "eight or sixteen to a bar, with grid eighth or sixteenth."},
     {"grid", F(grid), 1, 0, GRID_COUNT - 1, GRID_QUARTER, parse_grid_word, print_grid_word,
      "shape",
-     "Length of one step: quarter, or eighth for two steps to a beat and eight to a 4/4 "
-     "bar. Every key counted in steps counts grid steps; tempo still counts quarter notes. "
-     "Longer notes are tied steps (rhythm), so on the eighth grid a quarter note is 2 "
-     "steps, a dotted quarter 3 and a half note 4."},
+     "Length of one step: quarter; eighth for two steps to a beat and eight to a 4/4 bar; "
+     "or sixteenth for four steps to a beat and sixteen to a bar. Every key counted in "
+     "steps counts grid steps; tempo still counts quarter notes. Longer notes are tied "
+     "steps (rhythm), so on the eighth grid a quarter note is 2 steps, a dotted quarter 3 "
+     "and a half note 4, and on the sixteenth grid an eighth is 2, a dotted eighth 3, a "
+     "quarter 4 and a half note 8."},
     {"voices", F(voices), 1, 2, VOICE_MAX, 2, NULL, NULL, "shape",
      "Number of voices. Voice 1 plays the melody; the others follow it."},
     {"delay", F(delay), 1, 0, SPAN_MAX, 4, NULL, NULL, "shape",
      "Steps between entries: voice v enters after v * delay steps (quarter notes, or "
-     "eighths with grid eighth)."},
+     "eighths or sixteenths with grid eighth or sixteenth)."},
     {"delay_1", VOICE_DELAY(1), 1, 0, SPAN_MAX, 0, NULL, NULL, "shape",
      "Entry step of voice 2 in grid steps (0 = 1 * delay)."},
     {"delay_2", VOICE_DELAY(2), 1, 0, SPAN_MAX, 0, NULL, NULL, "shape",
@@ -364,11 +366,12 @@ static const KeyDef keys[] = {
     {"max_hold", F(max_hold), 1, 1, 7, 1, NULL, NULL, "rhythm",
      "Longest tie in grid steps after the attack: 1 allows half notes and 3 whole notes on "
      "the quarter grid; on the eighth grid 1 allows quarter notes, 3 half notes and 7 "
-     "whole notes."},
+     "whole notes; on the sixteenth grid 3 allows quarter notes and 7 half notes."},
     {"rest_at", F(rest_at), 1, -1, MELODY_MAX - 1, -1, parse_off_word,
      print_off_word, "rhythm", "Force a rest at this melody index (needs rhythm)."},
     {"max_rests", F(max_rests), 1, 0, MELODY_MAX, 2, NULL, NULL, "rhythm",
-     "Most rest steps the melody may contain (on the eighth grid a quarter rest is two)."},
+     "Most rest steps the melody may contain (a quarter rest is two on the eighth grid and "
+     "four on the sixteenth)."},
 
     {"lock", F(lock), 1, 0, 1, 0, NULL, NULL, "lock",
      "Fix one melody note before the search and report what it changed (melody "
@@ -446,14 +449,18 @@ static const KeyDef keys[] = {
     {"w_rest", F(w_rest), 1, 0, 100, 4, NULL, NULL, "energy", "Cost of each step of rest."},
     {"w_hold", F(w_hold), 1, 0, 100, 1, NULL, NULL, "energy", "Cost of each tied step."},
     {"w_syncopation", F(w_syncopation), 1, 0, 100, 3, NULL, NULL, "energy",
-     "Cost of a note attacked on beat 2 or 4 and tied over beat 3 or 1; on the eighth "
-     "grid also of a note attacked on an off-beat eighth and held across the next beat."},
+     "Cost of a note attacked on beat 2 or 4 and tied over beat 3 or 1; on the eighth and "
+     "sixteenth grids also of a note attacked off the beat (on an off-beat eighth or "
+     "sixteenth) and held across the next beat."},
     {"w_rhythm", F(w_rhythm), 1, 0, 100, 3, NULL, NULL, "energy",
-     "Cost of a bar with no rhythmic variety: four plain quarter notes, or on the eighth "
-     "grid eight plain eighths or four plain quarters."},
+     "Cost of a bar with no rhythmic variety: four plain quarter notes; on the eighth grid "
+     "eight plain eighths or four plain quarters; on the sixteenth grid sixteen plain "
+     "sixteenths, eight plain eighths or four plain quarters."},
     {"w_run", F(w_run), 1, 0, 100, 2, NULL, NULL, "energy",
-     "On the eighth grid, cost of two eighth notes in a row that leap more than a whole "
-     "tone (over 2 semitones), so fast notes move by step; nothing on the quarter grid."},
+     "Cost of two notes in a row, both shorter than a beat, that leap more than a whole "
+     "tone (over 2 semitones), so fast notes move by step: eighths on the eighth grid; "
+     "sixteenths, eighths and dotted eighths on the sixteenth grid; nothing on the quarter "
+     "grid."},
     {"w_final", F(w_final), 1, 0, 100, 2, NULL, NULL, "energy",
      "Cost of a short final note when rhythm is on."},
     {"w_corpus", F(w_corpus), 1, 0, 100, 4, NULL, NULL, "energy",
@@ -905,7 +912,14 @@ int config_voice_count(const PieceConfig *config) {
 }
 
 int config_beat_steps(const PieceConfig *config) {
-    return config->grid == GRID_EIGHTH ? 2 : 1;
+    switch (config->grid) {
+    case GRID_EIGHTH:
+        return 2;
+    case GRID_SIXTEENTH:
+        return 4;
+    default:
+        return 1;
+    }
 }
 
 int config_bar_steps(const PieceConfig *config) {

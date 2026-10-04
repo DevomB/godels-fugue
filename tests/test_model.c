@@ -230,6 +230,90 @@ static void test_eighth_grid(void) {
     test_close(r);
 }
 
+/* On the sixteenth grid a beat is four steps and a bar sixteen: one chord
+ * and one strong step a bar; syncopation covers a note attacked on any of a
+ * beat's later sixteenths and held across the next beat; a bar of plain
+ * sixteenths, eighths or quarters lacks variety; and two notes in a row
+ * that are both shorter than a beat move by step. */
+static void test_sixteenth_grid(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "grid=sixteenth");
+    test_set(&c, "length=40");
+    test_set(&c, "delay=16");
+    test_set(&c, "rhythm=1");
+    test_set(&c, "harmony=1");
+    test_set(&c, "max_hold=7");
+    TestRun *r = test_open(&c);
+    const Model *m = &r->model;
+    CHECK(m->span == 56 && m->nbars == 4);
+    /* both voices sound on the first beats of bars 2 and 3, steps 16 and 32 */
+    CHECK(count_rule(m, CID_CONSONANCE) == 2);
+    CHECK(count_rule(m, CID_CHORD) == 6); /* each voice on three downbeats */
+    for (int i = 0; i < m->ncons; i++) {
+        const Constraint *k = &m->cons[i];
+        if (k->type == C_CONSONANCE || k->type == C_CHORD_TONE) CHECK(k->time % 16 == 0);
+        if (k->type == C_CHORD_TONE) CHECK(k->vars[k->slot[1]] == m->chord[k->time / 16]);
+    }
+    CHECK(count_term(m, TERM_CHORD) == 4);
+
+    /* beats 2 and 4 held over 3 and 1 at steps 8, 16, 24 and 32; an attack
+     * one, two or three sixteenths before each of the nine later beats */
+    CHECK(count_term(m, TERM_SYNCOPATION) == 4 + 3 * 9);
+    const Constraint *over = find_term(m, TERM_SYNCOPATION, 8, 5);
+    CHECK(over != NULL && over->vars[over->slot[0]] == m->tie[4]);
+    CHECK(tie_cost(m, over, "NHHHH") == c.w_syncopation);
+    CHECK(tie_cost(m, over, "NHHHN") == 0 && tie_cost(m, over, "HHHHH") == 0);
+    CHECK(find_term(m, TERM_SYNCOPATION, 4, 5) == NULL); /* beat 2 is not held over */
+    const Constraint *a = find_term(m, TERM_SYNCOPATION, 8, 2); /* the "a" of beat 2 */
+    CHECK(a != NULL && a->vars[a->slot[0]] == m->tie[7]);
+    CHECK(tie_cost(m, a, "NH") == c.w_syncopation && tie_cost(m, a, "NN") == 0);
+    const Constraint *half = find_term(m, TERM_SYNCOPATION, 8, 3); /* its "and" */
+    CHECK(half != NULL && half->vars[half->slot[0]] == m->tie[6]);
+    CHECK(tie_cost(m, half, "NHH") == c.w_syncopation);
+    CHECK(tie_cost(m, half, "NHN") == 0 && tie_cost(m, half, "HHH") == 0);
+    const Constraint *e = find_term(m, TERM_SYNCOPATION, 8, 4); /* its "e" */
+    CHECK(e != NULL && e->vars[e->slot[0]] == m->tie[5]);
+    CHECK(tie_cost(m, e, "NHHH") == c.w_syncopation && tie_cost(m, e, "NNHH") == 0);
+    CHECK(find_term(m, TERM_SYNCOPATION, 6, 3) == NULL); /* step 6 starts no beat */
+
+    /* a bar of sixteenths, eighths or quarters is plain; any mix is not */
+    CHECK(count_term(m, TERM_RHYTHM) == 2);
+    const Constraint *bar = find_term(m, TERM_RHYTHM, 16, 15);
+    CHECK(bar != NULL && bar->vars[bar->slot[0]] == m->tie[17]);
+    CHECK(tie_cost(m, bar, "NNNNNNNNNNNNNNN") == c.w_rhythm);
+    CHECK(tie_cost(m, bar, "HNHNHNHNHNHNHNH") == c.w_rhythm);
+    CHECK(tie_cost(m, bar, "HHHNHHHNHHHNHHH") == c.w_rhythm);
+    CHECK(tie_cost(m, bar, "HNHNHNHNHNHNHNN") == 0);
+    CHECK(tie_cost(m, bar, "NNNHHHHNHHHNHHH") == 0);
+    CHECK(tie_cost(m, bar, "HHHHHHHNHHHHHHH") == 0); /* two half notes */
+
+    /* notes shorter than a beat that leap: the notes at steps 9 and 10,
+     * with the ties of steps 7 to 13 */
+    CHECK(count_term(m, TERM_RUN) == 39);
+    const Constraint *run = find_term(m, TERM_RUN, 9, 9);
+    CHECK(run != NULL && run->vars[run->slot[2]] == m->tie[7]);
+    CHECK(run->vars[run->slot[8]] == m->tie[13]);
+    CHECK(run_cost(m, run, 60, 64, "NNNNNNN") == c.w_run);  /* two sixteenths */
+    CHECK(run_cost(m, run, 60, 64, "NNHNHNN") == c.w_run);  /* two eighths */
+    CHECK(run_cost(m, run, 60, 64, "NHHNNNN") == c.w_run);  /* dotted eighth, sixteenth */
+    CHECK(run_cost(m, run, 60, 64, "NNNNHHN") == c.w_run);  /* sixteenth, dotted eighth */
+    CHECK(run_cost(m, run, 60, 62, "NNNNNNN") == 0);        /* a step */
+    CHECK(run_cost(m, run, 60, 64, "HHHNNNN") == 0);        /* a quarter, then a sixteenth */
+    CHECK(run_cost(m, run, 60, 64, "NNNNHHH") == 0);        /* a sixteenth, then a quarter */
+    CHECK(run_cost(m, run, 60, 64, "NNNHNNN") == 0);        /* one note held on */
+    CHECK(run_cost(m, run, PITCH_REST, 64, "NNNNNNN") == 0); /* a rest is no note */
+    /* the first note starts the melody, and the last ends it */
+    const Constraint *first = find_term(m, TERM_RUN, 0, 6);
+    CHECK(first != NULL && first->vars[first->slot[2]] == m->tie[1]);
+    CHECK(run_cost(m, first, 60, 67, "NNHH") == c.w_run);
+    CHECK(run_cost(m, first, 60, 67, "NHHH") == 0); /* the second note is a quarter */
+    const Constraint *last = find_term(m, TERM_RUN, 38, 6);
+    CHECK(last != NULL && last->vars[last->slot[5]] == m->tie[39]);
+    CHECK(run_cost(m, last, 67, 60, "HHNN") == c.w_run);
+    CHECK(run_cost(m, last, 67, 60, "HHHN") == 0); /* the first note is a quarter */
+    test_close(r);
+}
+
 /* w_step charges each melodic interval by its size beyond a whole step:
  * (semitones - 1) / 2, so a third 1, a fourth 2, a fifth 3, an octave 5. */
 static void test_step(void) {
@@ -486,6 +570,10 @@ static void test_energy(void) {
         {"grid=eighth", "voices=3", "poly_meter=1", "rhythm=1", "max_hold=5", NULL},
         {"w_step=2", "rhythm=1", "voices=3", NULL},
         {"grid=eighth", "w_step=3", "rhythm=1", "max_hold=3", NULL},
+        {"grid=sixteenth", "rhythm=1", "harmony=1", "length=24", "delay=6", NULL},
+        {"grid=sixteenth", "voices=3", "poly_meter=1", "rhythm=1", "max_hold=7", NULL},
+        {"grid=sixteenth", "w_step=3", "rhythm=1", "length=36", "max_hold=3", NULL},
+        {"grid=sixteenth", "voices=3", "delay=5", "length=20", NULL},
     };
     for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
         PieceConfig c = test_config();
@@ -545,6 +633,7 @@ int main(void) {
     test_tension();
     test_mirror();
     test_eighth_grid();
+    test_sixteenth_grid();
     test_step();
     test_energy();
     printf("ok\n");

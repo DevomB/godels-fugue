@@ -112,7 +112,9 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   With `grid eighth` a step is an eighth note, so a bar is eight steps and the ties
   give eighths, quarters, dotted quarters, halves and longer; strong beats, chords
   and the rhythm costs follow the bar, eighth notes that leap cost extra (`w_run`),
-  and every score file writes the real values.
+  and every score file writes the real values. With `grid sixteenth` a step is a
+  sixteenth, a bar sixteen steps, and the ties give eighths, dotted eighths, quarters,
+  dotted quarters and halves; notes shorter than a beat that leap cost extra.
 - **Rules you can turn on or off**: consonance, parallel fifths and octaves, maximum
   leap, voice spacing and crossing, cadence, leading tones rising to the tonic
   (`leading_tone`), no two large leaps in a row in one direction (`double_leaps 0`),
@@ -181,7 +183,7 @@ The keys you are most likely to change:
 | Key | Default | What it does |
 | --- | --- | --- |
 | `length` | 12 | Melody notes, up to 128 (one step each; four steps make a bar) |
-| `grid` | quarter | Length of a step: `quarter`, or `eighth` for eight steps to a bar |
+| `grid` | quarter | Length of a step: `quarter`, `eighth` (eight steps to a bar) or `sixteenth` (sixteen) |
 | `voices` | 2 | Number of voices |
 | `delay` | 4 | Steps between voice entries |
 | `key`, `mode` | C, major | The key; `search` lets the solver choose |
@@ -222,7 +224,7 @@ rules the melody breaks.
 
 `--melody-midi FILE` gives every note from a Standard MIDI file instead, and sets
 `length` to fit: it reads the first track with notes at one step per quarter note (per
-eighth with `grid eighth`),
+eighth or sixteenth with `grid eighth` or `grid sixteenth`),
 takes the highest note where notes overlap, and rests where none sounds (rests need
 `rhythm 1`).
 

@@ -459,6 +459,42 @@ static void test_eighth_grid(void) {
     free(run);
 }
 
+/* A sixteenth-note canon with rhythm and harmony solves and keeps every
+ * rule: a chord to each sixteen-step bar, consonant downbeats, and a
+ * melody of notes from a sixteenth to a half note. */
+static void test_sixteenth_grid(void) {
+    static const char *const settings[] = {
+        "grid=sixteenth", "voices=3",   "delay=16",       "length=48",       "rhythm=1",
+        "harmony=1",      "max_hold=7", "key=D",          "mode=minor",      "range_low=50",
+        "range_high=81",  "w_step=3",   "optimize=2000"};
+    PieceConfig c = test_config();
+    for (size_t k = 0; k < sizeof(settings) / sizeof(settings[0]); k++) test_set(&c, settings[k]);
+    Run *run = malloc(sizeof(Run));
+    CHECK(run != NULL);
+    char err[200];
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->status == SOLVE_SAT);
+    CHECK(satisfies_model(&run->model, run->values));
+    CHECK(run->model.span == 80 && run->model.nbars == 5);
+    CHECK(run->score.beat_steps == 4);
+    for (int b = 0; b < run->model.nbars; b++) CHECK(run->values[run->model.chord[b]] >= 0);
+    int shortest = 99;
+    int longest = 0;
+    const ScoreVoice *lead = &run->score.voice[0];
+    for (int k = 0; k < lead->count; k++) {
+        const ScoreNote *n = &lead->notes[k];
+        if (n->pitch == SOUND_REST || n->start >= c.length) continue;
+        if (n->length < shortest) shortest = n->length;
+        if (n->length > longest) longest = n->length;
+    }
+    CHECK(shortest >= 1 && longest <= 8 && longest > shortest);
+    /* the energy the run reports is the model's, term by term */
+    int breakdown[TERM_COUNT];
+    CHECK(model_energy(&run->model, run->values, breakdown) == run->energy);
+    run_free(run);
+    free(run);
+}
+
 /* Semitones moved and stepwise moves (two semitones or fewer, a held
  * note aside) along the melody between sounding notes. */
 static void melody_motion(const TestRun *r, int *moved, int *steps) {
@@ -564,6 +600,7 @@ int main(void) {
     test_optimize();
     test_longest_melody();
     test_eighth_grid();
+    test_sixteenth_grid();
     test_step_cost();
     test_run_pipeline();
     printf("ok\n");

@@ -180,17 +180,21 @@ bool output_paths_distinct(const OutputPaths *paths, char *err, size_t cap) {
     return true;
 }
 
-const char *output_value_name(int eighths) {
-    switch (eighths) {
+const char *output_value_name(int sixteenths) {
+    switch (sixteenths) {
     case 1:
-        return "e";
+        return "s";
     case 2:
-        return "q";
+        return "e";
     case 3:
-        return "q.";
+        return "e.";
     case 4:
-        return "h";
+        return "q";
     case 6:
+        return "q.";
+    case 8:
+        return "h";
+    case 12:
         return "h.";
     default:
         return "w";
@@ -270,7 +274,7 @@ void output_print_summary(FILE *out, const Run *run) {
                 for (int left = len; left > 0;) {
                     int part = score_written_steps(&run->score, left);
                     fprintf(out, "%s%s", left < len ? "~" : "",
-                            output_value_name(score_eighths(&run->score, part)));
+                            output_value_name(score_sixteenths(&run->score, part)));
                     left -= part;
                 }
             }

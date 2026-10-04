@@ -93,8 +93,9 @@ enum {
 };
 
 /* The widest rule is the cadence approach to a final note held max_hold
- * (up to 7) extra steps: its pitch, the key and eight ties. */
-enum { SCOPE_MAX = 10, SLOT_MAX = 10 };
+ * (up to 7) extra steps: its pitch, the key and eight ties; the widest term
+ * the rhythm cost of a bar of the sixteenth grid, fifteen ties. */
+enum { SCOPE_MAX = 16, SLOT_MAX = 16 };
 
 typedef struct ModelVar {
     int kind;

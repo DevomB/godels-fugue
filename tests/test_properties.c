@@ -218,9 +218,10 @@ static void check_piece(const Model *m, const int *values) {
         if (values[m->pitch[i + 1]] != p + 1) fail(c, "leading tone", i);
     }
 
-    /* a step is a quarter-note beat, or half of one on the eighth grid; the
-     * first beat of a 4/4 bar is strong, and with poly_meter every third */
-    int beat = c->grid == GRID_EIGHTH ? 2 : 1;
+    /* a step is a quarter-note beat, or a half or a quarter of one on the
+     * eighth or sixteenth grid; the first beat of a 4/4 bar is strong, and
+     * with poly_meter every third */
+    int beat = c->grid == GRID_SIXTEENTH ? 4 : c->grid == GRID_EIGHTH ? 2 : 1;
     int bar = 4 * beat;
     for (int t = 0; t < m->span; t++) {
         int sounding[VOICE_MAX];
@@ -443,6 +444,40 @@ int main(void) {
     printf("eighth grid solved %d, sat-checked %d\n", eighth_solved, eighth_checked);
     CHECK(eighth_solved >= 40);
     CHECK(eighth_checked >= 5);
+
+    /* the sixteenth grid: four steps to a beat and sixteen to a bar, ties
+     * up to a half note, and entries a sixteenth to a bar and a half apart */
+    int sixteenth_solved = 0;
+    int sixteenth_checked = 0;
+    for (int trial = 0; trial < 120; trial++) {
+        PieceConfig c = random_config();
+        c.grid = GRID_SIXTEENTH;
+        c.length = pick(8, 32);
+        c.delay = pick(1, 24);
+        c.max_hold = pick(1, 7);
+        if (c.modulate_at > c.length) c.modulate_at = c.length;
+        for (int i = c.length; i < MELODY_MAX; i++) c.melody[i] = -1;
+        char err[200];
+        if (!config_validate(&c, err, sizeof(err))) continue;
+        TestRun *r = test_solve(&c);
+        if (r->status == SOLVE_SAT) {
+            sixteenth_solved++;
+            check_piece(&r->model, r->values);
+        }
+        if (r->status != SOLVE_LIMIT && c.length <= 10) {
+            int values[VAR_MAX];
+            int rc = sat_solve(&r->model, values, 200000);
+            if (rc == SAT_SAT || rc == SAT_UNSAT) {
+                sixteenth_checked++;
+                CHECK((rc == SAT_SAT) == (r->status == SOLVE_SAT));
+                if (rc == SAT_SAT) check_piece(&r->model, values);
+            }
+        }
+        test_close(r);
+    }
+    printf("sixteenth grid solved %d, sat-checked %d\n", sixteenth_solved, sixteenth_checked);
+    CHECK(sixteenth_solved >= 40);
+    CHECK(sixteenth_checked >= 5);
     printf("ok\n");
     return 0;
 }

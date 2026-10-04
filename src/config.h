@@ -10,7 +10,7 @@
 enum { CONSONANCE_OFF, CONSONANCE_STRONG, CONSONANCE_ALL };
 enum { ORDER_MRV, ORDER_ENTROPY, ORDER_COLLAPSE, ORDER_INDEX };
 enum { INSTRUMENT_PLUCK, INSTRUMENT_ORGAN, INSTRUMENT_SINE, INSTRUMENT_COUNT };
-enum { GRID_QUARTER, GRID_EIGHTH, GRID_COUNT };
+enum { GRID_QUARTER, GRID_EIGHTH, GRID_SIXTEENTH, GRID_COUNT };
 enum { KEY_SEARCH = -1 };
 enum { TRANSPOSE_SAME = -128 };
 
@@ -148,8 +148,8 @@ int config_preset_count(void);
 const char *config_preset_name(int index);
 
 int config_voice_count(const PieceConfig *config);
-/* Steps in one quarter-note beat (1, or 2 on the eighth grid) and in one
- * 4/4 bar. */
+/* Steps in one quarter-note beat (1, 2 on the eighth grid, 4 on the
+ * sixteenth grid) and in one 4/4 bar. */
 int config_beat_steps(const PieceConfig *config);
 int config_bar_steps(const PieceConfig *config);
 

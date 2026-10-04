@@ -276,10 +276,68 @@ static void test_eighth_grid(void) {
     free(abc);
 }
 
+/* On the sixteenth grid a step is a sixteenth and a bar sixteen steps:
+ * LilyPond writes 16, 8., 4. and ties what no single value writes; ABC
+ * counts in sixteenths (L:1/16) and beams the notes of each beat. */
+static void test_sixteenth_grid(void) {
+    /* sixteenths, an eighth, a dotted eighth and a sixteenth, a dotted
+     * quarter and an eighth on the "and" of beat 4; then five sixteenths
+     * from the downbeat, a dotted eighth and a half */
+    static const int lead[][3] = {{0, 1, 60},  {1, 1, 62},  {2, 2, 64},  {4, 3, 65},
+                                  {7, 1, 67},  {8, 6, 69},  {14, 2, 71}, {16, 5, 72},
+                                  {21, 3, 74}, {24, 8, 76}};
+    Score s;
+    memset(&s, 0, sizeof(s));
+    s.voices = 1;
+    s.span = 32;
+    s.tempo = 90;
+    s.beat_steps = 4;
+    s.nsections = 1;
+    s.key[0] = key_id(0, MODE_MAJOR);
+    int count = (int)(sizeof(lead) / sizeof(lead[0]));
+    for (int k = 0; k < count; k++) {
+        ScoreNote n = {lead[k][0], lead[k][1], lead[k][2], k};
+        s.voice[0].notes[k] = n;
+        for (int t = n.start; t < n.start + n.length; t++) s.line[0][t] = n.pitch;
+    }
+    s.voice[0].count = count;
+    test_output_dir();
+
+    CHECK(export_lilypond("output/tests/sixteenths.ly", &s));
+    char *ly = test_slurp("output/tests/sixteenths.ly", NULL);
+    CHECK(strstr(ly, "\\time 4/4 \\tempo 4 = 90") != NULL);
+    CHECK(strstr(ly, "\n      c'16 d'16 e'8 f'8. g'16 a'4. b'8 |\n"
+                     "      c''4~ c''16 d''8. e''2 \\bar \"|.\"\n") != NULL);
+    free(ly);
+
+    CHECK(export_abc("output/tests/sixteenths.abc", &s));
+    char *abc = test_slurp("output/tests/sixteenths.abc", NULL);
+    CHECK(strstr(abc, "M:4/4\nL:1/16\nQ:1/4=90\n") != NULL);
+    /* the notes of a beat are written together, so their sixteenths are beamed */
+    CHECK(strstr(abc, "\nV:1\nCDE2 F3G A6B2 |\nc4- cd3 e8 |]\n") != NULL);
+    free(abc);
+
+    /* a whole bar's rest and a whole note */
+    static const int whole[1][8][3] = {{{0, 16, SOUND_REST}, {16, 16, 72}}};
+    static const int one[1] = {2};
+    build(&s, 1, 32, whole, one);
+    s.beat_steps = 4;
+    s.key[0] = key_id(0, MODE_MAJOR);
+    CHECK(export_lilypond("output/tests/whole16.ly", &s));
+    ly = test_slurp("output/tests/whole16.ly", NULL);
+    CHECK(strstr(ly, " r1 |\n      c''1 \\bar") != NULL);
+    free(ly);
+    CHECK(export_abc("output/tests/whole16.abc", &s));
+    abc = test_slurp("output/tests/whole16.abc", NULL);
+    CHECK(strstr(abc, "\nV:1\nz16 |\nc16 |]\n") != NULL);
+    free(abc);
+}
+
 int main(void) {
     test_modulating();
     test_keys();
     test_eighth_grid();
+    test_sixteenth_grid();
     printf("ok\n");
     return 0;
 }

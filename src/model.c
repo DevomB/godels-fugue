@@ -673,12 +673,14 @@ static void build_terms(Builder *b) {
                 for (int j = i - beat; j <= i; j++) add_slot(t, m->tie[j], -1);
                 if (t != NULL) t->time = i;
             }
-            /* on the eighth grid, a note attacked off the beat and held across the next */
+            /* on a finer grid, a note attacked off the beat, k steps before
+             * this one, and held across it */
             if (beat > 1 && i % beat == 0) {
-                t = add_term(b, TERM_SYNCOPATION, c->w_syncopation);
-                add_slot(t, m->tie[i - 1], -1);
-                add_slot(t, m->tie[i], -1);
-                if (t != NULL) t->time = i;
+                for (int k = 1; k < beat; k++) {
+                    t = add_term(b, TERM_SYNCOPATION, c->w_syncopation);
+                    for (int j = i - k; j <= i; j++) add_slot(t, m->tie[j], -1);
+                    if (t != NULL) t->time = i;
+                }
             }
         }
         for (int bar = 0; (bar + 1) * bar_steps <= length; bar++) {
@@ -695,14 +697,19 @@ static void build_terms(Builder *b) {
             if (t != NULL) t->time = length - 1;
         }
     }
-    /* on the eighth grid, notes i and i + 1 are both eighths when neither
-     * is held into or held on: the ties at i, i + 1 and i + 2 that exist */
+    /* on a finer grid, the notes sounding at steps i and i + 1 are two
+     * notes shorter than a beat when step i + 1 is an attack and so are a
+     * step among the beat - 1 before it and one among the beat - 1 after:
+     * the ties that exist from i + 2 - beat to i + beat (on the eighth grid
+     * at i, i + 1 and i + 2) */
     if (beat > 1) {
         for (int i = 0; i + 1 < length; i++) {
             Constraint *t = add_term(b, TERM_RUN, c->w_run);
             add_slot(t, m->pitch[i], 0);
             add_slot(t, m->pitch[i + 1], 0);
-            for (int j = i; j <= i + 2 && j < length; j++) add_slot(t, m->tie[j], -1);
+            for (int j = i + 2 - beat; j <= i + beat && j < length; j++) {
+                if (j >= 0) add_slot(t, m->tie[j], -1);
+            }
             if (t != NULL) t->time = i;
         }
     }
@@ -1103,16 +1110,16 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
         return w;
     case TERM_RHYTHM: {
         /* slot k is the tie at step k + 1 of the bar and param the steps
-         * per beat: every step attacked, or on a finer grid every beat
-         * attacked and held to the next */
-        bool plain = true;
-        bool beats = t->param > 1;
-        for (int k = 0; k < t->nslots; k++) {
-            int tie = slot_value(t, vals, k);
-            if (tie != TIE_NOTE) plain = false;
-            if (beats && tie != ((k + 1) % t->param == 0 ? TIE_NOTE : TIE_HOLD)) beats = false;
+         * per beat: every step attacked, or on a finer grid every beat, or
+         * on the sixteenth grid every half beat, attacked and held to the
+         * next */
+        for (int every = 1; every <= t->param; every *= 2) {
+            bool plain = true;
+            for (int k = 0; k < t->nslots && plain; k++)
+                plain = slot_value(t, vals, k) == ((k + 1) % every == 0 ? TIE_NOTE : TIE_HOLD);
+            if (plain) return w;
         }
-        return plain || beats ? w : 0;
+        return 0;
     }
     case TERM_FINAL:
         return slot_value(t, vals, 0) == TIE_NOTE ? w : 0;
@@ -1140,14 +1147,28 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
     case TERM_KEY_DISTANCE:
         return w * key_distance(slot_value(t, vals, 0), slot_value(t, vals, 1));
     case TERM_RUN: {
-        /* two pitches, then ties that must all be new attacks */
+        /* two pitches, then the ties that exist around the second one's
+         * step (model.c builds them): it must be an attack, and so must a
+         * step among the beat - 1 before it and one among the beat - 1
+         * after it, so that both notes are shorter than a beat. A step with
+         * no tie (the first, or one past the end) counts as an attack. */
         int a = slot_value(t, vals, 0);
         int b = slot_value(t, vals, 1);
         if (a == PITCH_REST || b == PITCH_REST || iabs(a - b) <= 2) return 0;
-        for (int k = 2; k < t->nslots; k++) {
-            if (slot_value(t, vals, k) != TIE_NOTE) return 0;
+        int beat = config_beat_steps(cfg);
+        int next = t->time + 1;
+        bool before = false;
+        bool after = false;
+        int k = 2;
+        for (int j = next + 1 - beat; j < next + beat; j++) {
+            bool attack = true;
+            if (j >= 0 && j < cfg->length && m->tie[j] >= 0)
+                attack = slot_value(t, vals, k++) == TIE_NOTE;
+            if (j == next && !attack) return 0;
+            if (j < next) before = before || attack;
+            if (j > next) after = after || attack;
         }
-        return w;
+        return before && after ? w : 0;
     }
     case TERM_STEP: {
         /* 0 for a unison or a step, 1 for a third, 2 for a fourth or

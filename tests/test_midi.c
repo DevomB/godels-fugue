@@ -169,6 +169,22 @@ int main(void) {
     CHECK(eighths->notes[1].on == MIDI_PPQ / 2 && eighths->notes[1].off == 2 * MIDI_PPQ);
     CHECK(eighths->notes[2].on == 2 * MIDI_PPQ && eighths->notes[2].off == 4 * MIDI_PPQ);
 
+    /* on the sixteenth grid a step is a quarter of a quarter: sixteenth C,
+     * dotted eighth E, quarter G, the key changing on beat 2 */
+    e.span = 8;
+    e.beat_steps = 4;
+    ScoreNote fast[] = {{0, 1, 60, 0}, {1, 3, 64, 1}, {4, 4, 67, 4}};
+    e.voice[0].count = 3;
+    memcpy(e.voice[0].notes, fast, sizeof(fast));
+    CHECK(midi_write_score("output/tests/sixteenths.mid", &e));
+    CHECK(read_file("output/tests/sixteenths.mid", tracks, 4) == 2);
+    CHECK(tracks[0].nkeys == 2 && tracks[0].key_tick[1] == MIDI_PPQ);
+    const Track *sixteenths = &tracks[1];
+    CHECK(sixteenths->nnotes == 3);
+    CHECK(sixteenths->notes[0].on == 0 && sixteenths->notes[0].off == MIDI_PPQ / 4);
+    CHECK(sixteenths->notes[1].on == MIDI_PPQ / 4 && sixteenths->notes[1].off == MIDI_PPQ);
+    CHECK(sixteenths->notes[2].on == MIDI_PPQ && sixteenths->notes[2].off == 2 * MIDI_PPQ);
+
     s.voice[0].notes[0].pitch = 200;
     CHECK(!midi_write_score("output/tests/bad.mid", &s));
     printf("ok\n");

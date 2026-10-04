@@ -305,7 +305,7 @@ static void test_files(void) {
     CHECK(strstr(err, "cannot read config") != NULL);
 }
 
-/* grid sets how long a step is: a quarter note, or an eighth. */
+/* grid sets how long a step is: a quarter note, an eighth or a sixteenth. */
 static void test_grid(void) {
     PieceConfig c;
     char err[200];
@@ -323,9 +323,17 @@ static void test_grid(void) {
     CHECK(c.grid == GRID_QUARTER);
     CHECK(config_set(&c, "grid", "1", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH);
-    CHECK(!config_set(&c, "grid", "sixteenth", err, sizeof(err)));
-    CHECK(strstr(err, "config value for grid is not valid: sixteenth") != NULL);
-    CHECK(!config_set(&c, "grid", "2", err, sizeof(err)));
+    CHECK(config_set(&c, "grid", "sixteenth", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH);
+    CHECK(config_beat_steps(&c) == 4 && config_bar_steps(&c) == 16);
+    CHECK(config_set(&c, "grid", "eighth", err, sizeof(err)));
+    CHECK(config_set(&c, "grid", "2", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH);
+    CHECK(!config_set(&c, "grid", "thirtysecond", err, sizeof(err)));
+    CHECK(strstr(err, "config value for grid is not valid: thirtysecond") != NULL);
+    CHECK(!config_set(&c, "grid", "3", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH);
+    CHECK(config_set(&c, "grid", "eighth", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH);
     /* a tie may hold a note to a whole note of eighths */
     CHECK(config_set(&c, "max_hold", "7", err, sizeof(err)));
@@ -342,6 +350,12 @@ static void test_grid(void) {
         if (strcmp(config_key_name(i), "grid") == 0) config_key_value(&c, i, value, sizeof(value));
     }
     CHECK(strcmp(value, "eighth") == 0);
+    c.grid = GRID_SIXTEENTH;
+    for (int i = 0; i < config_key_count(); i++) {
+        if (strcmp(config_key_name(i), "grid") == 0) config_key_value(&c, i, value, sizeof(value));
+    }
+    CHECK(strcmp(value, "sixteenth") == 0);
+    CHECK(config_validate(&c, err, sizeof(err)));
     test_output_dir();
     write_file("output/tests/grid.txt", "grid eighth\nlength 32\n");
     config_defaults(&c);
@@ -351,6 +365,15 @@ static void test_grid(void) {
     config_defaults(&c);
     CHECK(config_load_file(&c, "output/tests/grid.json", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH && c.delay == 8);
+    write_file("output/tests/grid16.txt", "grid sixteenth\nlength 128\ndelay 48\n");
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/grid16.txt", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH && c.length == 128 && c.delay == 48);
+    CHECK(config_validate(&c, err, sizeof(err)));
+    write_file("output/tests/grid16.json", "{\"grid\": \"sixteenth\", \"delay\": 16}");
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/grid16.json", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH && c.delay == 16);
 }
 
 /* Writing every key and loading it back gives the same config. */

@@ -61,7 +61,8 @@ static int end_track(FILE *f, long len_pos, unsigned delta) {
     return fseek(f, end, SEEK_SET) == 0 ? 0 : -1;
 }
 
-/* Ticks in one step: a quarter note, or an eighth on the eighth grid. */
+/* Ticks in one step: a quarter note, or an eighth or a sixteenth on the
+ * finer grids. */
 static unsigned step_ticks(const Score *score) {
     return (unsigned)(MIDI_PPQ / score_beat_steps(score));
 }

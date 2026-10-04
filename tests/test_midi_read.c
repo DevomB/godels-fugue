@@ -165,6 +165,41 @@ static void test_eighth_grid(void) {
     midi_file_free(&f);
 }
 
+/* A sixteenth-grid score reads back step for step on the sixteenth grid,
+ * and rounded on the coarser grids, where the highest of the notes a step
+ * gathers wins. */
+static void test_sixteenth_grid(void) {
+    Score s;
+    memset(&s, 0, sizeof(s));
+    s.voices = 1;
+    s.span = 8;
+    s.tempo = 90;
+    s.beat_steps = 4;
+    s.nsections = 1;
+    s.key[0] = key_id(0, MODE_MAJOR);
+    /* sixteenths C and D, eighth E, dotted eighth F, sixteenth G */
+    ScoreNote lead[] = {{0, 1, 60, 0}, {1, 1, 62, 1}, {2, 2, 64, 2}, {4, 3, 65, 4},
+                        {7, 1, 67, 7}};
+    s.voice[0].count = 5;
+    memcpy(s.voice[0].notes, lead, sizeof(lead));
+    CHECK(midi_write_score("output/tests/sixteenths_read.mid", &s));
+    MidiFile f;
+    char err[200];
+    CHECK(midi_read_file(&f, "output/tests/sixteenths_read.mid", err, sizeof(err)));
+    int steps[16];
+    static const int want[8] = {60, 62, 64, 64, 65, 65, 65, 67};
+    CHECK(midi_track_grid(&f, 1, 4, steps, 16) == 8);
+    for (int i = 0; i < 16; i++) CHECK(steps[i] == (i < 8 ? want[i] : PITCH_REST));
+    /* on eighths E's onset rounds onto D's step; on quarters D's onto C's */
+    static const int eighths[5] = {60, 64, 65, 65, 67};
+    CHECK(midi_track_grid(&f, 1, 2, steps, 16) == 5);
+    for (int i = 0; i < 5; i++) CHECK(steps[i] == eighths[i]);
+    static const int quarters[3] = {62, 65, 67};
+    CHECK(midi_track_grid(&f, 1, 1, steps, 16) == 3);
+    for (int i = 0; i < 3; i++) CHECK(steps[i] == quarters[i]);
+    midi_file_free(&f);
+}
+
 static void test_quantize(void) {
     Bytes b;
     header(&b, 0, 1, 96);
@@ -447,6 +482,7 @@ int main(void) {
     test_output_dir();
     test_round_trip();
     test_eighth_grid();
+    test_sixteenth_grid();
     test_quantize();
     test_running_status();
     test_format0();
