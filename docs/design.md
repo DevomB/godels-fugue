@@ -321,6 +321,13 @@ A fingerprint card draws the canon's coupling as an arc diagram: an arc for ever
 of melody notes heard at the same step in different voices, weighted by how long they
 overlap and solid where a harmony rule removed values between them in the proof.
 
+Under the tiles, a solved page sums up the collapse in plain words: the size of the
+space before any rule (the product of the initial domains), the values removed and the
+rules that removed the most, how many values were forced and chosen, the backtracks
+before the first piece, and what the optimizer gained. In the demo, How many? runs
+`--count` for up to four seconds, and the sheet music lights the bar being played.
+`tests/web_smoke.mjs` checks the WebAssembly build the way the demo uses it.
+
 **Built.** **Partly built**: the fingerprint shows the coupling through simultaneous
 notes; a full constraint graph (chords, keys, ties and every rule as nodes) is not
 built.
