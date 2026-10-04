@@ -258,7 +258,8 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   "use strict";
 
   const PIECES = [
-    { group: "Examples", label: "A three-voice canon in D minor", file: "showcase.txt" },
+    { group: "Examples", label: "A three-voice canon in D minor, high, middle and low", file: "showcase.txt" },
+    { group: "Examples", label: "Running eighth notes in A minor", file: "eighths.txt" },
     { group: "Examples", label: "A rhythmic canon, ready to replay", file: "replay.txt" },
     { group: "Examples", label: "The plain two-voice canon", file: "two_voice.txt" },
     { group: "Examples", label: "A round that loops forever", file: "cyclic.txt" },
@@ -274,10 +275,10 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     { group: "Examples", label: "A tension curve drawn by hand", file: "tension.txt" },
     { group: "Examples", label: "Complete a melody given in part", file: "given.txt" },
     { group: "Examples", label: "An impossible rule set, and why", file: "unsat.txt" },
-    { group: "Style presets", label: "Renaissance", text: "# Modal, stepwise lines in half and quarter notes with strict consonance.\npreset renaissance\n" },
-    { group: "Style presets", label: "Baroque", text: "# Three voices two bars apart over a functional chord progression, V-I at the end.\npreset baroque\n" },
-    { group: "Style presets", label: "Classical", text: "# Two voices in periodic phrases, clear cadence, long final note.\npreset classical\n" },
-    { group: "Style presets", label: "Minimalist", text: "# A three-note arpeggio looping against the 4/4 bar in a three-voice round.\npreset minimalist\n" },
+    { group: "Style presets", label: "Renaissance", text: "# Three modal voices in half and quarter notes, a canon at the octave and the fourth below.\npreset renaissance\n" },
+    { group: "Style presets", label: "Baroque", text: "# Running eighth notes in three registers, each voice an octave lower and three bars later, over I-IV-V-I.\npreset baroque\n" },
+    { group: "Style presets", label: "Classical", text: "# Two voices an octave apart in eighth and quarter notes, periodic phrases, a clear cadence.\npreset classical\n" },
+    { group: "Style presets", label: "Minimalist", text: "# A three-note arpeggio in eighth notes, three voices phasing a dotted quarter apart in a round.\npreset minimalist\n" },
     { group: "Style presets", label: "Experimental", text: "# Lydian mirror canon with off-beat entries on a 3-against-4 grid.\npreset experimental\n" },
   ];
   const DOWNLOADS = [
