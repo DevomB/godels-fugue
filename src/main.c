@@ -6,9 +6,11 @@
 #include "explain.h"
 #include "midi_read.h"
 #include "output.h"
+#include "parts.h"
 #include "run.h"
 #include "sat.h"
 #include "theory.h"
+#include "trace.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -29,7 +31,8 @@ static void usage(FILE *f) {
             "\n"
             "  --config FILE        load keys from FILE (\"key value\" lines, or JSON if\n"
             "                       the name ends in .json)\n"
-            "  --preset NAME        apply a style preset before the config file\n"
+            "  --preset NAME        start from a preset (see --list-presets) before the\n"
+            "                       config file; a preset starts from the defaults\n"
             "  --set KEY=VALUE      override one key after the config file (repeatable)\n"
             "  --lock INDEX PITCH   fix melody note INDEX to MIDI PITCH\n"
             "  --melody-midi FILE   take the melody and its length from the first track\n"
@@ -53,7 +56,10 @@ static void usage(FILE *f) {
             "  --max-nodes N        give up after N search nodes (0 = no limit)\n"
             "  --time-limit MS      give up after MS milliseconds (0 = no limit)\n"
             "  --list-config        print every config key (--markdown for a table)\n"
-            "  --list-presets       print the style presets\n"
+            "  --resolve            print the settings the run would use, as JSON (the\n"
+            "                       config, each voice's instrument and range, the form)\n"
+            "                       and exit without composing\n"
+            "  --list-presets       print the presets\n"
             "  --version            print the version\n"
             "\n"
             "Exit status: 0 solved, 1 unsatisfiable or bad input, 2 too large for\n"
@@ -275,6 +281,32 @@ static void warn_about_axis(const PieceConfig *c) {
     }
 }
 
+/* A given note outside the first voice's range could never be used: the
+ * rules would remove it before any search, and the unsat core could only
+ * blame the given note. Say so plainly instead. */
+static bool given_in_range(const PieceConfig *c, char *err, size_t cap) {
+    int low;
+    int high;
+    part_range(c, 0, &low, &high);
+    if (c->lock && c->lock_pitch != PITCH_REST && (c->lock_pitch < low || c->lock_pitch > high)) {
+        snprintf(err, cap,
+                 "the locked pitch %d is outside voice 1's range %d..%d (range_low..range_high, "
+                 "narrowed by its instrument)",
+                 c->lock_pitch, low, high);
+        return false;
+    }
+    for (int i = 0; i < c->length && i < MELODY_MAX; i++) {
+        int p = c->melody[i];
+        if (p <= PITCH_REST || (p >= low && p <= high)) continue;
+        snprintf(err, cap,
+                 "melody note %d (pitch %d) is outside voice 1's range %d..%d (range_low.."
+                 "range_high, narrowed by its instrument)",
+                 i, p, low, high);
+        return false;
+    }
+    return true;
+}
+
 static bool need_value(int i, int argc, int count, const char *flag) {
     if (i + count < argc) return true;
     fprintf(stderr, "missing value for %s\n", flag);
@@ -303,6 +335,7 @@ int main(int argc, char **argv) {
     bool sensitivity = false;
     bool markdown = false;
     bool list_config = false;
+    bool resolve = false;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
@@ -319,6 +352,8 @@ int main(int argc, char **argv) {
             list_config = true;
         } else if (strcmp(a, "--markdown") == 0) {
             markdown = true;
+        } else if (strcmp(a, "--resolve") == 0) {
+            resolve = true;
         } else if (strcmp(a, "--apply-weights") == 0) {
             apply_weights = true;
         } else if (strcmp(a, "--sat") == 0) {
@@ -328,6 +363,10 @@ int main(int argc, char **argv) {
         } else if (strcmp(a, "--sensitivity") == 0) {
             sensitivity = true;
         } else if (strcmp(a, "--lock") == 0) {
+            if (lock_index != NULL) {
+                fprintf(stderr, "--lock given twice; use melody to give several notes\n");
+                return EXIT_UNSAT;
+            }
             if (!need_value(i, argc, 2, a)) return EXIT_UNSAT;
             lock_index = argv[++i];
             lock_pitch = argv[++i];
@@ -355,6 +394,13 @@ int main(int argc, char **argv) {
                 fprintf(stderr, "unknown argument: %s\n", a);
                 usage(stderr);
                 return EXIT_UNSAT;
+            }
+            /* every option but --set takes one value: a second would silently win */
+            for (int k = 1; k < i && strcmp(a, "--set") != 0; k++) {
+                if (strcmp(argv[k], a) == 0) {
+                    fprintf(stderr, "%s given twice\n", a);
+                    return EXIT_UNSAT;
+                }
             }
             if (!need_value(i, argc, 1, a)) return EXIT_UNSAT;
             *slot = argv[++i];
@@ -390,6 +436,11 @@ int main(int argc, char **argv) {
         return EXIT_UNSAT;
     }
     for (int i = 0; i < nsets; i++) {
+        /* a preset replaces every key, so it cannot come after the file */
+        if (strncmp(sets[i], "preset=", 7) == 0) {
+            fprintf(stderr, "--set cannot apply a preset; use --preset or a preset line\n");
+            return EXIT_UNSAT;
+        }
         if (!config_assign(&config, sets[i], err, sizeof(err))) {
             fprintf(stderr, "%s\n", err);
             return EXIT_UNSAT;
@@ -433,8 +484,28 @@ int main(int argc, char **argv) {
                         "(no --sat, delay_search=0)\n");
         return EXIT_UNSAT;
     }
+    if (resolve) {
+        Model m;
+        if (!model_build(&m, &config, err, sizeof(err))) {
+            fprintf(stderr, "%s\n", err);
+            return EXIT_UNSAT;
+        }
+        printf("{\"config\":");
+        config_write_json(stdout, &config);
+        printf(",");
+        trace_write_plan(stdout, &m);
+        printf("}\n");
+        model_free(&m);
+        return 0;
+    }
     warn_about_axis(&config);
     if (check_mode) return run_check(&config);
+    if (!given_in_range(&config, err, sizeof(err))) {
+        fprintf(stderr, "%s\n", err);
+        return EXIT_UNSAT;
+    }
+    /* the time limit holds for the whole command, every solve it runs */
+    if (config.time_limit > 0) solver_set_deadline(config.time_limit);
     if (!sat_mode && !output_paths_distinct(&paths, err, sizeof(err))) {
         fprintf(stderr, "%s\n", err);
         return EXIT_UNSAT;

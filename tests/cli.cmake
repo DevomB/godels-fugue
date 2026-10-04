@@ -15,9 +15,18 @@ function(run name expect)
   cmake_parse_arguments(R "" "" "MATCH;ERROR;ARGS" ${ARGN})
   set(dir "${OUT}/${name}")
   file(REMOVE_RECURSE "${dir}")
+  # the output paths, unless the test gives its own (an option may come once)
+  set(paths "")
+  foreach(pair "--out;canon.mid" "--proof;proof.txt" "--entropy;entropy.txt")
+    list(GET pair 0 flag)
+    list(GET pair 1 file)
+    list(FIND R_ARGS ${flag} at)
+    if(at EQUAL -1)
+      list(APPEND paths ${flag} "${dir}/${file}")
+    endif()
+  endforeach()
   execute_process(
-    COMMAND "${EXE}" --out "${dir}/canon.mid" --proof "${dir}/proof.txt"
-            --entropy "${dir}/entropy.txt" ${R_ARGS}
+    COMMAND "${EXE}" ${paths} ${R_ARGS}
     WORKING_DIRECTORY "${SRC}"
     RESULT_VARIABLE rc
     OUTPUT_VARIABLE out
@@ -189,12 +198,13 @@ endif()
 run(limit 3 ERROR "search limit reached" ARGS --max-nodes 2)
 run(corpus 0 MATCH "weights:" ARGS --corpus "${SRC}/corpus" --apply-weights)
 # A piece's MIDI file gives back its melody, rests and all (the character
-# after the line ends it), and a corpus can be MIDI files.
-run(midi_piece 0 MATCH "melody:" ARGS)
+# after the line ends it), and a corpus can be MIDI files. mood plain plays
+# every note its written length; a performed file detaches some notes.
+run(midi_piece 0 MATCH "melody:" ARGS --set mood=plain)
 string(REGEX MATCH "melody:( [0-9]+| rest)+" melody_line "${last_out}")
 run(melody_midi 0 MATCH "${melody_line}[^ 0-9a-z]" "counterfactual: given"
     ARGS --melody-midi "${last_dir}/canon.mid")
-run(midi_rests 0 MATCH "melody:.* rest" ARGS --set rhythm=1 --set rest_at=3)
+run(midi_rests 0 MATCH "melody:.* rest" ARGS --set mood=plain --set rhythm=1 --set rest_at=3)
 string(REGEX MATCH "melody:( [0-9]+| rest)+" melody_line "${last_out}")
 run(melody_midi_rests 0 MATCH "${melody_line}[^ 0-9a-z]"
     ARGS --set rhythm=1 --melody-midi "${OUT}/midi_rests/canon.mid")
@@ -278,7 +288,7 @@ run(bad_grid 1 ERROR "config value for grid is not valid: thirtysecond"
     ARGS --set grid=thirtysecond)
 # The sixteenth grid: four steps to a beat and sixteen to a bar.
 run(grid_sixteenth 0 MATCH "melody:" "rhythm: " "chords:( [^ \r\n]+)( [^ \r\n]+)( [^ \r\n]+)\r?\n"
-    ARGS --set grid=sixteenth --set rhythm=1 --set harmony=1 --set length=32 --set delay=16
+    ARGS --set mood=plain --set grid=sixteenth --set rhythm=1 --set harmony=1 --set length=32 --set delay=16
          --set max_hold=3)
 file(READ "${last_dir}/report.txt" report)
 if(NOT report MATCHES "\ngrid sixteenth\r?\n" OR NOT report MATCHES "\nw_figure 3\r?\n")
@@ -314,7 +324,7 @@ if(NOT report MATCHES "\nlength 32\r?\n")
 endif()
 # An eighth-grid piece writes its score files in eighths, and its MIDI file
 # gives back its melody on the same grid.
-run(midi_eighths 0 MATCH "melody:" ARGS --set grid=eighth --set rhythm=1 --set length=20
+run(midi_eighths 0 MATCH "melody:" ARGS --set mood=plain --set grid=eighth --set rhythm=1 --set length=20
     --set delay=6)
 foreach(name IN ITEMS canon.mid score.musicxml score.ly score.abc voices.wav)
   expect_file("${last_dir}/${name}" "")
@@ -383,26 +393,51 @@ run(dir_config 1 ERROR "cannot read config" ARGS --config "${SRC}/examples")
 run(bad_corpus 1 ERROR "cannot read corpus" ARGS --corpus "${SRC}/nothing-here")
 
 run(collide 1 ERROR "both be written" ARGS --proof "${OUT}/collide/score.html")
+# An option given twice is refused, not silently replaced by the second.
+run(twice 1 ERROR "--config given twice"
+    ARGS --config "${SRC}/examples/two_voice.txt" --config "${SRC}/examples/cyclic.txt")
+run(set_preset 1 ERROR "cannot apply a preset" ARGS --set preset=hymn)
+# A given note outside the first voice's range is explained, not blamed on itself.
+run(lock_range 1 ERROR "outside voice 1's range 60..72" ARGS --lock 0 50)
+# --resolve prints the settings a run would use, a preset's included, and composes nothing.
+run(resolve 0 MATCH "\"tempo\":\"66\"" "\"players\":" "\"form\":" ARGS --preset longing --resolve)
+if(EXISTS "${last_dir}/canon.mid")
+  fail("--resolve wrote a score")
+endif()
 run(collide_dag 1 ERROR "both be written" ARGS --entropy "${OUT}/collide_dag/proof.dag")
 run(lock_limit 3 MATCH "inconclusive" ERROR "search limit"
     ARGS --set optimize=0 --set length=16 --set voices=3 --set delay=2 --set range_low=55
          --set range_high=74 --set consonance=all --set harmony=1 --set rhythm=1
          --set backjump=0 --max-nodes 11 --lock 4 55)
 
-# A failed run clears the score files an earlier run left in the same place.
+# A failed run keeps the score files an earlier run left in the same place,
+# whole, and says they are not its own; it leaves no half-written files.
 set(dir "${OUT}/stale")
 file(REMOVE_RECURSE "${dir}")
 execute_process(COMMAND "${EXE}" --out "${dir}/canon.mid" --proof "${dir}/proof.txt"
                         --entropy "${dir}/entropy.txt" WORKING_DIRECTORY "${SRC}"
                 RESULT_VARIABLE rc OUTPUT_QUIET ERROR_QUIET)
+file(READ "${dir}/canon.mid" good_midi HEX)
 execute_process(COMMAND "${EXE}" --out "${dir}/canon.mid" --proof "${dir}/proof.txt"
                         --entropy "${dir}/entropy.txt" --config "${SRC}/examples/unsat.txt"
-                WORKING_DIRECTORY "${SRC}" RESULT_VARIABLE rc OUTPUT_QUIET ERROR_QUIET)
+                WORKING_DIRECTORY "${SRC}" RESULT_VARIABLE rc OUTPUT_QUIET
+                ERROR_VARIABLE stale_err)
 foreach(name IN ITEMS canon.mid score.musicxml score.ly score.abc contour.svg voices.wav)
-  if(EXISTS "${dir}/${name}")
-    fail("stale ${name} left beside a failed run")
+  if(NOT EXISTS "${dir}/${name}")
+    fail("a failed run deleted the earlier ${name}")
   endif()
 endforeach()
+file(READ "${dir}/canon.mid" kept_midi HEX)
+if(NOT kept_midi STREQUAL good_midi)
+  fail("a failed run changed the earlier canon.mid")
+endif()
+if(NOT stale_err MATCHES "these files are from an earlier one: [^\n]*canon.mid")
+  fail("a failed run does not say which files are not its own: ${stale_err}")
+endif()
+file(GLOB partial "${dir}/*.part")
+if(partial)
+  fail("half-written files left behind: ${partial}")
+endif()
 expect_file("${dir}/score.html" "<!DOCTYPE html>")
 
 file(WRITE "${OUT}/bad_key.txt" "length 12\nstrong_chord 1\n")
@@ -415,7 +450,8 @@ string(REPLACE "\r" "" doc "${doc}")
 string(REPLACE "\r" "" reference "${last_out}")
 string(FIND "${doc}" "${reference}" at)
 if(at EQUAL -1)
-  fail("docs/config.md is out of date: regenerate it with --list-config --markdown")
+  message("${reference}")
+  fail("docs/config.md is out of date: regenerate it with --list-config --markdown (printed above)")
 endif()
 
 if(failures GREATER 0)

@@ -16,6 +16,8 @@
 
 #ifdef _WIN32
 #include <direct.h>
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #else
 #include <sys/stat.h>
 #endif
@@ -71,15 +73,40 @@ static bool dag_path(char *out, size_t cap, const char *proof) {
 
 typedef bool (*Writer)(const char *path, const Run *run);
 
+/* Replaces path with the finished file at tmp. */
+static bool replace_file(const char *tmp, const char *path) {
+#ifdef _WIN32
+    return MoveFileExA(tmp, path, MOVEFILE_REPLACE_EXISTING) != 0;
+#else
+    return rename(tmp, path) == 0;
+#endif
+}
+
+/* Writes the whole file beside its final name and moves it into place only
+ * when it is complete, so a failure (a full disk, a file another program
+ * holds open) leaves the previous file as it was, never a part of one. */
+static bool write_whole(const char *path, Writer writer, const Run *run) {
+    char tmp[520];
+    if ((size_t)snprintf(tmp, sizeof(tmp), "%s.part", path) >= sizeof(tmp)) return false;
+    if (writer(tmp, run) && replace_file(tmp, path)) return true;
+    remove(tmp);
+    fprintf(stderr, "could not write %s\n", path);
+    return false;
+}
+
 static bool write_beside(const char *base, const char *name, Writer writer, const Run *run) {
     char path[512];
     if (!sibling_path(path, sizeof(path), base, name)) return false;
     ensure_parent_dir(path);
-    return writer(path, run);
+    return write_whole(path, writer, run);
+}
+
+static bool write_dag(const char *path, const Run *run) {
+    return trace_write_dag(path, run);
 }
 
 static bool write_midi(const char *path, const Run *run) {
-    return midi_write_score(path, &run->score);
+    return midi_write_performed(path, &run->score, &run->perf);
 }
 
 static bool write_musicxml(const char *path, const Run *run) {
@@ -99,7 +126,7 @@ static bool write_contour(const char *path, const Run *run) {
 }
 
 static bool write_wav(const char *path, const Run *run) {
-    return export_wav(path, &run->score, run->config.instrument);
+    return export_wav_performed(path, &run->score, run->config.instrument, &run->perf);
 }
 
 bool output_write_all(Run *run, const OutputPaths *paths) {
@@ -108,29 +135,45 @@ bool output_write_all(Run *run, const OutputPaths *paths) {
     ensure_parent_dir(paths->proof);
     ensure_parent_dir(paths->entropy);
     ensure_parent_dir(paths->midi);
-    ok &= trace_write_text(paths->proof, run);
+    ok &= write_whole(paths->proof, trace_write_text, run);
     {
         char dag[512];
-        ok &= dag_path(dag, sizeof(dag), paths->proof) && trace_write_dag(dag, run);
+        ok &= dag_path(dag, sizeof(dag), paths->proof) && write_whole(dag, write_dag, run);
     }
-    ok &= trace_write_entropy(paths->entropy, run);
+    ok &= write_whole(paths->entropy, trace_write_entropy, run);
     ok &= write_beside(paths->proof, "proof.json", trace_save_json, run);
     ok &= write_beside(paths->midi, "report.txt", output_write_report, run);
     /* the page and explanations also show why a failed run failed */
     ok &= write_beside(paths->midi, "score.html", page_write, run);
     ok &= write_beside(paths->midi, "explain.txt", output_write_explanations, run);
     if (run->status != SOLVE_SAT) {
-        static const char *const stale[] = {"score.musicxml", "score.ly", "score.abc",
-                                            "contour.svg", "voices.wav"};
-        remove(paths->midi);
-        for (size_t i = 0; i < sizeof(stale) / sizeof(stale[0]); i++) {
+        /* a run with no piece keeps the last piece's files rather than
+         * deleting them, and says which ones are not from this run */
+        static const char *const kept[] = {"score.musicxml", "score.ly", "score.abc",
+                                           "contour.svg", "voices.wav"};
+        char names[256] = "";
+        size_t used = 0;
+        for (size_t i = 0; i <= sizeof(kept) / sizeof(kept[0]); i++) {
             char path[512];
-            if (sibling_path(path, sizeof(path), paths->midi, stale[i])) remove(path);
+            const char *name = i == 0 ? paths->midi : kept[i - 1];
+            if (i == 0) {
+                snprintf(path, sizeof(path), "%s", paths->midi);
+            } else if (!sibling_path(path, sizeof(path), paths->midi, name)) {
+                continue;
+            }
+            FILE *f = fopen(path, "rb");
+            if (f == NULL) continue;
+            fclose(f);
+            int w = snprintf(names + used, sizeof(names) - used, "%s%s", used ? ", " : "", name);
+            if (w > 0 && (size_t)w < sizeof(names) - used) used += (size_t)w;
         }
+        if (used > 0)
+            fprintf(stderr, "note: no piece this run; these files are from an earlier one: %s\n",
+                    names);
         return ok;
     }
 
-    ok &= write_midi(paths->midi, run);
+    ok &= write_whole(paths->midi, write_midi, run);
     ok &= write_beside(paths->midi, "score.musicxml", write_musicxml, run);
     ok &= write_beside(paths->midi, "score.ly", write_lilypond, run);
     ok &= write_beside(paths->midi, "score.abc", write_abc, run);
@@ -243,6 +286,8 @@ static void print_optimize_line(FILE *out, const Run *run) {
             st->first_energy, run->energy, improvements, improvements == 1 ? "" : "s",
             st->windows, st->windows == 1 ? "" : "s", st->nodes - st->first.nodes,
             st->converged     ? "no window improves it"
+            : st->limited     ? "stopped by max_nodes or time_limit, so the piece may differ on a "
+                                "faster or slower machine"
             : st->windows_cut ? "a full pass found nothing cheaper, some windows cut short"
                               : "budget spent");
 }
@@ -386,6 +431,9 @@ void output_print_counterfactual(FILE *out, const Run *run) {
                 run->unlocked_status == SOLVE_UNSAT ? "unsat" : "search limit");
     } else if (run->status == SOLVE_LIMIT) {
         fprintf(out, "inconclusive: the search hit its limit with the given notes\n");
+    } else if (run->status != SOLVE_SAT && run->core_n == 0) {
+        /* no core was found (its own search hit a limit): nothing is known */
+        fprintf(out, "killed: unknown, the search for the clashing rules hit a limit\n");
     } else if (run->status != SOLVE_SAT) {
         fprintf(out, "killed:");
         int shown = 0;
@@ -394,7 +442,8 @@ void output_print_counterfactual(FILE *out, const Run *run) {
             fprintf(out, " %s", rule_name(run->core[i]));
             shown++;
         }
-        fprintf(out, "%s\n", shown ? "" : " the given notes alone");
+        fprintf(out, "%s%s\n", shown ? "" : " the given notes alone",
+                run->core_approximate ? " (approximate: a trial hit the limit)" : "");
     } else {
         int changed = 0;
         fprintf(out, "changed:");
