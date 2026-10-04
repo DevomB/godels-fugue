@@ -34,6 +34,26 @@ jobs:
         working-directory: build
         run: ctest -C Release --output-on-failure
 
+  webassembly:
+    name: WebAssembly
+    runs-on: ubuntu-latest
+    env:
+      EMSDK_VERSION: 6.0.11
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Emscripten
+        run: |
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install "$EMSDK_VERSION"
+          "$RUNNER_TEMP/emsdk/emsdk" activate "$EMSDK_VERSION"
+      - name: Build
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-web
+      - name: Smoke test
+        run: node tests/web_smoke.mjs build-web examples
+
   sanitizers:
     name: Linux ASan and UBSan
     runs-on: ubuntu-latest
