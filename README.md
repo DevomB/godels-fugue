@@ -406,6 +406,11 @@ does. On top of `score.html` it adds:
 - **Sheet music**, engraved from `score.abc` by [abcjs](https://www.abcjs.net).
 - **Share links**: the address carries the config and the variation, so a link
   composes the same piece again.
+- **How many?** counts the pieces the config allows (`--count`, for up to four
+  seconds): exactly 1,730 for the mirror example, at least a hundred thousand for the
+  opening canon.
+- **piece.txt** downloads the config behind the piece, so `canon-collapse --config
+  piece.txt` composes it again note for note.
 
 Every push to `main` publishes it with GitHub Pages.
 
