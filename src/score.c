@@ -63,12 +63,16 @@ int score_eighths(const Score *score, int steps) {
     return steps * 2 / score_beat_steps(score);
 }
 
+int score_sixteenths(const Score *score, int steps) {
+    return steps * 4 / score_beat_steps(score);
+}
+
 int score_written_steps(const Score *score, int steps) {
-    static const int values[] = {8, 6, 4, 3, 2, 1}; /* in eighths */
+    static const int values[] = {16, 12, 8, 6, 4, 3, 2, 1}; /* in sixteenths */
     int beat = score_beat_steps(score);
     for (size_t k = 0; k < sizeof(values) / sizeof(values[0]); k++) {
-        if (values[k] * beat % 2 != 0) continue; /* shorter than a step */
-        int written = values[k] * beat / 2;
+        if (values[k] * beat % 4 != 0) continue; /* not whole steps */
+        int written = values[k] * beat / 4;
         if (written <= steps) return written;
     }
     return steps;

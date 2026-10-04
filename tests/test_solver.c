@@ -381,13 +381,17 @@ static void test_optimize(void) {
     test_close(r);
 }
 
-/* Canons of the longest melody solve and keep every rule; with rhythm and
- * harmony the decisions go past level 64, and every forced value is still
- * explained by a minimal set of them. */
+/* Canons of 64 notes and of the longest melody, 128, solve and keep every
+ * rule; with rhythm and harmony the decisions go past level 64 (or 128).
+ * Every forced value is explained by a part of its reason, a minimal one
+ * while the explanation budget lasts, which covers every forced value of a
+ * 64-note piece. */
 static void test_longest_melody(void) {
     static const char *const cases[][5] = {
         {"length=64", NULL},
         {"length=64", "voices=3", "rhythm=1", "harmony=1", NULL},
+        {"length=128", NULL},
+        {"length=128", "voices=3", "rhythm=1", "harmony=1", NULL},
     };
     Run *run = malloc(sizeof(Run));
     CHECK(run != NULL);
@@ -397,23 +401,25 @@ static void test_longest_melody(void) {
         for (int j = 0; cases[k][j] != NULL; j++) test_set(&c, cases[k][j]);
         CHECK(run_piece(run, &c, err, sizeof(err)));
         CHECK(run->status == SOLVE_SAT);
-        CHECK(run->model.config.length == MELODY_MAX);
+        CHECK(run->model.config.length == (k < 2 ? 64 : MELODY_MAX));
         CHECK(satisfies_model(&run->model, run->values));
-        CHECK(run->model.span == MELODY_MAX + (c.voices - 1) * c.delay);
-        if (c.rhythm) CHECK(run->state.level > 64);
+        CHECK(run->model.span == c.length + (c.voices - 1) * c.delay);
+        if (c.rhythm) CHECK(run->state.level > c.length);
         CHECK(run_explain(run));
         int forced = 0;
+        int minimized = 0;
         for (int v = 0; v < run->model.nvars; v++) {
             const Explanation *e = &run->explained[v];
             CHECK(e->status != WHY_OPEN);
             if (e->status != WHY_FORCED) continue;
             forced++;
-            CHECK(e->minimized);
+            minimized += e->minimized;
+            if (c.length == 64) CHECK(e->minimized);
             LevelSet both = e->minimal;
             levelset_union(&both, &e->reason);
             CHECK(memcmp(&both, &e->reason, sizeof(both)) == 0);
         }
-        if (c.rhythm) CHECK(forced > 0);
+        if (c.rhythm) CHECK(forced > 0 && minimized > 0);
         run_free(run);
     }
     free(run);
@@ -449,6 +455,42 @@ static void test_eighth_grid(void) {
         }
     }
     CHECK(eighths > 0 && longer > 0);
+    run_free(run);
+    free(run);
+}
+
+/* A sixteenth-note canon with rhythm and harmony solves and keeps every
+ * rule: a chord to each sixteen-step bar, consonant downbeats, and a
+ * melody of notes from a sixteenth to a half note. */
+static void test_sixteenth_grid(void) {
+    static const char *const settings[] = {
+        "grid=sixteenth", "voices=3",   "delay=16",       "length=48",       "rhythm=1",
+        "harmony=1",      "max_hold=7", "key=D",          "mode=minor",      "range_low=50",
+        "range_high=81",  "w_step=3",   "optimize=2000"};
+    PieceConfig c = test_config();
+    for (size_t k = 0; k < sizeof(settings) / sizeof(settings[0]); k++) test_set(&c, settings[k]);
+    Run *run = malloc(sizeof(Run));
+    CHECK(run != NULL);
+    char err[200];
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->status == SOLVE_SAT);
+    CHECK(satisfies_model(&run->model, run->values));
+    CHECK(run->model.span == 80 && run->model.nbars == 5);
+    CHECK(run->score.beat_steps == 4);
+    for (int b = 0; b < run->model.nbars; b++) CHECK(run->values[run->model.chord[b]] >= 0);
+    int shortest = 99;
+    int longest = 0;
+    const ScoreVoice *lead = &run->score.voice[0];
+    for (int k = 0; k < lead->count; k++) {
+        const ScoreNote *n = &lead->notes[k];
+        if (n->pitch == SOUND_REST || n->start >= c.length) continue;
+        if (n->length < shortest) shortest = n->length;
+        if (n->length > longest) longest = n->length;
+    }
+    CHECK(shortest >= 1 && longest <= 8 && longest > shortest);
+    /* the energy the run reports is the model's, term by term */
+    int breakdown[TERM_COUNT];
+    CHECK(model_energy(&run->model, run->values, breakdown) == run->energy);
     run_free(run);
     free(run);
 }
@@ -558,6 +600,7 @@ int main(void) {
     test_optimize();
     test_longest_melody();
     test_eighth_grid();
+    test_sixteenth_grid();
     test_step_cost();
     test_run_pipeline();
     printf("ok\n");

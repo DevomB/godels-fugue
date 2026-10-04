@@ -158,16 +158,18 @@ run(mirror_odd_off_key 1
     ERROR "axis 68: the middle note must be the axis, which is not in C major; axis 62 keeps them all"
     ARGS --config "${SRC}/examples/mirror.txt" --set length=11 --set mirror_axis=68)
 run(set 0 MATCH "voice 3:" ARGS --set voices=3)
-# the longest melody has 64 notes
-run(length_max 0 MATCH "melody:" ARGS --set length=64)
+# the longest melody has 128 notes, and a canon spans up to 256 steps
+run(length_max 0 MATCH "melody:" ARGS --set length=128)
 string(REGEX MATCH "melody:[ 0-9a-z]*" melody_line "${last_out}")
 string(REGEX MATCHALL " [0-9a-z]+" melody_notes "${melody_line}")
 list(LENGTH melody_notes count)
-if(NOT count EQUAL 64)
-  fail("length_max: the melody has ${count} notes, not 64")
+if(NOT count EQUAL 128)
+  fail("length_max: the melody has ${count} notes, not 128")
 endif()
 expect_file("${last_dir}/score.musicxml" "<?xml")
-run(length_over 1 ERROR "length must be 1\\.\\.64: 65" ARGS --set length=65)
+run(length_over 1 ERROR "length must be 1\\.\\.128: 129" ARGS --set length=129)
+run(span_over 1 ERROR "canon spans more than 256 steps"
+    ARGS --set length=128 --set voices=3 --set delay=65)
 run(sat 0 MATCH "melody:" ARGS --sat)
 run(sat_unsat 1 MATCH "unsat" ARGS --config "${SRC}/examples/unsat.txt" --sat)
 run(count 0 MATCH "count: 160 \\(exact\\)" ARGS --config "${SRC}/examples/sensitivity.txt" --count 1000)
@@ -249,7 +251,44 @@ file(READ "${last_dir}/proof.json" json)
 if(NOT json MATCHES "\"stepsPerBeat\":2,\"stepsPerBar\":8,\"strong\":\\[0,8,16,24\\]")
   fail("grid_eighth: proof.json lacks the grid's steps and strong steps")
 endif()
-run(bad_grid 1 ERROR "config value for grid is not valid: sixteenth" ARGS --set grid=sixteenth)
+run(bad_grid 1 ERROR "config value for grid is not valid: thirtysecond"
+    ARGS --set grid=thirtysecond)
+# The sixteenth grid: four steps to a beat and sixteen to a bar.
+run(grid_sixteenth 0 MATCH "melody:" "rhythm: " "chords:( [^ \r\n]+)( [^ \r\n]+)( [^ \r\n]+)\r?\n"
+    ARGS --set grid=sixteenth --set rhythm=1 --set harmony=1 --set length=32 --set delay=16
+         --set max_hold=3)
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\ngrid sixteenth\r?\n" OR NOT report MATCHES "\nw_figure 3\r?\n")
+  fail("grid_sixteenth: report.txt lacks the grid or w_figure")
+endif()
+file(READ "${last_dir}/proof.json" json)
+if(NOT json MATCHES "\"stepsPerBeat\":4,\"stepsPerBar\":16,\"strong\":\\[0,16,32\\]")
+  fail("grid_sixteenth: proof.json lacks the grid's steps and strong steps")
+endif()
+if(NOT json MATCHES "\"grid\":\"sixteenth\"" OR NOT json MATCHES "\"w_figure\":\"3\"")
+  fail("grid_sixteenth: proof.json lacks the grid or w_figure in its config")
+endif()
+foreach(name IN ITEMS canon.mid score.musicxml score.ly score.abc voices.wav score.html)
+  expect_file("${last_dir}/${name}" "")
+endforeach()
+file(READ "${last_dir}/score.abc" abc)
+if(NOT abc MATCHES "\nL:1/16\nQ:1/4=120\n")
+  fail("grid_sixteenth: score.abc does not count in sixteenths")
+endif()
+file(READ "${last_dir}/score.musicxml" xml)
+if(NOT xml MATCHES "<divisions>4</divisions>" OR NOT xml MATCHES "<measure number=\"3\">"
+   OR xml MATCHES "<measure number=\"4\">")
+  fail("grid_sixteenth: score.musicxml lacks three bars of sixteenths")
+endif()
+# its MIDI file gives back its melody on the same grid
+string(REGEX MATCH "melody:( [0-9]+| rest)+" melody_line "${last_out}")
+run(melody_midi_sixteenths 0 MATCH "${melody_line}[^ 0-9a-z]"
+    ARGS --set grid=sixteenth --set rhythm=1 --set delay=16 --set max_hold=3
+         --melody-midi "${OUT}/grid_sixteenth/canon.mid")
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\nlength 32\r?\n")
+  fail("melody_midi_sixteenths: the melody read back is not 32 sixteenths long")
+endif()
 # An eighth-grid piece writes its score files in eighths, and its MIDI file
 # gives back its melody on the same grid.
 run(midi_eighths 0 MATCH "melody:" ARGS --set grid=eighth --set rhythm=1 --set length=20
@@ -287,6 +326,26 @@ endif()
 file(READ "${last_dir}/report.txt" report)
 if(NOT report MATCHES "\ngrid eighth\r?\n")
   fail("eighths_example: report.txt lacks the grid")
+endif()
+# The sixteenth-grid example writes every score file on the sixteenth grid.
+run(sixteenths_example 0 MATCH "key: D minor" "rhythm: " "chords: "
+    ARGS --config "${SRC}/examples/sixteenths.txt")
+foreach(name IN ITEMS canon.mid score.musicxml score.ly score.abc contour.svg voices.wav
+                      score.html)
+  expect_file("${last_dir}/${name}" "")
+endforeach()
+file(READ "${last_dir}/score.musicxml" xml)
+if(NOT xml MATCHES "<divisions>4</divisions>" OR NOT xml MATCHES "<type>eighth</type>"
+   OR NOT xml MATCHES "<measure number=\"14\">" OR xml MATCHES "<measure number=\"15\">")
+  fail("sixteenths_example: score.musicxml lacks fourteen bars on the sixteenth grid")
+endif()
+file(READ "${last_dir}/score.abc" abc)
+if(NOT abc MATCHES "\nL:1/16\nQ:1/4=76\n")
+  fail("sixteenths_example: score.abc does not count in sixteenths")
+endif()
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\ngrid sixteenth\r?\n" OR NOT report MATCHES "\nlength 128\r?\n")
+  fail("sixteenths_example: report.txt lacks the grid or the length")
 endif()
 run(help 0 MATCH "usage: godels-fugue" ARGS --help)
 run(version 0 MATCH "godels-fugue [0-9]" ARGS --version)

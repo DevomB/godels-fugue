@@ -11,13 +11,13 @@ style preset first, so every other key in the file overrides it.
 
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
-| `length` | 12 | 1..64 | Melody length in steps: quarter notes, four to a bar, or eighth notes, eight to a bar, with grid eighth. |
-| `grid` | quarter | see meaning | Length of one step: quarter, or eighth for two steps to a beat and eight to a 4/4 bar. Every key counted in steps counts grid steps; tempo still counts quarter notes. Longer notes are tied steps (rhythm), so on the eighth grid a quarter note is 2 steps, a dotted quarter 3 and a half note 4. |
+| `length` | 12 | 1..128 | Melody length in steps: quarter notes, four to a bar, or eighth or sixteenth notes, eight or sixteen to a bar, with grid eighth or sixteenth. |
+| `grid` | quarter | see meaning | Length of one step: quarter; eighth for two steps to a beat and eight to a 4/4 bar; or sixteenth for four steps to a beat and sixteen to a bar. Every key counted in steps counts grid steps; tempo still counts quarter notes. Longer notes are tied steps (rhythm), so on the eighth grid a quarter note is 2 steps, a dotted quarter 3 and a half note 4, and on the sixteenth grid an eighth is 2, a dotted eighth 3, a quarter 4 and a half note 8. |
 | `voices` | 2 | 2..4 | Number of voices. Voice 1 plays the melody; the others follow it. |
-| `delay` | 4 | 0..128 | Steps between entries: voice v enters after v * delay steps (quarter notes, or eighths with grid eighth). |
-| `delay_1` | 0 | 0..128 | Entry step of voice 2 in grid steps (0 = 1 * delay). |
-| `delay_2` | 0 | 0..128 | Entry step of voice 3 in grid steps (0 = 2 * delay). |
-| `delay_3` | 0 | 0..128 | Entry step of voice 4 in grid steps (0 = 3 * delay). |
+| `delay` | 4 | 0..256 | Steps between entries: voice v enters after v * delay steps (quarter notes, or eighths or sixteenths with grid eighth or sixteenth). |
+| `delay_1` | 0 | 0..256 | Entry step of voice 2 in grid steps (0 = 1 * delay). |
+| `delay_2` | 0 | 0..256 | Entry step of voice 3 in grid steps (0 = 2 * delay). |
+| `delay_3` | 0 | 0..256 | Entry step of voice 4 in grid steps (0 = 3 * delay). |
 | `phase` | 0 | 0..16 | Extra grid steps added to every follower's entry. |
 | `range_low` | 60 | 1..127 | Lowest MIDI pitch any voice may sound (60 = middle C). |
 | `range_high` | 72 | 1..127 | Highest MIDI pitch any voice may sound. |
@@ -74,18 +74,18 @@ style preset first, so every other key in the file overrides it.
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
 | `rhythm` | 0 | 0..1 | Let notes be tied into longer values and let rests appear. |
-| `max_hold` | 1 | 1..7 | Longest tie in grid steps after the attack: 1 allows half notes and 3 whole notes on the quarter grid; on the eighth grid 1 allows quarter notes, 3 half notes and 7 whole notes. |
+| `max_hold` | 1 | 1..7 | Longest tie in grid steps after the attack: 1 allows half notes and 3 whole notes on the quarter grid; on the eighth grid 1 allows quarter notes, 3 half notes and 7 whole notes; on the sixteenth grid 3 allows quarter notes and 7 half notes. |
 | `rest_at` | off | see meaning | Force a rest at this melody index (needs rhythm). |
-| `max_rests` | 2 | 0..64 | Most rest steps the melody may contain (on the eighth grid a quarter rest is two). |
+| `max_rests` | 2 | 0..128 | Most rest steps the melody may contain (a quarter rest is two on the eighth grid and four on the sixteenth). |
 
 ### Lock
 
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
 | `lock` | 0 | 0..1 | Fix one melody note before the search and report what it changed (melody fixes any number). |
-| `lock_index` | 0 | 0..63 | Melody index of the locked note. |
+| `lock_index` | 0 | 0..127 | Melody index of the locked note. |
 | `lock_pitch` | 60 | 0..127 | MIDI pitch of the locked note (0 = rest). |
-| `melody` | ? | up to 64 values | The melody's notes, given as MIDI pitches, rest (needs rhythm) or ? for a note the solver chooses; notes past the list are free. Give them all to check a melody against the rules. |
+| `melody` | ? | up to 128 values | The melody's notes, given as MIDI pitches, rest (needs rhythm) or ? for a note the solver chooses; notes past the list are free. Give them all to check a melody against the rules. |
 
 ### Energy
 
@@ -100,7 +100,7 @@ style preset first, so every other key in the file overrides it.
 | `anneal_ratio` | 0 | 0..99 | Geometric schedule: temperature *= ratio / 100 per decision (0 = off). |
 | `w_gravity` | 1 | 0..100 | Cost of unstable scale degrees (leading tone high, tonic low). |
 | `w_curve` | 1 | 0..100 | Cost per unit of difference between a melody note's gravity and its target on the tension curve. |
-| `tension` | arch | up to 64 values | The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as points spread evenly from the first melody note to the last; notes between points take the straight line between them, rounded. 0 4 0 peaks in the middle and one value is flat. A ? point is filled in from the given points on either side, or from the nearest one at either end, so 0 4 ? rises over the first half and then holds. arch (or no given point) is the built-in arch. |
+| `tension` | arch | up to 128 values | The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as points spread evenly from the first melody note to the last; notes between points take the straight line between them, rounded. 0 4 0 peaks in the middle and one value is flat. A ? point is filled in from the given points on either side, or from the nearest one at either end, so 0 4 ? rises over the first half and then holds. arch (or no given point) is the built-in arch. |
 | `w_leap` | 1 | 0..100 | Cost per four semitones of melodic interval. |
 | `w_step` | 0 | 0..100 | Cost of each melodic interval larger than a whole step, growing with its size, favouring stepwise lines: this times (semitones - 1) / 2, rounded down, so 1 for a third, 2 for a fourth, 3 for a fifth and 5 for an octave. |
 | `w_repeat` | 4 | 0..100 | Cost of striking the same pitch twice in a row. |
@@ -117,9 +117,10 @@ style preset first, so every other key in the file overrides it.
 | `w_harmony` | 1 | 0..100 | Cost of weaker chords (ii, vi, and twice for iii, vii), twice this for a chord repeated from the bar before, and of non-chord tones on weak beats. |
 | `w_rest` | 4 | 0..100 | Cost of each step of rest. |
 | `w_hold` | 1 | 0..100 | Cost of each tied step. |
-| `w_syncopation` | 3 | 0..100 | Cost of a note attacked on beat 2 or 4 and tied over beat 3 or 1; on the eighth grid also of a note attacked on an off-beat eighth and held across the next beat. |
-| `w_rhythm` | 3 | 0..100 | Cost of a bar with no rhythmic variety: four plain quarter notes, or on the eighth grid eight plain eighths or four plain quarters. |
-| `w_run` | 2 | 0..100 | On the eighth grid, cost of two eighth notes in a row that leap more than a whole tone (over 2 semitones), so fast notes move by step; nothing on the quarter grid. |
+| `w_syncopation` | 3 | 0..100 | Cost of a note attacked on beat 2 or 4 and tied over beat 3 or 1; on the eighth and sixteenth grids also of a note attacked off the beat (on an off-beat eighth or sixteenth) and held across the next beat. |
+| `w_rhythm` | 3 | 0..100 | Cost of a bar with no rhythmic variety: four plain quarter notes; on the eighth grid eight plain eighths or four plain quarters; on the sixteenth grid sixteen plain sixteenths, eight plain eighths or four plain quarters. |
+| `w_run` | 2 | 0..100 | Cost of two notes in a row, both shorter than a beat, that leap more than a whole tone (over 2 semitones), so fast notes move by step: eighths on the eighth grid; sixteenths, eighths and dotted eighths on the sixteenth grid; nothing on the quarter grid. |
+| `w_figure` | 3 | 0..100 | On the sixteenth grid, cost of each beat's rhythm figure, times its grade. Writing x for a sixteenth where a note or rest starts and . for one held from before: 0 for x... (a quarter or a longer note), x.x. (two eighths) and .... (a beat held over); 1 for x.xx, xxx., xxxx, x..x (sixteenth figures from the beat) and ..x. (an eighth on the and after a held one); 2 for xx.. (the snap); 3 for xx.x, ...x, ..xx and .xxx; 4 for .x.., .x.x and .xx. (a sixteenth on the e after a held one). Nothing on the other grids. |
 | `w_final` | 2 | 0..100 | Cost of a short final note when rhythm is on. |
 | `w_corpus` | 4 | 0..100 | Largest pitch-class cost that --corpus --apply-weights may add. |
 | `pc_weight` | 0 | 12 x 0..100 | Twelve extra costs, one per pitch class C..B. |
@@ -136,8 +137,8 @@ style preset first, so every other key in the file overrides it.
 | `max_nodes` | 200000 | 0 or more | Give up after this many search nodes (0 = no limit). |
 | `time_limit` | 10000 | 0 or more | Give up after this many milliseconds (0 = no limit). |
 | `delay_search` | 0 | 0..1 | Try every delay from delay_min to delay_max and keep the lowest energy. |
-| `delay_min` | 1 | 1..128 | Smallest delay tried by delay_search. |
-| `delay_max` | 8 | 1..128 | Largest delay tried by delay_search. |
+| `delay_min` | 1 | 1..256 | Smallest delay tried by delay_search. |
+| `delay_max` | 8 | 1..256 | Largest delay tried by delay_search. |
 
 ### Output
 

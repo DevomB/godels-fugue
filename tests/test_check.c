@@ -205,7 +205,7 @@ int main(void) {
 
     /* the rest limit names every given rest, even in the longest melody */
     c = test_config();
-    test_set(&c, "length=64");
+    test_set(&c, "length=128");
     test_set(&c, "rhythm=1");
     test_set(&c, "cadence=0");
     char given[5 * MELODY_MAX + 8] = "melody=";
@@ -215,7 +215,7 @@ int main(void) {
     int k = reports_type(&m, v, check_stored(n), C_MAX_RESTS);
     CHECK(k >= 0 && v[k].nvars == MELODY_MAX);
     check_text(&m, &v[k], text, sizeof(text));
-    CHECK(strstr(text, "x62 = rest, x63 = rest)") != NULL);
+    CHECK(strstr(text, "x126 = rest, x127 = rest)") != NULL);
     model_free(&m);
 
     printf("test_check: ok\n");

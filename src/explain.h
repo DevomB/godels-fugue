@@ -5,16 +5,17 @@
 
 #include <stdio.h>
 
-/* Room for any removal reason: a refutation can list every decision. */
-enum { EXPLAIN_TEXT_MAX = 4096 };
+/* Room for any removal reason: a refutation can list every decision, up to
+ * VAR_MAX of them at about 20 characters each ("tie127 = hold, "). */
+enum { EXPLAIN_TEXT_MAX = 8192 };
 
 /* Replays one pass over the variables may spend minimizing forced values.
  * Each costs one of its whole reason and at most one per decision in it,
  * and is minimized only if that much is left; the others keep their whole
  * reason, which is still sound. Pieces of 32 notes in four voices need up
- * to about 500, and the largest tried, 64 notes in three or four voices,
- * about 900; the cap keeps a worse one from holding up its own output. One
- * variable (at most VAR_MAX decisions) always fits. */
+ * to about 500, and 64 notes in three or four voices about 900; the cap
+ * keeps a longer piece, whose every replay costs more as well, from holding
+ * up its own output. One variable (at most VAR_MAX decisions) always fits. */
 enum { EXPLAIN_BUDGET = 1000 };
 
 /* How a variable reached its final value. */

@@ -188,8 +188,8 @@ static void test_intervals(void) {
     CHECK(dissonance_grade(60, 71) == 3);
 }
 
-/* On the quarter grid a step is a beat; on the eighth grid only a step
- * that starts a strong beat is strong. */
+/* On the quarter grid a step is a beat; on the eighth and sixteenth grids
+ * only a step that starts a strong beat is strong. */
 static void test_strong_steps(void) {
     for (int t = 0; t < 24; t++) {
         CHECK(is_strong_step(t, 1, 0) == is_strong_time(t, 0));
@@ -201,6 +201,17 @@ static void test_strong_steps(void) {
     /* poly_meter: every third beat, steps 0, 6, 12 ... and never an off-beat */
     CHECK(is_strong_step(6, 2, 1) && is_strong_step(12, 2, 1) && is_strong_step(8, 2, 1));
     CHECK(!is_strong_step(3, 2, 1) && !is_strong_step(9, 2, 1) && !is_strong_step(4, 2, 1));
+
+    /* sixteenths: a bar is sixteen steps and only its first is strong */
+    for (int t = 0; t < 96; t++) {
+        CHECK(is_strong_step(t, 4, 0) == (t % 16 == 0));
+        CHECK(is_strong_step(t, 4, 1) == (t % 4 == 0 && is_strong_time(t / 4, 1)));
+    }
+    CHECK(!is_strong_step(8, 4, 0)); /* beat 3 */
+    CHECK(!is_strong_step(1, 4, 0) && !is_strong_step(2, 4, 0) && !is_strong_step(17, 4, 0));
+    /* poly_meter: beats 0, 3, 4, 6, 8, 9 ... at steps 0, 12, 16, 24, 32, 36 */
+    CHECK(is_strong_step(12, 4, 1) && is_strong_step(24, 4, 1) && is_strong_step(36, 4, 1));
+    CHECK(!is_strong_step(8, 4, 1) && !is_strong_step(13, 4, 1) && !is_strong_step(6, 4, 1));
 }
 
 static void test_transforms_and_costs(void) {

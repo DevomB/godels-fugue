@@ -19,17 +19,20 @@ static int key_at(const Score *score, int step) {
 }
 
 
-/* A written value (score_written_steps) in eighths. */
-static const char *note_type(int eighths, bool *dotted) {
-    *dotted = eighths == 3 || eighths == 6;
-    switch (eighths) {
+/* A written value (score_written_steps) in sixteenths. */
+static const char *note_type(int sixteenths, bool *dotted) {
+    *dotted = sixteenths == 3 || sixteenths == 6 || sixteenths == 12;
+    switch (sixteenths) {
     case 1:
-        return "eighth";
+        return "16th";
     case 2:
     case 3:
-        return "quarter";
+        return "eighth";
     case 4:
     case 6:
+        return "quarter";
+    case 8:
+    case 12:
         return "half";
     default:
         return "whole";
@@ -44,7 +47,7 @@ static void write_key(FILE *f, int key) {
 static void write_segment(FILE *f, const Score *score, int pitch, int steps, int key,
                           bool tie_stop, bool tie_start) {
     bool dotted;
-    const char *type = note_type(score_eighths(score, steps), &dotted);
+    const char *type = note_type(score_sixteenths(score, steps), &dotted);
     fprintf(f, "      <note>");
     if (pitch == SOUND_REST) {
         fprintf(f, "<rest/>");
@@ -144,7 +147,8 @@ bool export_musicxml(const char *path, const Score *score) {
                 if (score->nsections > 1 && t < score->modulate_at && score->modulate_at < stop)
                     stop = score->modulate_at;
                 if (stop > end) stop = end;
-                /* a length no single value writes, such as five eighths, is tied */
+                /* a length no single value writes, such as five eighths or five
+                 * sixteenths, is tied */
                 stop = t + score_written_steps(score, stop - t);
                 /* a tied note keeps the spelling of its attack */
                 int spelling_key = key_at(score, n->start);

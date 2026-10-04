@@ -163,7 +163,7 @@ static void test_validation(void) {
     config_defaults(&c);
     c.length = 32;
     c.voices = 4;
-    c.delay = 40;
+    c.delay = 80;
     CHECK(!config_validate(&c, err, sizeof(err)));
     CHECK(strstr(err, "too long") != NULL);
 
@@ -305,7 +305,7 @@ static void test_files(void) {
     CHECK(strstr(err, "cannot read config") != NULL);
 }
 
-/* grid sets how long a step is: a quarter note, or an eighth. */
+/* grid sets how long a step is: a quarter note, an eighth or a sixteenth. */
 static void test_grid(void) {
     PieceConfig c;
     char err[200];
@@ -316,6 +316,18 @@ static void test_grid(void) {
     CHECK(config_set(&c, "w_run", "5", err, sizeof(err)));
     CHECK(c.w_run == 5);
     CHECK(!config_set(&c, "w_run", "101", err, sizeof(err)));
+    /* the cost of a beat's rhythm figure on the sixteenth grid */
+    CHECK(c.w_figure == 3);
+    CHECK(config_set(&c, "w_figure", "0", err, sizeof(err)));
+    CHECK(c.w_figure == 0);
+    CHECK(config_set(&c, "w_figure", "100", err, sizeof(err)));
+    CHECK(c.w_figure == 100);
+    CHECK(!config_set(&c, "w_figure", "101", err, sizeof(err)));
+    CHECK(strstr(err, "w_figure must be 0..100") != NULL);
+    CHECK(!config_set(&c, "w_figure", "-1", err, sizeof(err)));
+    CHECK(!config_set(&c, "w_figure", "plenty", err, sizeof(err)));
+    CHECK(c.w_figure == 100);
+    CHECK(config_set(&c, "w_figure", "4", err, sizeof(err)));
     CHECK(config_set(&c, "grid", "eighth", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH);
     CHECK(config_beat_steps(&c) == 2 && config_bar_steps(&c) == 8);
@@ -323,9 +335,17 @@ static void test_grid(void) {
     CHECK(c.grid == GRID_QUARTER);
     CHECK(config_set(&c, "grid", "1", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH);
-    CHECK(!config_set(&c, "grid", "sixteenth", err, sizeof(err)));
-    CHECK(strstr(err, "config value for grid is not valid: sixteenth") != NULL);
-    CHECK(!config_set(&c, "grid", "2", err, sizeof(err)));
+    CHECK(config_set(&c, "grid", "sixteenth", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH);
+    CHECK(config_beat_steps(&c) == 4 && config_bar_steps(&c) == 16);
+    CHECK(config_set(&c, "grid", "eighth", err, sizeof(err)));
+    CHECK(config_set(&c, "grid", "2", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH);
+    CHECK(!config_set(&c, "grid", "thirtysecond", err, sizeof(err)));
+    CHECK(strstr(err, "config value for grid is not valid: thirtysecond") != NULL);
+    CHECK(!config_set(&c, "grid", "3", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH);
+    CHECK(config_set(&c, "grid", "eighth", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH);
     /* a tie may hold a note to a whole note of eighths */
     CHECK(config_set(&c, "max_hold", "7", err, sizeof(err)));
@@ -342,6 +362,12 @@ static void test_grid(void) {
         if (strcmp(config_key_name(i), "grid") == 0) config_key_value(&c, i, value, sizeof(value));
     }
     CHECK(strcmp(value, "eighth") == 0);
+    c.grid = GRID_SIXTEENTH;
+    for (int i = 0; i < config_key_count(); i++) {
+        if (strcmp(config_key_name(i), "grid") == 0) config_key_value(&c, i, value, sizeof(value));
+    }
+    CHECK(strcmp(value, "sixteenth") == 0);
+    CHECK(config_validate(&c, err, sizeof(err)));
     test_output_dir();
     write_file("output/tests/grid.txt", "grid eighth\nlength 32\n");
     config_defaults(&c);
@@ -351,6 +377,25 @@ static void test_grid(void) {
     config_defaults(&c);
     CHECK(config_load_file(&c, "output/tests/grid.json", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH && c.delay == 8);
+    write_file("output/tests/grid16.txt", "grid sixteenth\nlength 128\ndelay 48\nw_figure 5\n");
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/grid16.txt", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH && c.length == 128 && c.delay == 48 && c.w_figure == 5);
+    CHECK(config_validate(&c, err, sizeof(err)));
+    write_file("output/tests/grid16.json",
+               "{\"grid\": \"sixteenth\", \"delay\": 16, \"w_figure\": 2}");
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/grid16.json", err, sizeof(err)));
+    CHECK(c.grid == GRID_SIXTEENTH && c.delay == 16 && c.w_figure == 2);
+    /* the report's config lists the key */
+    FILE *f = fopen("output/tests/grid16_written.txt", "wb");
+    CHECK(f != NULL);
+    config_write(f, &c);
+    CHECK(fclose(f) == 0);
+    char *written = test_slurp("output/tests/grid16_written.txt", NULL);
+    CHECK(strstr(written, "\ngrid sixteenth\n") != NULL);
+    CHECK(strstr(written, "\nw_figure 2\n") != NULL);
+    free(written);
 }
 
 /* Writing every key and loading it back gives the same config. */
@@ -388,30 +433,43 @@ static void test_round_trip(void) {
     CHECK(config_key_name(config_key_count()) == NULL);
 }
 
-/* A melody takes up to 64 notes, from text or JSON, and writing the
- * config keeps every one of them. */
+/* A melody takes up to 128 notes, from text or JSON, and writing the
+ * config keeps every one of them; a canon spans up to 256 steps. */
 static void test_longest_melody(void) {
     PieceConfig a;
     PieceConfig b;
     char err[300];
     test_output_dir();
-    CHECK(MELODY_MAX == 64);
+    CHECK(MELODY_MAX == 128 && SPAN_MAX == 256);
     config_defaults(&b);
-    CHECK(config_set(&b, "lock_index", "63", err, sizeof(err)));
-    CHECK(!config_set(&b, "lock_index", "64", err, sizeof(err)));
-    CHECK(config_set(&b, "rest_at", "63", err, sizeof(err)));
-    CHECK(!config_set(&b, "rest_at", "64", err, sizeof(err)));
+    CHECK(config_set(&b, "lock_index", "127", err, sizeof(err)));
+    CHECK(!config_set(&b, "lock_index", "128", err, sizeof(err)));
+    CHECK(config_set(&b, "rest_at", "127", err, sizeof(err)));
+    CHECK(!config_set(&b, "rest_at", "128", err, sizeof(err)));
+    CHECK(config_set(&b, "delay", "256", err, sizeof(err)));
+    CHECK(!config_set(&b, "delay", "257", err, sizeof(err)));
+    CHECK(config_set(&b, "delay_max", "256", err, sizeof(err)));
+    CHECK(config_set(&b, "modulate_at", "256", err, sizeof(err)));
     config_defaults(&a);
-    CHECK(config_set(&a, "length", "64", err, sizeof(err)));
-    CHECK(a.length == 64);
-    CHECK(!config_set(&a, "length", "65", err, sizeof(err)));
-    CHECK(strstr(err, "must be 1..64") != NULL);
-    CHECK(config_set(&a, "max_rests", "64", err, sizeof(err)));
-    CHECK(!config_set(&a, "max_rests", "65", err, sizeof(err)));
+    CHECK(config_set(&a, "length", "128", err, sizeof(err)));
+    CHECK(a.length == 128);
+    CHECK(!config_set(&a, "length", "129", err, sizeof(err)));
+    CHECK(strstr(err, "must be 1..128") != NULL);
+    CHECK(config_set(&a, "max_rests", "128", err, sizeof(err)));
+    CHECK(!config_set(&a, "max_rests", "129", err, sizeof(err)));
+    /* three voices 64 steps apart fill the longest span exactly */
+    config_defaults(&b);
+    test_set(&b, "length=128");
+    test_set(&b, "voices=3");
+    test_set(&b, "delay=64");
+    CHECK(config_validate(&b, err, sizeof(err)));
+    test_set(&b, "phase=1");
+    CHECK(!config_validate(&b, err, sizeof(err)));
+    CHECK(strstr(err, "more than 256 steps") != NULL);
 
     /* rests and three-digit pitches make the longest text a melody has */
     char text[5 * MELODY_MAX] = "";
-    char json[16 * MELODY_MAX] = "{\"length\": 64, \"rhythm\": 1, \"max_rests\": 64, \"melody\": [";
+    char json[16 * MELODY_MAX] = "{\"length\": 128, \"rhythm\": 1, \"max_rests\": 128, \"melody\": [";
     for (int i = 0; i < MELODY_MAX; i++) {
         strcat(text, i ? "," : "");
         strcat(text, i % 2 ? "127" : "rest");
@@ -424,10 +482,10 @@ static void test_longest_melody(void) {
     for (int i = 0; i < MELODY_MAX; i++) CHECK(a.melody[i] == (i % 2 ? 127 : PITCH_REST));
     test_set(&a, "rhythm=1");
     CHECK(config_validate(&a, err, sizeof(err)));
-    a.length = 63; /* the last note is past the end */
+    a.length = 127; /* the last note is past the end */
     CHECK(!config_validate(&a, err, sizeof(err)));
-    CHECK(strstr(err, "note 63 is past the end") != NULL);
-    a.length = 64;
+    CHECK(strstr(err, "note 127 is past the end") != NULL);
+    a.length = 128;
 
     write_file("output/tests/longest.json", json);
     config_defaults(&b);
@@ -490,10 +548,10 @@ static void test_file_edges(void) {
     CHECK(config_load_file(&c, "output/tests/sharp_round.txt", err, sizeof(err)));
     CHECK(memcmp(&a, &c, sizeof(a)) == 0);
 
-    char longline[700];
+    char longline[1200];
     memset(longline, ' ', sizeof(longline));
     memcpy(longline, "seed", 4);
-    memcpy(longline + 600, "1234\n", 6);
+    memcpy(longline + 1100, "1234\n", 6);
     write_file("output/tests/long.txt", longline);
     CHECK(!config_load_file(&c, "output/tests/long.txt", err, sizeof(err)));
     CHECK(strstr(err, "too long") != NULL);

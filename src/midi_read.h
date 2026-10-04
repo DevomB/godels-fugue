@@ -52,7 +52,7 @@ int midi_first_track(const MidiFile *file);
  * without notes. */
 int midi_track_steps(const MidiFile *file, int track, int *steps, int cap);
 /* The same on a grid of beat_steps steps to a quarter note: 2 reads the
- * track in eighths. */
+ * track in eighths and 4 in sixteenths. */
 int midi_track_grid(const MidiFile *file, int track, int beat_steps, int *steps, int cap);
 
 #endif
