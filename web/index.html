@@ -132,8 +132,7 @@ pre {
 .sheet-card { padding-bottom: 4px; }
 .sheet-card summary { list-style-position: outside; margin-left: 16px; }
 .sheet-card h2 { display: inline; font-size: 15px; font-weight: 650; color: var(--text-primary); }
-.sheet { margin-top: 8px; overflow-x: auto; }
-.sheet svg { max-width: 100%; }
+.sheet { margin-top: 8px; }
 iframe { display: block; width: 100%; height: 1400px; border: 0; margin-top: 4px; background: var(--page); }
 .empty { padding: 48px 16px; text-align: center; color: var(--text-muted); }
 footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 13px; color: var(--text-muted); }
@@ -448,12 +447,14 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     abcjs.then(function (ABCJS) {
       if (card.hidden && window.innerWidth < 700) card.open = false; /* long on a phone */
       card.hidden = false;
-      const width = Math.max(320, $("sheet").clientWidth || 1100);
-      const scale = width < 700 ? 1 : 0.8;
+      // The card's width, not the sheet's: abcjs scales with a transform, so the
+      // sheet can be wider than it shows. "resize" fits the music to the card.
+      const width = Math.max(300, (card.clientWidth || 1132) - 32);
+      const narrow = width < 700;
       ABCJS.renderAbc("sheet", text, {
-        scale: scale,
-        staffwidth: (width - 40) / scale,
-        wrap: { minSpacing: 1.6, maxSpacing: 2.6, preferredMeasuresPerLine: width < 700 ? 2 : width < 1000 ? 4 : 7 },
+        responsive: "resize",
+        staffwidth: narrow ? 480 : Math.round(width / 0.85),
+        wrap: { minSpacing: 1.6, maxSpacing: 2.6, preferredMeasuresPerLine: narrow ? 2 : 6 },
         foregroundColor: getComputedStyle(document.body).color,
         add_classes: true,
       });
