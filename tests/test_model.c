@@ -138,6 +138,16 @@ static int tie_cost(const Model *m, const Constraint *t, const char *ties) {
     return term_cost(m, t, v);
 }
 
+/* Cost of a run term for two pitches and its ties, N or H in slot order. */
+static int run_cost(const Model *m, const Constraint *t, int a, int b, const char *ties) {
+    int v[SCOPE_MAX];
+    CHECK(t != NULL && (int)strlen(ties) == t->nslots - 2);
+    v[t->slot[0]] = a;
+    v[t->slot[1]] = b;
+    for (int k = 2; k < t->nslots; k++) v[t->slot[k]] = ties[k - 2] == 'H' ? TIE_HOLD : TIE_NOTE;
+    return term_cost(m, t, v);
+}
+
 /* On the eighth grid a bar is eight steps: one chord, one strong step on
  * its first beat, and rhythm terms that count a beat as two steps. */
 static void test_eighth_grid(void) {
@@ -186,6 +196,22 @@ static void test_eighth_grid(void) {
     CHECK(tie_cost(m, bar, "HNHNHNN") == 0);
     CHECK(tie_cost(m, bar, "NNHNHNH") == 0);
     CHECK(tie_cost(m, bar, "HHHNHHH") == 0); /* two half notes */
+
+    /* two eighths in a row move by step: notes 5 and 6 are eighths when
+     * the ties at 5, 6 and 7 are all attacks */
+    CHECK(count_term(m, TERM_RUN) == 23);
+    const Constraint *run = find_term(m, TERM_RUN, 5, 5);
+    CHECK(run != NULL && run->vars[run->slot[2]] == m->tie[5]);
+    CHECK(run_cost(m, run, 60, 64, "NNN") == c.w_run);
+    CHECK(run_cost(m, run, 72, 60, "NNN") == c.w_run);
+    CHECK(run_cost(m, run, 60, 62, "NNN") == 0);         /* a step */
+    CHECK(run_cost(m, run, 60, 64, "HNN") == 0);         /* the first note is longer */
+    CHECK(run_cost(m, run, 60, 64, "NNH") == 0);         /* so is the second */
+    CHECK(run_cost(m, run, PITCH_REST, 64, "NNN") == 0); /* a rest is no note */
+    /* the first note has no tie, and the last has no next step */
+    CHECK(run_cost(m, find_term(m, TERM_RUN, 0, 4), 60, 67, "NN") == c.w_run);
+    CHECK(run_cost(m, find_term(m, TERM_RUN, 22, 4), 67, 60, "NN") == c.w_run);
+    CHECK(run_cost(m, find_term(m, TERM_RUN, 22, 4), 67, 60, "HN") == 0);
     test_close(r);
 
     /* the same piece on the quarter grid keeps its terms */
@@ -196,6 +222,7 @@ static void test_eighth_grid(void) {
     CHECK(count_rule(m, CID_CONSONANCE) == 4); /* steps 8, 12, 16, 20 */
     CHECK(count_term(m, TERM_SYNCOPATION) == 11);
     CHECK(count_term(m, TERM_RHYTHM) == 6);
+    CHECK(count_term(m, TERM_RUN) == 0);
     over = find_term(m, TERM_SYNCOPATION, 4, 2);
     CHECK(tie_cost(m, over, "NH") == c.w_syncopation && tie_cost(m, over, "HH") == 0);
     bar = find_term(m, TERM_RHYTHM, 4, 3);

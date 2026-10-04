@@ -307,6 +307,10 @@ static void test_grid(void) {
     config_defaults(&c);
     CHECK(c.grid == GRID_QUARTER);
     CHECK(config_beat_steps(&c) == 1 && config_bar_steps(&c) == 4);
+    CHECK(c.w_run == 2);
+    CHECK(config_set(&c, "w_run", "5", err, sizeof(err)));
+    CHECK(c.w_run == 5);
+    CHECK(!config_set(&c, "w_run", "101", err, sizeof(err)));
     CHECK(config_set(&c, "grid", "eighth", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH);
     CHECK(config_beat_steps(&c) == 2 && config_bar_steps(&c) == 8);

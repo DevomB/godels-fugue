@@ -61,6 +61,7 @@ enum {
     TERM_NONCHORD,
     TERM_KEY,
     TERM_KEY_DISTANCE,
+    TERM_RUN,
     TERM_COUNT
 };
 

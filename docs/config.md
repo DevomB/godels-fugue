@@ -118,6 +118,7 @@ style preset first, so every other key in the file overrides it.
 | `w_hold` | 1 | 0..100 | Cost of each tied step. |
 | `w_syncopation` | 3 | 0..100 | Cost of a note attacked on beat 2 or 4 and tied over beat 3 or 1; on the eighth grid also of a note attacked on an off-beat eighth and held across the next beat. |
 | `w_rhythm` | 3 | 0..100 | Cost of a bar with no rhythmic variety: four plain quarter notes, or on the eighth grid eight plain eighths or four plain quarters. |
+| `w_run` | 2 | 0..100 | On the eighth grid, cost of two eighth notes in a row that leap more than a whole tone (over 2 semitones), so fast notes move by step; nothing on the quarter grid. |
 | `w_final` | 2 | 0..100 | Cost of a short final note when rhythm is on. |
 | `w_corpus` | 4 | 0..100 | Largest pitch-class cost that --corpus --apply-weights may add. |
 | `pc_weight` | 0 | 12 x 0..100 | Twelve extra costs, one per pitch class C..B. |

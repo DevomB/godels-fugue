@@ -97,6 +97,7 @@ typedef struct PieceConfig {
     int w_hold;
     int w_syncopation;
     int w_rhythm;
+    int w_run;
     int w_final;
     int w_corpus;
     int pc_weight[12];

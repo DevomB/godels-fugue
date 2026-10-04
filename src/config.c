@@ -443,6 +443,9 @@ static const KeyDef keys[] = {
     {"w_rhythm", F(w_rhythm), 1, 0, 100, 3, NULL, NULL, "energy",
      "Cost of a bar with no rhythmic variety: four plain quarter notes, or on the eighth "
      "grid eight plain eighths or four plain quarters."},
+    {"w_run", F(w_run), 1, 0, 100, 2, NULL, NULL, "energy",
+     "On the eighth grid, cost of two eighth notes in a row that leap more than a whole "
+     "tone (over 2 semitones), so fast notes move by step; nothing on the quarter grid."},
     {"w_final", F(w_final), 1, 0, 100, 2, NULL, NULL, "energy",
      "Cost of a short final note when rhythm is on."},
     {"w_corpus", F(w_corpus), 1, 0, 100, 4, NULL, NULL, "energy",

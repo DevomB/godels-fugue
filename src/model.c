@@ -24,7 +24,7 @@ const char *term_name(int term) {
         "gravity",   "curve",       "corpus", "rest",  "leap",       "repeat",
         "recovery",  "motif",       "dissonance", "direct perfect", "contrary motion", "hold",
         "syncopation", "rhythm",    "final",  "chord", "chord motion", "non-chord tone", "key",
-        "key distance"};
+        "key distance", "run"};
     if (term < 0 || term >= TERM_COUNT) return "unknown";
     return names[term];
 }
@@ -691,6 +691,17 @@ static void build_terms(Builder *b) {
             if (t != NULL) t->time = length - 1;
         }
     }
+    /* on the eighth grid, notes i and i + 1 are both eighths when neither
+     * is held into or held on: the ties at i, i + 1 and i + 2 that exist */
+    if (beat > 1) {
+        for (int i = 0; i + 1 < length; i++) {
+            Constraint *t = add_term(b, TERM_RUN, c->w_run);
+            add_slot(t, m->pitch[i], 0);
+            add_slot(t, m->pitch[i + 1], 0);
+            for (int j = i; j <= i + 2 && j < length; j++) add_slot(t, m->tie[j], -1);
+            if (t != NULL) t->time = i;
+        }
+    }
 
     if (c->harmony) {
         for (int bar = 0; bar < m->nbars; bar++) {
@@ -1124,6 +1135,16 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
         return w * iabs(key_fifths(slot_value(t, vals, 0)));
     case TERM_KEY_DISTANCE:
         return w * key_distance(slot_value(t, vals, 0), slot_value(t, vals, 1));
+    case TERM_RUN: {
+        /* two pitches, then ties that must all be new attacks */
+        int a = slot_value(t, vals, 0);
+        int b = slot_value(t, vals, 1);
+        if (a == PITCH_REST || b == PITCH_REST || iabs(a - b) <= 2) return 0;
+        for (int k = 2; k < t->nslots; k++) {
+            if (slot_value(t, vals, k) != TIE_NOTE) return 0;
+        }
+        return w;
+    }
     default:
         return 0;
     }
