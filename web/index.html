@@ -181,6 +181,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
         <input id="seed" type="number" min="0" max="99999" value="0" title="0 is the cheapest piece; any other number samples a different one">
       </label>
       <button id="shuffle" type="button" title="Sample a different piece under the same rules">Shuffle</button>
+      <button id="surprise" type="button" title="Roll a new key, mode, number of voices, entries and tension curve">Surprise me</button>
       <button id="compose" type="button" class="primary">Compose</button>
     </div>
     <label for="config" class="hint">Config: one <code>key value</code> per line, <code>#</code> starts a comment. Edit it and compose again.</label>
@@ -307,6 +308,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   function busy(on) {
     compose.disabled = on;
     shuffle.disabled = on;
+    $("surprise").disabled = on;
   }
 
   // The settings the run adds after the config: a variation samples instead of
@@ -560,12 +562,58 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   });
 
   select.addEventListener("change", function () {
+    if (select.value === "surprise") { $("surprise").click(); return; }
     seed.value = "0";
     undoStack = [];
     undo.hidden = true;
     load(Number(select.value), true);
   });
   compose.addEventListener("click", run);
+  // A random but always solvable kind of piece: 2 or 3 voices, any of eight keys
+  // and six modes, chords in major and minor, rhythm, and a drawn tension curve.
+  $("surprise").addEventListener("click", function () {
+    const pick = function (list) { return list[Math.floor(Math.random() * list.length)]; };
+    const voices = pick([2, 3]);
+    const delay = voices === 3 ? pick([4, 8, 12]) : pick([4, 6, 8]);
+    const key = pick(["C", "D", "E", "F", "G", "A", "Bb", "Eb"]);
+    const mode = pick(["major", "minor", "dorian", "mixolydian", "lydian", "phrygian"]);
+    const tonal = mode === "major" || mode === "minor";
+    const harmony = tonal && Math.random() < 0.7 ? 1 : 0;
+    const tempo = pick([72, 84, 96, 108, 120, 132]);
+    const curvePts = [];
+    for (let i = 0; i < 6; i++) curvePts.push(Math.floor(Math.random() * 4));
+    const apart = { 4: "a bar", 6: "a bar and a half", 8: "two bars", 12: "three bars" }[delay];
+    config.value = [
+      "# A surprise: a " + (voices === 3 ? "three" : "two") + "-voice canon in " + key + " " + mode +
+        (harmony ? " over a chord per bar" : "") + ",",
+      "# each voice entering " + apart + " after the one before, at " + tempo + " beats a minute.",
+      "length " + pick([24, 32, 32, 40]),
+      "voices " + voices,
+      "delay " + delay,
+      "key " + key,
+      "mode " + mode,
+      "harmony " + harmony,
+      "rhythm 1",
+      "range_low 50",
+      "range_high 79",
+      "leading_tone " + (tonal ? 1 : 0),
+      "w_contrary " + Math.floor(Math.random() * 4),
+      "w_leap " + (1 + Math.floor(Math.random() * 4)),
+      "tension " + curvePts.join(" ") + " 0",
+      "tempo " + tempo,
+    ].join("\n") + "\n";
+    seed.value = String(1 + Math.floor(Math.random() * 99999));
+    undoStack = [];
+    undo.hidden = true;
+    if (!select.querySelector('option[value="surprise"]')) {
+      const o = document.createElement("option");
+      o.value = "surprise";
+      o.textContent = "A surprise";
+      select.insertBefore(o, select.firstChild);
+    }
+    select.value = "surprise";
+    run();
+  });
   shuffle.addEventListener("click", function () {
     seed.value = String(1 + Math.floor(Math.random() * 99999));
     run();
