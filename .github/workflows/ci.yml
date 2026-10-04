@@ -60,6 +60,22 @@ jobs:
           cmake --build build-web
       - name: Smoke test
         run: node tests/web_smoke.mjs build-web examples
+      - name: Assemble the site
+        run: |
+          mkdir -p _site/examples
+          cp web/* build-web/godels-fugue.js build-web/godels-fugue.wasm _site/
+          cp examples/*.txt examples/*.json _site/examples/
+      - name: Browser test
+        run: |
+          npm install --no-save --no-package-lock playwright-core@1
+          node tests/browser_test.mjs _site browser-artifacts
+      - name: Keep the browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-artifacts
+          path: browser-artifacts
+          retention-days: 7
 
   sanitizers:
     name: Linux ASan and UBSan
@@ -76,3 +92,35 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest --output-on-failure
+
+  music:
+    name: Music before and after
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Build this change and the last release
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --target godels-fugue
+          git worktree add "$RUNNER_TEMP/release" "$(git describe --tags --abbrev=0)"
+          cmake -S "$RUNNER_TEMP/release" -B "$RUNNER_TEMP/release/build" -DCMAKE_BUILD_TYPE=Release
+          cmake --build "$RUNNER_TEMP/release/build" --target godels-fugue
+      - name: The README's examples, as this build prints them
+        run: |
+          build/godels-fugue --out "$RUNNER_TEMP/doc/canon.mid" --proof "$RUNNER_TEMP/doc/proof.txt" --entropy "$RUNNER_TEMP/doc/entropy.txt" || true
+          build/godels-fugue --config examples/cyclic.txt --explain x8 --out "$RUNNER_TEMP/doc/canon.mid" --proof "$RUNNER_TEMP/doc/proof.txt" --entropy "$RUNNER_TEMP/doc/entropy.txt" || true
+          build/godels-fugue --config examples/unsat.txt --out "$RUNNER_TEMP/doc/canon.mid" --proof "$RUNNER_TEMP/doc/proof.txt" --entropy "$RUNNER_TEMP/doc/entropy.txt" || true
+          build/godels-fugue --preset longing --resolve | head -c 600 || true
+      - name: Report
+        run: >
+          python3 tests/music_report.py "$RUNNER_TEMP/release/build/godels-fugue" build/godels-fugue music --check
+          --variant seq6=w_sequence=6 --variant seq10=w_sequence=10
+      - name: Keep the music for listening
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: music-before-after
+          path: music
+          retention-days: 14
