@@ -150,6 +150,14 @@ bool export_musicxml(const char *path, const Score *score) {
                                 clef, clef == 'F' ? 4 : clef == 'C' ? 3 : 2);
                         if (up > 0) write_transpose(f, score_part(score, v));
                         fprintf(f, "</attributes>\n");
+                        if (v == 0) {
+                            int tempo = score->tempo > 0 ? score->tempo : 120;
+                            fprintf(f, "      <direction placement=\"above\"><direction-type>"
+                                       "<metronome><beat-unit>quarter</beat-unit><per-minute>%d"
+                                       "</per-minute></metronome></direction-type><sound "
+                                       "tempo=\"%d\"/></direction>\n",
+                                    tempo, tempo);
+                        }
                     }
                 }
                 if (score->nsections > 1 && t == score->modulate_at && t > 0) {
@@ -410,11 +418,27 @@ static double reverb_run(ReverbSide *side, double in) {
     return wet;
 }
 
+/* The synth a voice plays on: the instrument key's, or for auto the pluck
+ * for a struck or plucked instrument (or none) and the organ tone for a
+ * sustained one. */
+static int voice_synth(const Score *score, int v, int instrument) {
+    if (instrument != INSTRUMENT_AUTO) return instrument;
+    const Part *p = score_part(score, v);
+    return p == NULL || p->struck ? INSTRUMENT_PLUCK : INSTRUMENT_ORGAN;
+}
+
 bool export_wav(const char *path, const Score *score, int instrument) {
+    return export_wav_performed(path, score, instrument, NULL);
+}
+
+bool export_wav_performed(const char *path, const Score *score, int instrument,
+                          const Performance *perf) {
     if (path == NULL || score == NULL) return false;
     int tempo = score->tempo > 0 ? score->tempo : 120;
     double per_step = (double)WAV_RATE * 60.0 / tempo / score_beat_steps(score);
-    long total = lround(per_step * (score->span > 0 ? score->span : 1)) + WAV_TAIL;
+    long body = perf != NULL ? lround((perf->times[score->span] + perf->hold) * WAV_RATE)
+                             : lround(per_step * (score->span > 0 ? score->span : 1));
+    long total = body + WAV_TAIL;
     float *frames = calloc((size_t)total * 2, sizeof(float));
     double *line = malloc(PLUCK_LINE_MAX * sizeof(double));
     ReverbSide *reverb = malloc(2 * sizeof(ReverbSide));
@@ -426,25 +450,39 @@ bool export_wav(const char *path, const Score *score, int instrument) {
     }
 
     for (int v = 0; v < score->voices; v++) {
-        /* equal-power pan, the voices spread evenly from left to right */
-        double place = score->voices > 1 ? -0.6 + 1.2 * v / (score->voices - 1) : 0.0;
+        /* equal-power pan: the performance's place, or the voices spread
+         * evenly from left to right; its volume as the players' gain */
+        double place = perf != NULL           ? perf->pan[v] / 100.0
+                       : score->voices > 1 ? -0.6 + 1.2 * v / (score->voices - 1)
+                                           : 0.0;
+        double gain = perf != NULL ? perform_gain(perf, v) : 1.0;
         double angle = (place + 1.0) * M_PI / 4.0;
-        Pan pan = {frames, cos(angle), sin(angle)};
+        int synth = voice_synth(score, v, instrument);
         double phase = 0.0;
         for (int k = 0; k < score->voice[v].count; k++) {
             const ScoreNote *n = &score->voice[v].notes[k];
             if (n->pitch == SOUND_REST) continue;
             long start = lround(per_step * n->start);
             long len = lround(per_step * (n->start + n->length)) - start;
+            double loud = gain;
+            if (perf != NULL) {
+                double on;
+                double off;
+                perform_span(perf, score, v, k, false, &on, &off);
+                start = lround(on * WAV_RATE);
+                len = lround(off * WAV_RATE) - start;
+                loud *= perf->note[v][k].velocity / 100.0;
+            }
             if (start + len > total) len = total - start;
             if (len <= 0) continue;
-            if (instrument == INSTRUMENT_PLUCK) {
+            Pan pan = {frames, cos(angle) * loud, sin(angle) * loud};
+            if (synth == INSTRUMENT_PLUCK) {
                 uint32_t seed = 0x9E3779B9u * (uint32_t)(v + 1) ^
                                 0x85EBCA6Bu * (uint32_t)n->pitch ^
                                 0xC2B2AE35u * (uint32_t)(n->start + 1);
                 pluck(&pan, start, len, n->pitch, seed, line);
             } else {
-                tone(&pan, start, len, n->pitch, instrument == INSTRUMENT_ORGAN, &phase);
+                tone(&pan, start, len, n->pitch, synth == INSTRUMENT_ORGAN, &phase);
             }
         }
     }

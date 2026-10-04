@@ -3,6 +3,7 @@
 
 #include "check.h"
 #include "explain.h"
+#include "perform.h"
 #include "score.h"
 #include "solver.h"
 
@@ -23,6 +24,7 @@ typedef struct Run {
     int energy;
     int breakdown[TERM_COUNT];
     Score score;
+    Performance perf; /* how the solved piece is played (perform.h) */
     int core[CID_MAX];
     int core_n;
     bool core_approximate;

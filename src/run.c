@@ -14,9 +14,10 @@ static SolveStatus trial(const PieceConfig *config, int *energy, long *nodes,
     char err[160];
     *energy = 0;
     *nodes = 0;
-    if (!model_build(&m, config, err, sizeof(err))) return SOLVE_UNSAT;
+    /* a trial that cannot be built or started proves nothing: not unsat */
+    if (!model_build(&m, config, err, sizeof(err))) return SOLVE_LIMIT;
     SolverState s;
-    SolveStatus st = SOLVE_UNSAT;
+    SolveStatus st = SOLVE_LIMIT;
     if (solver_init(&s, &m)) {
         st = solver_solve(&s);
         *nodes = s.stats.nodes;
@@ -89,6 +90,7 @@ bool run_piece(Run *run, const PieceConfig *config, char *err, size_t cap) {
     if (run->status == SOLVE_SAT) {
         run->energy = model_energy(&run->model, run->values, run->breakdown);
         score_build(&run->score, &run->model, run->values);
+        perform_build(&run->perf, &run->score, &run->config, &run->model.form);
     } else if (run->status == SOLVE_UNSAT) {
         solver_unsat_core(&run->model, run->core, CID_MAX, &run->core_n,
                           &run->core_approximate);

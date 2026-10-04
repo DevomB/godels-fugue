@@ -15,6 +15,11 @@ bool trace_write_entropy(const char *path, const Run *run);
 /* The piece as one JSON document: config, score, every variable's
  * explanation, the proof events with their parents, and statistics. */
 void trace_write_json(FILE *f, const Run *run);
+/* The members "players" (each voice's instrument, range, transposition and
+ * entry), "form" (the phrase plan and the climax) and "keepsNotes" (the keys
+ * that change only how the piece is played), as proof.json and --resolve
+ * write them. */
+void trace_write_plan(FILE *f, const Model *m);
 bool trace_save_json(const char *path, const Run *run);
 
 const char *solve_status_name(SolveStatus status);

@@ -347,13 +347,15 @@ static void test_parts(void) {
     s.part[0] = PART_ALTO_SAX;
     CHECK(export_lilypond("output/tests/alto.ly", &s));
     char *ly = test_slurp("output/tests/alto.ly", NULL);
-    CHECK(strstr(ly, "instrumentName = \"Alto Sax in Eb\"") != NULL);
+    CHECK(strstr(ly, "instrumentName = \"Alto Sax in Eb\" midiInstrument = \"alto sax\"") != NULL);
     CHECK(strstr(ly, "\\clef treble \\transposition ees \\key b \\minor") != NULL);
     CHECK(strstr(ly, " b'1") != NULL);
     free(ly);
     CHECK(export_abc("output/tests/alto.abc", &s));
     char *abc = test_slurp("output/tests/alto.abc", NULL);
-    CHECK(strstr(abc, "V:1 clef=treble name=\"Alto Sax in Eb\"\nK:Dm\n") != NULL);
+    /* ABC players sound it on the alto sax, a sixth below what is written */
+    CHECK(strstr(abc, "V:1 clef=treble name=\"Alto Sax in Eb\"\n%%MIDI program 65\n"
+                      "%%MIDI transpose -9\nK:Dm\n") != NULL);
     CHECK(strstr(abc, "\nV:1\n[K:Bm] B4 |]\n") != NULL);
     free(abc);
 

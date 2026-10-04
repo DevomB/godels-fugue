@@ -148,8 +148,18 @@ bool export_lilypond(const char *path, const Score *score) {
         int n = voice_segments(score, v, segs);
         char name[40];
         score_part_name(score, v, name, sizeof(name));
-        fprintf(f, "    \\new Staff \\with { instrumentName = \"%s\" } {\n      \\clef %s ", name,
-                clef_name(score_clef(score, v)));
+        fprintf(f, "    \\new Staff \\with { instrumentName = \"%s\"", name);
+        const Part *part = score_part(score, v);
+        if (part != NULL) {
+            /* LilyPond names General MIDI sounds in words: the soundfont's name */
+            char midi[40];
+            snprintf(midi, sizeof(midi), "%s",
+                     strcmp(part->sample, "piano") == 0 ? "acoustic grand" : part->sample);
+            for (char *c = midi; *c != '\0'; c++)
+                if (*c == '_') *c = ' ';
+            fprintf(f, " midiInstrument = \"%s\"", midi);
+        }
+        fprintf(f, " } {\n      \\clef %s ", clef_name(score_clef(score, v)));
         /* written pitches; \transposition lets LilyPond's MIDI sound them */
         if (score_written_up(score, v) > 0)
             fprintf(f, "\\transposition %s ", score_part(score, v)->lily);
@@ -227,6 +237,10 @@ bool export_abc(const char *path, const Score *score) {
         char name[40];
         score_part_name(score, v, name, sizeof(name));
         fprintf(f, "V:%d clef=%s name=\"%s\"\n", v + 1, clef_name(score_clef(score, v)), name);
+        const Part *part = score_part(score, v);
+        if (part != NULL) fprintf(f, "%%%%MIDI program %d\n", part->program);
+        if (score_written_up(score, v) > 0)
+            fprintf(f, "%%%%MIDI transpose %d\n", -score_written_up(score, v));
     }
     abc_key(f, score->key[0]);
     fprintf(f, "\n");

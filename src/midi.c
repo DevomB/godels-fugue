@@ -4,6 +4,7 @@
 #include "parts.h"
 #include "theory.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -76,31 +77,82 @@ static int key_signature(FILE *f, unsigned delta, int key) {
     return write_meta(f, delta, 0x59, data, 2);
 }
 
-static int write_conductor(FILE *f, const Score *score) {
+static int tempo_event(FILE *f, unsigned delta, unsigned us_per_quarter) {
+    unsigned char data[3] = {(unsigned char)(us_per_quarter >> 16),
+                             (unsigned char)(us_per_quarter >> 8), (unsigned char)us_per_quarter};
+    return write_meta(f, delta, 0x51, data, 3);
+}
+
+/* Microseconds per quarter note at step s: the performance's time map, or
+ * the written tempo. */
+static unsigned step_tempo(const Score *score, const Performance *perf, int s) {
+    if (perf == NULL) return 60000000u / (unsigned)(score->tempo > 0 ? score->tempo : 120);
+    if (s >= score->span) s = score->span - 1;
+    if (s < 0) s = 0;
+    double step = perf->times[s + 1] - perf->times[s];
+    return (unsigned)lround(step * score_beat_steps(score) * 1e6);
+}
+
+/* The tick a time in seconds falls on under the time map; past the last
+ * step the last step's tempo carries on (the held final chord). */
+static unsigned ticks_at(const Score *score, const Performance *perf, double seconds) {
+    double st = step_ticks(score);
+    int span = score->span;
+    for (int s = 0; s < span; s++) {
+        double a = perf->times[s];
+        double b = perf->times[s + 1];
+        if (seconds < b) {
+            double u = b > a ? (seconds - a) / (b - a) : 0.0;
+            return (unsigned)lround((s + (u > 0.0 ? u : 0.0)) * st);
+        }
+    }
+    double last = perf->times[span] - perf->times[span - 1];
+    double extra = last > 0.0 ? (seconds - perf->times[span]) / last : 0.0;
+    return (unsigned)lround((span + extra) * st);
+}
+
+/* The last tick any note sounds to. */
+static unsigned end_tick(const Score *score, const Performance *perf) {
+    unsigned end = (unsigned)score->span * step_ticks(score);
+    if (perf != NULL) {
+        unsigned held = ticks_at(score, perf, perf->times[score->span] + perf->hold);
+        if (held > end) end = held;
+    }
+    return end;
+}
+
+static int write_conductor(FILE *f, const Score *score, const Performance *perf) {
     long len_pos = begin_track(f);
     if (len_pos < 0) return -1;
-    unsigned tempo = 60000000u / (unsigned)(score->tempo > 0 ? score->tempo : 120);
-    unsigned char tempo_data[3] = {(unsigned char)(tempo >> 16), (unsigned char)(tempo >> 8),
-                                   (unsigned char)tempo};
     unsigned char meter[4] = {4, 2, 24, 8};
-    if (write_meta(f, 0, 0x51, tempo_data, 3) != 0 || write_meta(f, 0, 0x58, meter, 4) != 0 ||
+    unsigned tempo = step_tempo(score, perf, 0);
+    if (tempo_event(f, 0, tempo) != 0 || write_meta(f, 0, 0x58, meter, 4) != 0 ||
         key_signature(f, 0, score->key[0]) != 0)
         return -1;
     unsigned last = 0;
-    if (score->nsections > 1) {
-        unsigned at = (unsigned)score->modulate_at * step_ticks(score);
-        if (key_signature(f, at, score->key[1]) != 0) return -1;
+    /* a tempo change wherever the performance bends the time, and the key
+     * change where the piece modulates */
+    for (int s = 1; s < score->span; s++) {
+        unsigned at = (unsigned)s * step_ticks(score);
+        if (score->nsections > 1 && s == score->modulate_at) {
+            if (key_signature(f, at - last, score->key[1]) != 0) return -1;
+            last = at;
+        }
+        unsigned now = step_tempo(score, perf, s);
+        if (now == tempo) continue;
+        if (tempo_event(f, at - last, now) != 0) return -1;
+        tempo = now;
         last = at;
     }
-    unsigned end = (unsigned)score->span * step_ticks(score);
+    unsigned end = end_tick(score, perf);
     return end_track(f, len_pos, end > last ? end - last : 0);
 }
 
-static int write_voice(FILE *f, const Score *score, int v) {
+static int write_voice(FILE *f, const Score *score, int v, const Performance *perf) {
     long len_pos = begin_track(f);
     if (len_pos < 0) return -1;
-    /* the instrument's name and General MIDI program; MIDI is always at
-     * sounding pitch, whatever the part is written in */
+    /* the instrument's name and General MIDI program, its volume and pan;
+     * MIDI is always at sounding pitch, whatever the part is written in */
     char name[40];
     score_part_name(score, v, name, sizeof(name));
     const Part *part = score_part(score, v);
@@ -109,6 +161,13 @@ static int write_voice(FILE *f, const Score *score, int v) {
     if (write_meta(f, 0, 0x03, (const unsigned char *)name, (unsigned)strlen(name)) != 0 ||
         write_bytes(f, program, 3) != 0)
         return -1;
+    if (perf != NULL) {
+        int pan = 64 + (int)lround(perf->pan[v] * 63.0 / 100.0);
+        /* two controller events, each after a delta time of 0 */
+        unsigned char mix[8] = {0, (unsigned char)(0xB0 | v), 7,  (unsigned char)perf->volume[v],
+                                0, (unsigned char)(0xB0 | v), 10, (unsigned char)pan};
+        if (write_bytes(f, mix, sizeof(mix)) != 0) return -1;
+    }
     unsigned last = 0;
     const ScoreVoice *voice = &score->voice[v];
     for (int k = 0; k < voice->count; k++) {
@@ -116,18 +175,35 @@ static int write_voice(FILE *f, const Score *score, int v) {
         if (note->pitch == SOUND_REST) continue;
         unsigned on = (unsigned)note->start * step_ticks(score);
         unsigned off = on + (unsigned)note->length * step_ticks(score);
-        unsigned char on_msg[3] = {(unsigned char)(0x90 | v), (unsigned char)note->pitch, 80};
+        int velocity = 80;
+        if (perf != NULL) {
+            double t_on;
+            double t_off;
+            perform_span(perf, score, v, k, false, &t_on, &t_off);
+            off = ticks_at(score, perf, t_off);
+            velocity = perf->note[v][k].velocity;
+            /* one voice is one line: a legato note ends where the next begins */
+            for (int j = k + 1; j < voice->count; j++) {
+                if (voice->notes[j].pitch == SOUND_REST) continue;
+                unsigned next = (unsigned)voice->notes[j].start * step_ticks(score);
+                if (off > next) off = next;
+                break;
+            }
+            if (off <= on) off = on + 1;
+        }
+        unsigned char on_msg[3] = {(unsigned char)(0x90 | v), (unsigned char)note->pitch,
+                                   (unsigned char)velocity};
         unsigned char off_msg[3] = {(unsigned char)(0x80 | v), (unsigned char)note->pitch, 0};
         if (write_vlq(f, on - last) != 0 || write_bytes(f, on_msg, 3) != 0 ||
             write_vlq(f, off - on) != 0 || write_bytes(f, off_msg, 3) != 0)
             return -1;
         last = off;
     }
-    unsigned end = (unsigned)score->span * step_ticks(score);
+    unsigned end = end_tick(score, perf);
     return end_track(f, len_pos, end > last ? end - last : 0);
 }
 
-bool midi_write_score(const char *path, const Score *score) {
+bool midi_write_performed(const char *path, const Score *score, const Performance *perf) {
     if (path == NULL || score == NULL || score->voices < 1 || score->voices > 15) return false;
     for (int v = 0; v < score->voices; v++) {
         for (int k = 0; k < score->voice[v].count; k++) {
@@ -141,8 +217,12 @@ bool midi_write_score(const char *path, const Score *score) {
     if (fwrite("MThd", 1, 4, f) != 4 || write_u32be(f, 6) != 0 || write_u16be(f, 1) != 0 ||
         write_u16be(f, (unsigned)score->voices + 1) != 0 || write_u16be(f, MIDI_PPQ) != 0)
         rc = -1;
-    if (rc == 0) rc = write_conductor(f, score);
-    for (int v = 0; v < score->voices && rc == 0; v++) rc = write_voice(f, score, v);
+    if (rc == 0) rc = write_conductor(f, score, perf);
+    for (int v = 0; v < score->voices && rc == 0; v++) rc = write_voice(f, score, v, perf);
     if (fclose(f) != 0) rc = -1;
     return rc == 0;
+}
+
+bool midi_write_score(const char *path, const Score *score) {
+    return midi_write_performed(path, score, NULL);
 }

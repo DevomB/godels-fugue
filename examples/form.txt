@@ -1,0 +1,31 @@
+# A melody with a form (phrase 2): four two-bar phrases. The first states a
+# subject; the second brings its first bar back upside down, against the
+# second voice entering with the subject itself; the third, holding the
+# climax, moves differently; the last brings the subject back at its own
+# pitch before the cadence. Each phrase but the last ends on a long note or a
+# rest, on a dominant chord prepared by IV or ii. The climax, two thirds of
+# the way through, is the melody's single top. report.txt and score.html show
+# the phrases; the energy names the form's costs (subject, contrast, breath,
+# arrival) and the proof its rules (form).
+grid eighth
+length 64
+voices 2
+delay 16
+transpose_1 -12
+key D
+mode minor
+harmony 1
+rhythm 1
+max_hold 3
+max_rests 4
+leading_tone 1
+range_low 45
+range_high 84
+phrase 2
+w_sequence 3
+w_arc 5
+climax 66
+w_step 3
+w_gravity 0
+tempo 80
+optimize 4000

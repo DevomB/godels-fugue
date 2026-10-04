@@ -59,6 +59,7 @@ add_library(canon STATIC
   src/output.c
   src/page.c
   src/parts.c
+  src/perform.c
   src/proof.c
   src/run.c
   src/sat.c
@@ -107,7 +108,8 @@ foreach(name IN ITEMS
     test_export
     test_notation
     test_midi
-    test_midi_read)
+    test_midi_read
+    test_perform)
   add_executable(${name} tests/${name}.c)
   target_link_libraries(${name} PRIVATE canon)
   add_test(NAME ${name} COMMAND ${name})

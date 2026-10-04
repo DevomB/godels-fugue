@@ -1,0 +1,32 @@
+# Three players chosen one by one (parts), not as an ensemble: an oboe, a
+# viola an octave below and a bassoon two octaves below. Each instrument's
+# range is a rule, so every note fits its player. Each has its own mix and
+# way of playing: the oboe a little louder and to the left, the viola
+# legato, the bassoon detached and shaped less strongly. The notes are the
+# same whatever the mix; canon.mid and voices.wav carry it.
+grid eighth
+length 48
+voices 3
+delay 16
+transpose_1 -12
+transpose_2 -24
+key G
+mode major
+harmony 1
+rhythm 1
+max_hold 3
+max_rests 2
+range_low 34
+range_high 91
+phrase 2
+w_sequence 3
+w_arc 4
+climax 60
+parts oboe, viola, bassoon
+volume 110, 90, 95
+pan -40, 0, 40
+articulation auto, legato, detached
+intensity 100, 100, 70
+mood longing
+tempo 72
+optimize 4000

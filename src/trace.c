@@ -2,6 +2,7 @@
 
 #include "canon.h"
 #include "explain.h"
+#include "parts.h"
 #include "theory.h"
 
 #include <string.h>
@@ -91,16 +92,99 @@ bool trace_write_entropy(const char *path, const Run *run) {
 }
 
 static void write_config(FILE *f, const PieceConfig *config) {
-    fprintf(f, "\"config\":{");
-    for (int i = 0; i < config_key_count(); i++) {
-        char value[CONFIG_VALUE_MAX];
-        config_key_value(config, i, value, sizeof(value));
-        fprintf(f, "%s", i ? "," : "");
-        json_string(f, config_key_name(i));
-        fprintf(f, ":");
-        json_string(f, value);
+    fprintf(f, "\"config\":");
+    config_write_json(f, config);
+}
+
+void trace_write_plan(FILE *f, const Model *m) {
+    const PieceConfig *c = &m->config;
+    fprintf(f, "\"players\":[");
+    for (int v = 0; v < m->voices; v++) {
+        const Part *p = part_get(m->part[v]);
+        fprintf(f, "%s{\"voice\":%d,\"part\":", v ? "," : "", v + 1);
+        json_string(f, p != NULL ? p->id : "auto");
+        fprintf(f, ",\"name\":");
+        char name[48];
+        if (p != NULL) {
+            snprintf(name, sizeof(name), "%s", p->name);
+        } else {
+            snprintf(name, sizeof(name), "Voice %d", v + 1);
+        }
+        json_string(f, name);
+        fprintf(f, ",\"sample\":");
+        json_string(f, p != NULL ? p->sample : "");
+        fprintf(f, ",\"program\":%d,\"gain\":%d,\"struck\":%s,\"low\":%d,\"high\":%d,"
+                   "\"transpose\":%d,\"delay\":%d}",
+                p != NULL ? p->program : 0, p != NULL ? p->gain : 0,
+                p == NULL || p->struck ? "true" : "false", m->low[v], m->high[v],
+                canon_transpose(c, v), canon_voice_delay(c, v));
     }
-    fprintf(f, "}");
+    const FormPlan *form = &m->form;
+    fprintf(f, "],\"form\":{\"head\":%d,\"climax\":%d,\"phrases\":[", form->head,
+            form->climax);
+    for (int k = 0; k < form->count; k++) {
+        fprintf(f, "%s{\"start\":%d,\"end\":%d,\"role\":\"%s\"}", k ? "," : "",
+                form->start[k], form->start[k + 1], role_name(form->role[k]));
+    }
+    fprintf(f, "]},\"instruments\":[");
+    for (int id = 1; id < PART_COUNT; id++) {
+        const Part *p = part_get(id);
+        fprintf(f, "%s{\"id\":", id > 1 ? "," : "");
+        json_string(f, p->id);
+        fprintf(f, ",\"name\":");
+        json_string(f, p->name);
+        fprintf(f, ",\"low\":%d,\"high\":%d}", p->low, p->high);
+    }
+    fprintf(f, "],\"keepsNotes\":[");
+    bool first = true;
+    for (int i = 0; i < config_key_count(); i++) {
+        if (!config_keeps_notes(config_key_name(i))) continue;
+        fprintf(f, "%s", first ? "" : ",");
+        json_string(f, config_key_name(i));
+        first = false;
+    }
+    fprintf(f, "]");
+}
+
+/* The root of a chord as a pitch class: the triad note a third and a fifth
+ * sit above. */
+static int chord_root(int key, int degree) {
+    int mask = key_triad_mask(key, degree);
+    for (int r = 0; r < 12; r++) {
+        if (!((mask >> r) & 1)) continue;
+        bool third = ((mask >> ((r + 3) % 12)) & 1) || ((mask >> ((r + 4) % 12)) & 1);
+        bool fifth = ((mask >> ((r + 6) % 12)) & 1) || ((mask >> ((r + 7) % 12)) & 1) ||
+                     ((mask >> ((r + 8) % 12)) & 1);
+        if (third && fifth) return r;
+    }
+    return -1;
+}
+
+static void write_times(FILE *f, const char *name, const double *t, int n) {
+    fprintf(f, "\"%s\":[", name);
+    for (int i = 0; i < n; i++) fprintf(f, "%s%.4f", i ? "," : "", t[i]);
+    fprintf(f, "]");
+}
+
+/* How the piece is played (perform.h): the mood, the time map with and
+ * without the closing broadening, the hold, and each voice's mix. Each
+ * note's velocity and sounding share sit with the note in "score". */
+static void write_perform(FILE *f, const Run *run) {
+    const Performance *p = &run->perf;
+    int span = run->model.span;
+    fprintf(f, ",\"perform\":{\"mood\":\"%s\",\"hold\":%.4f,\"climax\":%d,",
+            perform_mood_name(p->mood), p->hold, p->climax);
+    write_times(f, "times", p->times, span + 1);
+    fprintf(f, ",");
+    write_times(f, "loopTimes", p->loop_times, span + 1);
+    fprintf(f, ",\"volume\":[");
+    for (int v = 0; v < run->model.voices; v++) fprintf(f, "%s%d", v ? "," : "", p->volume[v]);
+    fprintf(f, "],\"gain\":[");
+    for (int v = 0; v < run->model.voices; v++)
+        fprintf(f, "%s%.4f", v ? "," : "", perform_gain(p, v));
+    fprintf(f, "],\"pan\":[");
+    for (int v = 0; v < run->model.voices; v++) fprintf(f, "%s%d", v ? "," : "", p->pan[v]);
+    fprintf(f, "]}");
 }
 
 static void write_keys(FILE *f, const Run *run) {
@@ -135,11 +219,12 @@ static void write_score(FILE *f, const Run *run) {
                 int key = score->key[score->nsections > 1 && n->start >= score->modulate_at];
                 key_pitch_name(key, n->pitch, name, sizeof(name));
             }
+            const PerformNote *pn = &run->perf.note[v][k];
             fprintf(f, "%s{\"start\":%d,\"length\":%d,\"pitch\":%d,\"source\":%d,\"var\":%d,"
-                       "\"label\":",
+                       "\"vel\":%d,\"sound\":%.3f,\"label\":",
                     k ? "," : "", n->start, n->length,
                     n->pitch == SOUND_REST ? -1 : n->pitch, n->source,
-                    n->source >= 0 ? m->pitch[n->source] : -1);
+                    n->source >= 0 ? m->pitch[n->source] : -1, pn->velocity, pn->sounding);
             json_string(f, name);
             fprintf(f, "}");
         }
@@ -221,13 +306,14 @@ static void write_stats(FILE *f, const Run *run) {
             "\"learned\":%ld,\"propagations\":%ld,\"removals\":%ld,\"forced\":%ld,"
             "\"seconds\":%.4f,\"entropy\":%.6f,\"variables\":%d,\"constraints\":%d,"
             "\"terms\":%d,\"pieces\":%ld,\"firstEnergy\":%d,\"firstNodes\":%ld,"
-            "\"firstBacktracks\":%ld,\"windows\":%ld,\"converged\":%s,\"rules\":{",
+            "\"firstBacktracks\":%ld,\"windows\":%ld,\"converged\":%s,\"limited\":%s,"
+            "\"rules\":{",
             st->nodes, st->decisions, st->backtracks, st->backjumps, st->learned,
             st->propagations, st->removals, forced_count(&run->state.proof), st->seconds,
             solver_entropy(&run->state), run->model.nvars, run->model.ncons, run->model.nterms,
             st->solutions, st->first_energy,
             st->first.nodes, st->first.backtracks, st->windows,
-            st->converged ? "true" : "false");
+            st->converged ? "true" : "false", st->limited ? "true" : "false");
     bool first = true;
     for (int r = 1; r < CID_MAX; r++) {
         if (st->removals_by_rule[r] == 0) continue;
@@ -288,9 +374,12 @@ void trace_write_json(FILE *f, const Run *run) {
         first = false;
     }
     fprintf(f, "],");
+    trace_write_plan(f, m);
+    fprintf(f, ",");
     write_keys(f, run);
     fprintf(f, ",");
     write_score(f, run);
+    if (run->status == SOLVE_SAT) write_perform(f, run);
 
     fprintf(f, ",\"chords\":[");
     for (int b = 0; b < m->nbars && m->chord[b] >= 0; b++) {
@@ -298,7 +387,8 @@ void trace_write_json(FILE *f, const Run *run) {
         int chord = run->values[m->chord[b]];
         int key = run->values[m->key[model_section_at(m, b * bar_steps)]];
         if (chord >= 0 && key >= 0) degree_name(key, chord, name, sizeof(name));
-        fprintf(f, "%s{\"bar\":%d,\"var\":%d,\"label\":", b ? "," : "", b + 1, m->chord[b]);
+        fprintf(f, "%s{\"bar\":%d,\"var\":%d,\"root\":%d,\"label\":", b ? "," : "", b + 1,
+                m->chord[b], chord >= 0 && key >= 0 ? chord_root(key, chord) : -1);
         json_string(f, name);
         fprintf(f, "}");
     }
