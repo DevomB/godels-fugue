@@ -142,6 +142,11 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   recovering after a leap, a repeating motif, contrary rather than similar motion
   between voices (`w_contrary`), pitch-class weights learned from a corpus, and more.
   Their sum is the piece's *energy*.
+- **A shape for the melody**: `w_arc` makes the melody climb to one high point, its
+  climax, placed on a strong beat at `climax` percent of the way through (66 by
+  default), and keeps the opening well below it so the peak is earned. `w_sequence`
+  asks each bar to echo the contour of the bar before, so a figure is heard again a
+  step higher or lower, the way a sequence builds tension.
 - **Search** with minimum-remaining-values, entropy or look-ahead variable ordering,
   conflict-directed backjumping, learned conflicts, node and time limits, and a
   neighbourhood optimizer that lowers the energy after the first solution.
@@ -151,8 +156,26 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   alone does not force the value or a very large piece ran out of budget, is marked
   "full reason, not minimized"), an unsat core for impossible rule sets, and a
   counterfactual for given notes.
-- **Style presets**: `renaissance`, `baroque`, `classical`, `minimalist`,
-  `experimental`.
+- **Moods**: six presets, each a feeling rather than a period. A preset picks the
+  ensemble, key, mode, tempo, rhythm, where the climax falls and the costs that shape
+  the line:
+
+  | Preset | Feeling | Sound |
+  | --- | --- | --- |
+  | `lament` | grief | strings in D minor, slow, crying out early and falling a long way by step |
+  | `hymn` | calm | an organ in G major, long notes moving by step, rising to a peak and coming to rest |
+  | `triumph` | victory | brass in C major, leaping like fanfares, climbing to the peak near the end |
+  | `longing` | longing | a flute and a cello in A minor that turn to C major, reaching up late and letting go |
+  | `dance` | joy | a round for woodwinds in F major, quick and light, a bouncing motif that keeps coming back |
+  | `nocturne` | night | a quiet piano duet in E-flat major, slow and songlike, rising once and falling away |
+
+- **Played with expression**: the score page does not play the notes flat. Its
+  `mood` (set by each preset, or guessed from the tempo and key) shapes the
+  performance: the dynamics swell toward the climax and fall away after it, strong
+  beats are accented, phrases breathe at their ends, the tempo bends a little
+  (rubato) and slows over the last two bars, and the final chord is held. A lament
+  is played quietly and legato with a long ritardando, a dance lightly and in strict
+  time, a triumph loud to the end.
 - **A SAT cross-check** (`--sat`) that encodes the same rules for a separate DPLL
   solver.
 - **Counting and sensitivity** (`--count`, `--sensitivity`): how many pieces the
@@ -176,13 +199,13 @@ range_high 79
 JSON works too, and so does starting from a preset:
 
 ```json
-{ "preset": "baroque", "key": "D", "length": 20, "tempo": 96 }
+{ "preset": "lament", "key": "E", "tempo": 60, "seed": 4 }
 ```
 
 ```sh
 ./build/godels-fugue --config piece.txt
-./build/godels-fugue --config examples/baroque.json
-./build/godels-fugue --preset minimalist --set tempo=140
+./build/godels-fugue --config examples/lament.json
+./build/godels-fugue --preset dance --set key=G
 ```
 
 Settings apply in order: the defaults, then `--preset`, then the config file (whose own
@@ -208,11 +231,14 @@ The keys you are most likely to change:
 | `max_spacing`, `crossing` | off, allowed | Widest interval between voices; whether a later voice may sound above an earlier one |
 | `melody` | all free | The notes to keep, `?` for the ones to choose |
 | `w_leap`, `w_step` | 1, 0 | Costs of melodic leaps: per four semitones, and by size past a whole step (for stepwise lines) |
+| `w_arc`, `climax` | 0, 66 | Cost of notes that rise above the climax note, and where the climax falls (percent of the way through) |
+| `w_sequence` | 0 | Cost of a bar whose contour does not echo the bar before |
 | `w_figure` | 3 | On the sixteenth grid, the cost of each beat's rhythm figure: nothing for a quarter or two eighths, more for sixteenths, most for one off the beat |
 | `optimize` | 10000 | Nodes spent lowering the energy after the first solution |
 | `seed`, `temperature` | 1, 0 | Sampling instead of always taking the cheapest value |
 | `tempo`, `instrument` | 120, pluck | Quarter notes per minute; the sound of `voices.wav`: `pluck`, `organ` or `sine` |
 | `ensemble`, `written` | none, transposed | The instruments the parts are written for (`saxes`, `strings`, `brass`, ...), transposed or at concert pitch |
+| `mood` | auto | How the score page performs the piece: `plain`, `lament`, `hymn`, `triumph`, `longing`, `dance`, `nocturne`, or `auto` to guess from tempo and key |
 
 The `examples/` directory has a config for each feature. Each file starts with a
 comment saying what it shows.

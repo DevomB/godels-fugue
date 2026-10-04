@@ -110,6 +110,19 @@ can be broken down by rule (`report.txt`, `score.html`):
   semitones, so it leaves thirds free and a line can hop between chord tones; this
   favours stepwise lines;
 - **motif** – breaking a repeating interval pattern;
+- **arc** – the melody's shape around one climax (`w_arc`). The climax is the step
+  `climax` percent of the way through, moved to the nearest strong beat; every other
+  note pays for each semitone it rises above the climax note (this times
+  1 + semitones / 3), and a note in the first quarter also pays unless it is at least
+  a major third below. The melody has one peak, reached once and left behind, and
+  begins low enough that the climb is heard. The cost can only be paid where the range
+  leaves room: a peak at the top of the range is free, so a preset that wants an
+  early peak widens the range below it;
+- **sequence** – a bar that does not echo the bar before (`w_sequence`): for each
+  step, the direction of the interval into it is compared with the one a bar earlier.
+  Opposite directions cost the weight, a different interval in the same direction
+  half of it, and a match or a move of a semitone or less nothing. Bars then repeat a
+  figure at another pitch, the sequence that carries a line forward;
 - **dissonance** and **direct perfect** – graded vertical dissonance, and similar
   motion into a fifth or octave;
 - **contrary motion** – each pair of voices both moving up or both moving down from
@@ -423,8 +436,27 @@ Playback gives each voice its own sampled instrument (General MIDI soundfonts lo
 through smplr), chosen by register from an ensemble, so the imitation is heard moving
 between timbres; a bass line plays each bar's chord root on beat one and the root or
 fifth on beat three. Notes are phrased by metre (downbeats louder, off-beats softer),
-by an arch over the piece and by each voice's entry, with a little timing looseness.
-Without the network the synths of `voices.wav` play instead.
+by each voice's entry and by an expression plan, below. Without the network the
+synths of `voices.wav` play instead.
+
+**Expression.** A piece played exactly as written sounds mechanical, so the page
+performs it. The `mood` key names a profile (`plain`, `lament`, `hymn`, `triumph`,
+`longing`, `dance`, `nocturne`); `auto` guesses one from the first key and the tempo
+(slow minor is a lament, slow major a hymn, 120 and faster a dance, the rest plain).
+A profile sets:
+
+- a dynamic arc of three levels, at the start, at the climax and at the end, joined
+  by cosine easing; the climax is the onset of the highest note nearest two thirds of
+  the way through, kept between 35 and 85 percent. A lament starts quiet, cries out
+  and fades; a triumph keeps growing to the last chord;
+- the strength of metric accents and how legato the notes are (a dance is short and
+  accented, a hymn joined);
+- a time map from steps to seconds: rubato (a gentle wave in the tempo), a breath
+  that lengthens the last step of each four-bar phrase, and a ritardando over the last
+  two bars; a loop drops the ritardando so it stays in time;
+- how long the final chord is held, as a fermata.
+
+The plan applies to every voice alike, so the canon's voices still line up.
 
 **Built.** **Partly built**: the fingerprint shows the coupling through simultaneous
 notes; a full constraint graph (chords, keys, ties and every rule as nodes) is not
@@ -432,8 +464,17 @@ built.
 
 ## 13. Presets and modes
 
-`renaissance`, `baroque`, `classical`, `minimalist` and `experimental` bundle key,
-mode, rules and weights. They are rule systems, not imitations of historical style.
+The presets are moods: `lament`, `hymn`, `triumph`, `longing`, `dance` and
+`nocturne`. Each bundles an ensemble, a key and mode, a tempo, rhythm and harmony, the
+arc's climax and the costs that make the line sound like its feeling. A lament falls a
+long way by step from an early peak, slowly, on strings in D minor; a hymn moves in
+long consonant steps on an organ; a triumph leaps in fanfares and sequences up to a
+late peak on brass; longing turns from A minor to C major and peaks late; a dance is a
+quick round with a recurring motif; a nocturne is a quiet piano duet that rises once.
+Each preset also sets `mood`, so the score page performs it in kind. They are a
+starting point to change with `--set`, not a guarantee of the feeling: the solver
+weighs these costs against every rule, and how a piece moves a listener is not
+measured.
 
 **Built.** **Not built**: changing the rules part-way through a piece ("rule
 mutation"), and separate physics, counterpoint and research modes. The outputs
