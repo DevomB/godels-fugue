@@ -606,9 +606,12 @@ static void test_parts(void) {
     s.voice[0].count = 1;
     s.voice[0].notes[0] = d4;
     for (int t = 0; t < 4; t++) s.line[0][t] = 62;
-    /* one voice takes the ensemble's highest instrument */
-    parts_assign(&s, ENSEMBLE_SAXES, WRITTEN_TRANSPOSED);
-    CHECK(s.part[0] == PART_SOPRANO_SAX && !s.concert);
+    /* of two voices, the higher takes the ensemble's highest instrument */
+    PieceConfig two = test_config();
+    test_set(&two, "transpose_1=-12");
+    test_set(&two, "ensemble=saxes");
+    parts_for_config(&two, s.part);
+    CHECK(s.part[0] == PART_SOPRANO_SAX && s.part[1] == PART_BARITONE_SAX && !s.concert);
 
     s.part[0] = PART_ALTO_SAX;
     CHECK(score_written_up(&s, 0) == 9);
@@ -656,8 +659,9 @@ static void test_parts(void) {
     s.voice[0].notes[0].pitch = 58;
     CHECK(score_out_of_range(&s, 0) == 1);
 
-    /* three voices take the highest, the next and the lowest instrument by
-     * register, whatever their order */
+    /* three voices take the ensemble's top, third and bottom instruments in
+     * the order of their transpositions, whatever their notes; a voice's own
+     * part overrides the ensemble */
     Score r;
     memset(&r, 0, sizeof(r));
     r.voices = 3;
@@ -667,14 +671,34 @@ static void test_parts(void) {
         r.line[1][t] = 72;
         r.line[2][t] = 48;
     }
-    parts_assign(&r, ENSEMBLE_SAXES, WRITTEN_TRANSPOSED);
-    CHECK(r.part[1] == PART_SOPRANO_SAX && r.part[0] == PART_ALTO_SAX &&
+    PieceConfig c = test_config();
+    test_set(&c, "voices=3");
+    test_set(&c, "transpose_1=12");
+    test_set(&c, "transpose_2=-12");
+    test_set(&c, "ensemble=saxes");
+    parts_for_config(&c, r.part);
+    CHECK(r.part[1] == PART_SOPRANO_SAX && r.part[0] == PART_TENOR_SAX &&
           r.part[2] == PART_BARITONE_SAX);
     CHECK(score_clef(&r, 2) == 'G'); /* saxes all read treble clef */
-    parts_assign(&r, ENSEMBLE_STRINGS, WRITTEN_TRANSPOSED);
-    CHECK(r.part[1] == PART_VIOLIN && r.part[0] == PART_VIOLIN && r.part[2] == PART_CELLO);
-    CHECK(score_clef(&r, 2) == 'F');
-    parts_assign(&r, ENSEMBLE_NONE, WRITTEN_TRANSPOSED);
+    test_set(&c, "ensemble=strings");
+    parts_for_config(&c, r.part);
+    CHECK(r.part[1] == PART_VIOLIN && r.part[0] == PART_VIOLA && r.part[2] == PART_CELLO);
+    CHECK(score_clef(&r, 2) == 'F' && score_clef(&r, 0) == 'C');
+    test_set(&c, "parts=auto,flute");
+    parts_for_config(&c, r.part);
+    CHECK(r.part[0] == PART_VIOLA && r.part[1] == PART_FLUTE && r.part[2] == PART_CELLO);
+    /* a voice's range is the narrowest of the piece's, its instrument's and its own */
+    int low, high;
+    test_set(&c, "range_low=30");
+    test_set(&c, "range_high=90");
+    test_set(&c, "part_high=0,0,70");
+    part_range(&c, 2, &low, &high);
+    CHECK(low == 36 && high == 70); /* the cello's floor, part_high's ceiling */
+    part_range(&c, 1, &low, &high);
+    CHECK(low == 60 && high == 90); /* the flute's floor, the piece's ceiling */
+    test_set(&c, "ensemble=none");
+    test_set(&c, "parts=auto");
+    parts_for_config(&c, r.part);
     CHECK(score_part(&r, 2) == NULL && score_clef(&r, 2) == 'F' && score_clef(&r, 1) == 'G');
     char name[40];
     score_part_name(&r, 2, name, sizeof(name));

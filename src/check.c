@@ -131,8 +131,8 @@ static void spell(const Model *m, int var, int key, int value, char *buf, size_t
     }
 }
 
-static bool outside(const Model *m, int type, int key, int pitch) {
-    if (type == C_RANGE) return pitch < m->config.range_low || pitch > m->config.range_high;
+static bool outside(const Model *m, int type, int key, int pitch, int voice) {
+    if (type == C_RANGE) return pitch < m->low[voice] || pitch > m->high[voice];
     return key >= 0 && !key_has_pitch(key, pitch);
 }
 
@@ -140,11 +140,11 @@ static bool outside(const Model *m, int type, int key, int pitch) {
  * of the range or the key, or -1. */
 static int broken_follower(const Model *m, const Constraint *c, int key, int value) {
     if (c->type != C_RANGE && c->type != C_SCALE) return -1;
-    if (value == PITCH_REST || outside(m, c->type, key, value)) return -1;
+    if (value == PITCH_REST || outside(m, c->type, key, value, 0)) return -1;
     for (int k = 0; k < c->nslots; k++) {
         if (c->voice[k] <= 0) continue;
         int s = canon_sounding(&m->config, c->voice[k], value);
-        if (s != SOUND_REST && outside(m, c->type, key, s)) return k;
+        if (s != SOUND_REST && outside(m, c->type, key, s, c->voice[k])) return k;
     }
     return -1;
 }

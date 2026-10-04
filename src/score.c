@@ -1,7 +1,6 @@
 #include "score.h"
 
 #include "canon.h"
-#include "parts.h"
 
 #include <string.h>
 
@@ -50,7 +49,9 @@ void score_build(Score *score, const Model *m, const int *values) {
             prev_attack = attack;
         }
     }
-    parts_assign(score, m->config.ensemble, m->config.written);
+    /* the instruments the model composed for, so their ranges held */
+    for (int v = 0; v < VOICE_MAX; v++) score->part[v] = m->part[v];
+    score->concert = m->config.written == WRITTEN_CONCERT;
 }
 
 int score_beat_steps(const Score *score) {
