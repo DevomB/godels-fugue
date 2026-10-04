@@ -275,6 +275,7 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
       <label for="cx-pos" class="muted">Event</label>
       <input id="cx-pos" type="range" min="0" max="0" step="1" value="0">
       <span class="replay-pos" id="cx-count"></span>
+      <label class="loop" title="Pluck each note as the solver decides or forces it"><input id="cx-sound" type="checkbox" checked> Sound</label>
       <label>Speed <select id="cx-speed"><option value="5">5 events/s</option><option value="20" selected>20 events/s</option><option value="80">80 events/s</option><option value="400">400 events/s</option></select></label>
     </div>
     <div class="legend"><span><span class="swatch" style="background:var(--series-1)"></span>still possible</span><span><span class="swatch" style="background:var(--series-2)"></span>only value left</span><span><span class="swatch" style="box-shadow:inset 0 0 0 2px var(--critical)"></span>removed by this event</span></div>
@@ -1073,7 +1074,19 @@ const PIECE = /*PIECE_DATA*/;
     cxLast = now;
     const steps = Math.floor(cxCarry);
     cxCarry -= steps;
-    if (steps) cxGo(cxPos + steps);
+    if (steps) {
+      const from = cxPos;
+      cxGo(cxPos + steps);
+      /* hear the solver think: pluck each note as it is decided or forced */
+      let plucked = 0;
+      for (let k = from; k < cxPos && plucked < 3; k++) {
+        const e = events[k];
+        if (e.type !== "remove" && e.value > 0 && byId[e.varId] && byId[e.varId].kind === "pitch") {
+          chirp(e.value);
+          plucked++;
+        }
+      }
+    }
     if (cxPos >= events.length) { cxStop(); return; }
     cxTimer = requestAnimationFrame(cxTick);
   }
@@ -1234,6 +1247,24 @@ const PIECE = /*PIECE_DATA*/;
     const real = new Float32Array([0, 0, 0, 0, 0]);
     const imag = new Float32Array([0, 1, 0.5, 0.25, 0.12]);
     return audio.createPeriodicWave(real, imag);
+  }
+  function chirp(pitch) {
+    if (!document.getElementById("cx-sound").checked) return;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    audio = audio || new Ctx();
+    if (audio.state === "suspended") audio.resume();
+    bus = bus || makeBus();
+    const src = audio.createBufferSource();
+    src.buffer = pluckBuffer(pitch, 1, 0);
+    const g = audio.createGain(), t = audio.currentTime + 0.01;
+    g.gain.setValueAtTime(0.4, t);
+    g.gain.linearRampToValueAtTime(0, t + 0.6);
+    src.connect(g);
+    g.connect(bus.dry);
+    g.connect(bus.verb);
+    src.start(t);
+    src.stop(t + 0.65);
   }
   function stop() {
     for (const o of playing) { try { o.stop(); } catch (err) { /* already stopped */ } }
