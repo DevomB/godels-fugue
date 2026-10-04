@@ -104,7 +104,7 @@ foreach(path IN LISTS examples)
   endif()
 endforeach()
 
-foreach(preset IN ITEMS renaissance baroque classical minimalist experimental)
+foreach(preset IN ITEMS lament hymn triumph longing dance nocturne)
   run("preset_${preset}" 0 MATCH "melody:" ARGS --preset ${preset})
 endforeach()
 
@@ -372,7 +372,7 @@ if(NOT report MATCHES "\ngrid sixteenth\r?\n" OR NOT report MATCHES "\nlength 12
 endif()
 run(help 0 MATCH "usage: godels-fugue" ARGS --help)
 run(version 0 MATCH "godels-fugue [0-9]" ARGS --version)
-run(presets 0 MATCH "baroque" ARGS --list-presets)
+run(presets 0 MATCH "lament" ARGS --list-presets)
 run(bad_arg 1 ERROR "unknown argument" ARGS --frobnicate)
 run(missing 1 ERROR "missing value for --config" ARGS --config)
 run(bad_set 1 ERROR "unknown config key: tempi" ARGS --set tempi=3)

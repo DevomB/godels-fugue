@@ -260,8 +260,9 @@ static void test_presets(void) {
     config_defaults(&c);
     CHECK(!config_apply_preset(&c, "romantic", err, sizeof(err)));
     CHECK(strstr(err, "unknown preset") != NULL);
-    CHECK(config_apply_preset(&c, "baroque", err, sizeof(err)));
+    CHECK(config_apply_preset(&c, "triumph", err, sizeof(err)));
     CHECK(c.voices == 3 && c.harmony == 1);
+    CHECK(c.ensemble == ENSEMBLE_BRASS && c.mood == MOOD_TRIUMPH);
 }
 
 static void test_files(void) {
@@ -275,7 +276,7 @@ static void test_files(void) {
                "voices 2   # trailing comment\n"
                "key D\n"
                "mode minor\n"
-               "preset baroque\n"
+               "preset lament\n"
                "\n"
                "pc_weight 0 0 0 0 0 0 0 0 0 0 0 5\n");
     config_defaults(&c);
@@ -297,7 +298,7 @@ static void test_files(void) {
 
     write_file("output/tests/config.json",
                "{\"voices\": 3, \"invert\": true, \"key\": \"G\", \"mode\": \"search\",\n"
-               " \"pc_weight\": [1,1,1,1,1,1,1,1,1,1,1,2], \"preset\": \"renaissance\"}\n");
+               " \"pc_weight\": [1,1,1,1,1,1,1,1,1,1,1,2], \"preset\": \"hymn\"}\n");
     config_defaults(&c);
     CHECK(config_load_file(&c, "output/tests/config.json", err, sizeof(err)));
     CHECK(c.voices == 3);
@@ -425,7 +426,7 @@ static void test_round_trip(void) {
     PieceConfig b;
     char err[200];
     config_defaults(&a);
-    test_set(&a, "preset=baroque");
+    test_set(&a, "preset=triumph");
     test_set(&a, "key=search");
     test_set(&a, "modulate_at=8");
     test_set(&a, "key_second=related");

@@ -715,40 +715,54 @@ bool config_assign(PieceConfig *config, const char *assignment, char *err, size_
 typedef struct Preset {
     const char *name;
     const char *summary;
-    const char *settings[24];
+    const char *settings[32];
 } Preset;
 
 static const Preset presets[] = {
-    {"renaissance",
-     "Three modal voices in half and quarter notes, a canon at the octave and the fourth below, stepwise, strictly consonant.",
-     {"mode=dorian", "key=D", "voices=3", "delay=8", "transpose_1=-12", "transpose_2=-5",
-      "range_low=45", "range_high=76", "max_leap=5", "consonance=strong", "rhythm=1",
-      "max_hold=1", "w_step=3", "w_gravity=0", "w_leap=2", "w_recover=3", "w_repeat=6",
-      "w_dissonance=2", "w_rhythm=4", "length=24", "tempo=72", NULL}},
-    {"baroque",
-     "Eighth notes and sixteenth figures in three registers, each voice an octave lower and three bars later, over I-IV-V-I.",
-     {"grid=sixteenth", "key=G", "voices=3", "delay=48", "length=128", "transpose_1=-12",
-      "transpose_2=-24", "range_low=43", "range_high=86", "harmony=1", "progression=1",
-      "cadence=1", "rhythm=1", "max_hold=7", "max_rests=1", "leading_tone=1", "w_step=3",
-      "w_gravity=0", "w_hold=1", "w_repeat=6", "w_contrary=1", "tempo=76", "optimize=4000",
-      NULL}},
-    {"classical",
-     "Two voices an octave apart in eighth and quarter notes, periodic phrases, a clear cadence.",
-     {"grid=eighth", "voices=2", "delay=8", "length=48", "transpose_1=-12", "range_low=48",
-      "range_high=84", "harmony=1", "progression=1", "cadence=1", "rhythm=1", "max_hold=3",
-      "max_rests=1", "leading_tone=1", "w_step=3", "w_curve=3", "w_final=6", "w_repeat=6",
-      "tempo=108", NULL}},
-    {"minimalist",
-     "A three-note arpeggio in eighth notes, three voices phasing a dotted quarter apart in a round.",
-     {"grid=eighth", "cyclic=1", "voices=3", "delay=3", "length=24", "range_low=60",
-      "range_high=76", "cadence=0", "consonance=off", "allow_unison=1", "w_motif=6",
-      "motif_a=4", "motif_b=3", "motif_c=-7", "w_curve=0", "w_repeat=1", "w_dissonance=2",
-      "var_order=index", "tempo=132", NULL}},
-    {"experimental",
-     "Lydian mirror canon with off-beat entries on a 3-against-4 grid.",
-     {"mode=lydian", "invert=1", "axis=69", "voices=3", "delay=3", "length=16",
-      "poly_meter=1", "rhythm=1", "consonance=strong", "allow_fourth=1", "parallels=0",
-      "temperature=2", "cadence=0", "range_low=55", "range_high=83", NULL}},
+    {"lament",
+     "Grief: strings in D minor, slow, crying out early and falling a long way by step, its "
+     "sighs echoing from bar to bar.",
+     {"grid=eighth", "length=48", "voices=3", "delay=24", "transpose_1=-12", "transpose_2=-24",
+      "key=D", "mode=minor", "harmony=1", "rhythm=1", "max_hold=5", "max_rests=1",
+      "leading_tone=1", "range_low=38", "range_high=84", "w_step=4", "w_gravity=0", "w_hold=0",
+      "w_repeat=6", "w_contrary=1", "w_arc=8", "climax=35", "w_sequence=2", "tempo=56",
+      "optimize=4000", "ensemble=strings", "mood=lament", NULL}},
+    {"hymn",
+     "Calm: an organ in G major, long notes moving by step, consonant on every strong beat, "
+     "rising to a peak and coming to rest.",
+     {"length=24", "voices=3", "delay=12", "transpose_1=-12", "transpose_2=-24", "key=G",
+      "harmony=1", "rhythm=1", "max_hold=3", "max_rests=0", "max_leap=5", "leading_tone=1",
+      "range_low=36", "range_high=79", "w_step=4", "w_gravity=0", "w_hold=0", "w_arc=5",
+      "climax=60", "w_sequence=2", "tempo=63", "ensemble=organ", "mood=hymn", NULL}},
+    {"triumph",
+     "Victory: brass in C major, leaping like fanfares, its motifs in sequence, climbing to "
+     "the peak near the end and finishing loud.",
+     {"grid=eighth", "length=64", "voices=3", "delay=24", "transpose_1=-12", "transpose_2=-24",
+      "harmony=1", "rhythm=1", "max_hold=3", "max_rests=1", "leading_tone=1", "range_low=36",
+      "range_high=84", "w_step=1", "w_leap=0", "w_arc=6", "climax=80", "w_sequence=3",
+      "w_contrary=1", "tempo=112", "optimize=4000", "ensemble=brass", "mood=triumph", NULL}},
+    {"longing",
+     "Longing: a flute and a cello in A minor that turn to C major, reaching up to the peak "
+     "late and letting go.",
+     {"grid=eighth", "length=64", "voices=2", "delay=16", "transpose_1=-12", "key=A",
+      "mode=minor", "modulate_at=40", "key_second=C", "harmony=1", "rhythm=1", "max_hold=5",
+      "max_rests=1", "leading_tone=1", "range_low=45", "range_high=84", "w_step=3",
+      "w_gravity=0", "w_hold=0", "w_arc=6", "climax=70", "w_sequence=2", "tempo=66",
+      "optimize=4000", "ensemble=chamber", "mood=longing", NULL}},
+    {"dance",
+     "Joy: a round for woodwinds in F major, quick and light, a bouncing motif that keeps "
+     "coming back.",
+     {"grid=eighth", "length=48", "voices=3", "delay=16", "cyclic=1", "key=F", "harmony=1",
+      "rhythm=1", "max_hold=1", "max_rests=1", "range_low=53", "range_high=81", "w_step=2",
+      "w_sequence=4", "w_arc=2", "climax=66", "tempo=132", "optimize=4000", "ensemble=winds",
+      "mood=dance", NULL}},
+    {"nocturne",
+     "Night: a quiet piano duet in E-flat major, slow and songlike, rising once and falling "
+     "away.",
+     {"grid=eighth", "length=48", "voices=2", "delay=16", "transpose_1=-12", "key=Eb",
+      "harmony=1", "rhythm=1", "max_hold=5", "max_rests=1", "leading_tone=1", "range_low=39",
+      "range_high=79", "w_step=3", "w_gravity=0", "w_hold=0", "w_arc=4", "climax=62",
+      "w_sequence=2", "tempo=52", "optimize=4000", "ensemble=piano", "mood=nocturne", NULL}},
 };
 
 enum { PRESET_COUNT = (int)(sizeof(presets) / sizeof(presets[0])) };
