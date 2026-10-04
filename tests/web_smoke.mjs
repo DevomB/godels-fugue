@@ -7,7 +7,7 @@ import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 
 const [buildDir, examplesDir] = process.argv.slice(2).map((p) => resolve(p));
-const CanonCollapse = createRequire(import.meta.url)(join(buildDir, "canon-collapse.js"));
+const GodelsFugue = createRequire(import.meta.url)(join(buildDir, "godels-fugue.js"));
 let failures = 0;
 
 function check(ok, what) {
@@ -19,7 +19,7 @@ function check(ok, what) {
 
 async function run(name, args) {
   const log = [];
-  const mod = await CanonCollapse({ print: (s) => log.push(s), printErr: (s) => log.push(s) });
+  const mod = await GodelsFugue({ print: (s) => log.push(s), printErr: (s) => log.push(s) });
   mod.FS.mkdir("/in");
   mod.FS.mkdir("/out");
   mod.FS.writeFile("/in/piece.txt", readFileSync(join(examplesDir, name), "utf8"));

@@ -91,7 +91,7 @@ bool export_musicxml(const char *path, const Score *score) {
                "<!DOCTYPE score-partwise PUBLIC \"-//Recordare//DTD MusicXML 3.1 "
                "Partwise//EN\" \"http://www.musicxml.org/dtds/partwise.dtd\">\n"
                "<score-partwise version=\"3.1\">\n"
-               "  <work><work-title>Canon Collapse</work-title></work>\n"
+               "  <work><work-title>" PROJECT_TITLE "</work-title></work>\n"
                "  <part-list>\n");
     for (int v = 0; v < score->voices; v++) {
         fprintf(f, "    <score-part id=\"P%d\"><part-name>Voice %d</part-name></score-part>\n",

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Canon Collapse score</title>
+<title>Gödel's Fugue score</title>
 <style>
 :root {
   color-scheme: light;
@@ -217,7 +217,7 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
 <main>
   <div class="header">
     <div class="grow">
-      <h1 id="title">Canon Collapse</h1>
+      <h1 id="title">Gödel's Fugue</h1>
       <div class="subtitle" id="subtitle"></div>
     </div>
     <span class="badge" id="status"></span>
@@ -390,7 +390,7 @@ const PIECE = /*PIECE_DATA*/;
       : window.matchMedia("(prefers-color-scheme: dark)").matches;
     root.dataset.theme = dark ? "light" : "dark";
     drawAll();
-    if (host) host.postMessage({ type: "canon-collapse:theme", theme: root.dataset.theme }, "*");
+    if (host) host.postMessage({ type: "godels-fugue:theme", theme: root.dataset.theme }, "*");
   });
 
   /* ---------- header ---------- */
@@ -650,7 +650,7 @@ const PIECE = /*PIECE_DATA*/;
     function ask(token, label) {
       const melody = given.slice();
       melody[v.index] = token;
-      host.postMessage({ type: "canon-collapse:what-if", var: v.var, label: label,
+      host.postMessage({ type: "godels-fugue:what-if", var: v.var, label: label,
                          melody: melody.join(" ") }, "*");
     }
     inspector.appendChild(el("h3", {}, "What if it were…"));
@@ -674,22 +674,22 @@ const PIECE = /*PIECE_DATA*/;
   window.addEventListener("message", function (e) {
     const m = e.data || {};
     if (e.source !== window.parent || window.parent === window) return;
-    if (m.type === "canon-collapse:host") {
+    if (m.type === "godels-fugue:host") {
       host = e.source;
       if (m.theme === "light" || m.theme === "dark") {
         document.documentElement.dataset.theme = m.theme;
         drawAll();
       }
       if (selected >= 0) select(selected);
-    } else if (m.type === "canon-collapse:select") {
+    } else if (m.type === "godels-fugue:select") {
       const v = vars.find(function (x) { return x.var === m.var; });
       if (v) select(v.id);
-    } else if (m.type === "canon-collapse:changed") {
+    } else if (m.type === "godels-fugue:changed") {
       rippled = new Set(m.notes || []);
       markSelection();
-    } else if (m.type === "canon-collapse:play") {
+    } else if (m.type === "godels-fugue:play") {
       play.click();
-    } else if (m.type === "canon-collapse:collapse" && events.length) {
+    } else if (m.type === "godels-fugue:collapse" && events.length) {
       /* replay the whole proof in about seven seconds */
       const speed = document.getElementById("cx-speed");
       let best = speed.options[0];
@@ -1383,7 +1383,7 @@ const PIECE = /*PIECE_DATA*/;
   function tellBar(bar) {
     if (!host || bar === toldBar) return;
     toldBar = bar;
-    host.postMessage({ type: "canon-collapse:bar", bar: bar }, "*");
+    host.postMessage({ type: "godels-fugue:bar", bar: bar }, "*");
   }
   let audio = null, bus = null, channels = [], bassChannel = null, playing = [], voicesOn = [], raf = 0;
   /* one channel per voice: gain (mute) -> pan -> the dry and reverb buses */

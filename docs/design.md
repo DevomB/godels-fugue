@@ -1,13 +1,14 @@
-# Canon Collapse: design notes
+# Gödel's Fugue: design notes
 
-These notes cover the ideas behind Canon Collapse and how far the code has taken
+These notes cover the ideas behind Gödel's Fugue and how far the code has taken
 each one. Each section ends with a status line:
 
 - **Built** – in the code, tested, and documented in [config.md](config.md).
 - **Partly built** – a simpler form exists; the note says what is missing.
 - **Not built** – an idea only.
 
-(The project's working title was "Gödel's Fugue"; the name is now Canon Collapse.)
+(The name nods to Hofstadter's *Gödel, Escher, Bach*, whose dialogues are written as
+canons and fugues.)
 
 ## 1. The idea
 

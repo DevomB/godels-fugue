@@ -1,5 +1,5 @@
 # End-to-end tests of the command-line program.
-#   cmake -DEXE=path/to/canon-collapse -DSRC=source/dir -DOUT=scratch/dir -P cli.cmake
+#   cmake -DEXE=path/to/godels-fugue -DSRC=source/dir -DOUT=scratch/dir -P cli.cmake
 cmake_minimum_required(VERSION 3.16)
 
 set(failures 0)
@@ -66,7 +66,7 @@ run(default 0 MATCH "key: C major" "melody:" "backtracks:" "entropy:" "energy:")
 foreach(pair IN ITEMS "canon.mid|MThd" "score.musicxml|<?xml" "score.ly|\\version"
                       "score.abc|X:" "contour.svg|<svg"
                       "voices.wav|RIFF" "score.html|<!DOCTYPE html>" "proof.json|{"
-                      "report.txt|Canon Collapse" "explain.txt|" "proof.txt|" "proof.dag|"
+                      "report.txt|Gödel's Fugue" "explain.txt|" "proof.txt|" "proof.dag|"
                       "entropy.txt|")
   string(REPLACE "|" ";" parts "${pair}")
   list(GET parts 0 name)
@@ -288,8 +288,8 @@ file(READ "${last_dir}/report.txt" report)
 if(NOT report MATCHES "\ngrid eighth\r?\n")
   fail("eighths_example: report.txt lacks the grid")
 endif()
-run(help 0 MATCH "usage: canon-collapse" ARGS --help)
-run(version 0 MATCH "canon-collapse [0-9]" ARGS --version)
+run(help 0 MATCH "usage: godels-fugue" ARGS --help)
+run(version 0 MATCH "godels-fugue [0-9]" ARGS --version)
 run(presets 0 MATCH "baroque" ARGS --list-presets)
 run(bad_arg 1 ERROR "unknown argument" ARGS --frobnicate)
 run(missing 1 ERROR "missing value for --config" ARGS --config)

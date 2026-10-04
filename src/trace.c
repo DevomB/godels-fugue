@@ -273,7 +273,7 @@ static void write_counterfactual(FILE *f, const Run *run) {
 void trace_write_json(FILE *f, const Run *run) {
     const Model *m = &run->model;
     const SolverState *s = &run->state;
-    fprintf(f, "{\"title\":\"Canon Collapse\",\"status\":\"%s\",\"failed\":%d,",
+    fprintf(f, "{\"title\":\"" PROJECT_TITLE "\",\"status\":\"%s\",\"failed\":%d,",
             solve_status_name(run->status), s->failed ? s->failed_variable : -1);
     write_config(f, &run->config);
     int beat = config_beat_steps(&m->config);

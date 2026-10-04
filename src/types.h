@@ -20,4 +20,7 @@ enum { PITCH_REST = 0 };
 /* Tie variable values: a new attack, or a continuation of the previous note. */
 enum { TIE_NOTE = 0, TIE_HOLD = 1 };
 
+/* The project's name as score files and reports write it, in UTF-8. */
+#define PROJECT_TITLE "G\xc3\xb6" "del's Fugue"
+
 #endif

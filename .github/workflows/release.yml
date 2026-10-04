@@ -1,6 +1,6 @@
 name: Release
 
-# Builds, tests and packages canon-collapse for each platform and attaches the
+# Builds, tests and packages godels-fugue for each platform and attaches the
 # archives to the GitHub release that triggered the run.
 on:
   release:
@@ -51,9 +51,9 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          name="canon-collapse-${TAG#v}-${{ matrix.name }}"
+          name="godels-fugue-${TAG#v}-${{ matrix.name }}"
           mkdir -p "$name"
-          if [ "$RUNNER_OS" = Windows ]; then exe=canon-collapse.exe; else exe=canon-collapse; fi
+          if [ "$RUNNER_OS" = Windows ]; then exe=godels-fugue.exe; else exe=godels-fugue; fi
           cp "build/$exe" README.md LICENSE "$name/"
           cp -r examples docs corpus "$name/"
           if [ "$RUNNER_OS" = Windows ]; then

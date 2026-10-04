@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Canon Collapse</title>
+<title>Gödel's Fugue</title>
 <meta name="description" content="Compose canons by constraint propagation and see why every note is there. The C solver runs in your browser as WebAssembly.">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Canon Collapse">
+<meta property="og:title" content="Gödel's Fugue">
 <meta property="og:description" content="Compose a canon in your browser, hear it, and click any note to see the rules that put it there, or change it and watch the piece re-compose around you.">
 <meta property="og:url" content="https://devomb.github.io/godels-fugue/">
 <meta property="og:image" content="https://devomb.github.io/godels-fugue/preview.png">
@@ -163,7 +163,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
 <div class="wrap">
   <header>
     <div>
-      <h1>Canon Collapse</h1>
+      <h1>Gödel's Fugue</h1>
       <p class="lede">Composes canons as a constraint problem and proves why every note is there.
         Pick a piece and press Compose. Click any note to see the rules that put it there, or give it
         another pitch and hear the piece re-compose around your choice. This is the C program compiled
@@ -249,7 +249,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
 <iframe id="score" title="Score, playback and proof" allow="autoplay" hidden></iframe>
 
 <footer>
-  MIT licensed. The same program runs on the command line with <code>canon-collapse --config piece.txt</code>
+  MIT licensed. The same program runs on the command line with <code>godels-fugue --config piece.txt</code>
   and writes these files to disk.
 </footer>
 
@@ -453,14 +453,14 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   // is engraved again in the new text colour.
   window.addEventListener("message", function (e) {
     const m = e.data || {};
-    if (e.source !== frame.contentWindow || m.type !== "canon-collapse:theme") return;
+    if (e.source !== frame.contentWindow || m.type !== "godels-fugue:theme") return;
     document.documentElement.dataset.theme = m.theme;
     if (lastAbc) showSheet(lastAbc);
   });
   // Follow along: the score page reports the bar it is playing.
   window.addEventListener("message", function (e) {
     const m = e.data || {};
-    if (e.source !== frame.contentWindow || m.type !== "canon-collapse:bar") return;
+    if (e.source !== frame.contentWindow || m.type !== "godels-fugue:bar") return;
     document.querySelectorAll("#sheet .playing").forEach(function (g) { g.classList.remove("playing"); });
     if (m.bar >= 0)
       document.querySelectorAll("#sheet .abcjs-mm" + m.bar + ".abcjs-note, #sheet .abcjs-mm" + m.bar + ".abcjs-rest")
@@ -468,7 +468,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   });
   window.addEventListener("message", function (e) {
     const m = e.data || {};
-    if (e.source !== frame.contentWindow || m.type !== "canon-collapse:what-if") return;
+    if (e.source !== frame.contentWindow || m.type !== "godels-fugue:what-if") return;
     if (config.value.trim().startsWith("{")) {
       summary.textContent = "Trying other values works with text configs, not JSON.";
       return;
@@ -490,10 +490,10 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     run();
   });
   listen.addEventListener("click", function () {
-    frame.contentWindow.postMessage({ type: "canon-collapse:play" }, "*");
+    frame.contentWindow.postMessage({ type: "godels-fugue:play" }, "*");
   });
   watch.addEventListener("click", function () {
-    frame.contentWindow.postMessage({ type: "canon-collapse:collapse" }, "*");
+    frame.contentWindow.postMessage({ type: "godels-fugue:collapse" }, "*");
   });
 
   function showFiles(out) {
@@ -510,14 +510,14 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
       a.textContent = d[1];
       files.appendChild(a);
     });
-    // The config that made this piece, to run again with canon-collapse --config piece.txt.
+    // The config that made this piece, to run again with godels-fugue --config piece.txt.
     const piece = document.createElement("a");
     piece.href = URL.createObjectURL(new Blob([composed.config +
       (composed.seed !== "0" ? "seed " + composed.seed + "\ntemperature " + SAMPLE_TEMPERATURE + "\n" : "")], { type: "text/plain" }));
     urls.push(piece.href);
     piece.download = "piece.txt";
     piece.textContent = "piece.txt";
-    piece.title = "The config behind this piece: canon-collapse --config piece.txt";
+    piece.title = "The config behind this piece: godels-fugue --config piece.txt";
     files.appendChild(piece);
     if (out["score.html"]) {
       const url = URL.createObjectURL(new Blob([out["score.html"]], { type: "text/html" }));
@@ -604,9 +604,9 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     observer.observe(doc.body);
     fit();
     // Tell the score page it can offer other values, then show the note just tried.
-    frame.contentWindow.postMessage({ type: "canon-collapse:host", theme: document.documentElement.dataset.theme || null }, "*");
-    if (pendingChanged.length) frame.contentWindow.postMessage({ type: "canon-collapse:changed", notes: pendingChanged }, "*");
-    if (pendingSelect) frame.contentWindow.postMessage({ type: "canon-collapse:select", var: pendingSelect }, "*");
+    frame.contentWindow.postMessage({ type: "godels-fugue:host", theme: document.documentElement.dataset.theme || null }, "*");
+    if (pendingChanged.length) frame.contentWindow.postMessage({ type: "godels-fugue:changed", notes: pendingChanged }, "*");
+    if (pendingSelect) frame.contentWindow.postMessage({ type: "godels-fugue:select", var: pendingSelect }, "*");
     pendingSelect = null;
     pendingChanged = [];
   });

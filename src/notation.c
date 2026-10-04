@@ -138,7 +138,7 @@ bool export_lilypond(const char *path, const Score *score) {
     FILE *f = fopen(path, "wb"); /* the same line endings everywhere */
     if (f == NULL) return false;
     fprintf(f, "\\version \"2.24.0\"\n"
-               "\\header { title = \"Canon Collapse\" tagline = ##f }\n\n"
+               "\\header { title = \"" PROJECT_TITLE "\" tagline = ##f }\n\n"
                "\\score {\n  \\new StaffGroup <<\n");
     for (int v = 0; v < score->voices; v++) {
         Segment segs[SEGMENT_MAX];
@@ -213,7 +213,7 @@ bool export_abc(const char *path, const Score *score) {
     FILE *f = fopen(path, "wb"); /* the same line endings everywhere */
     if (f == NULL) return false;
     /* the unit note length is one step */
-    fprintf(f, "X:1\nT:Canon Collapse\nM:4/4\nL:1/%d\nQ:1/4=%d\n", 4 * score_beat_steps(score),
+    fprintf(f, "X:1\nT:" PROJECT_TITLE "\nM:4/4\nL:1/%d\nQ:1/4=%d\n", 4 * score_beat_steps(score),
             score->tempo > 0 ? score->tempo : 120);
     for (int v = 0; v < score->voices; v++) {
         fprintf(f, "V:%d clef=%s name=\"Voice %d\"\n", v + 1,

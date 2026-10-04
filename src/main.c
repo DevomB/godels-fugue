@@ -17,15 +17,15 @@
 #include <string.h>
 
 /* CMake passes the project version; this is the fallback for other builds. */
-#ifndef CANON_COLLAPSE_VERSION
-#define CANON_COLLAPSE_VERSION "1.4.0"
+#ifndef GODELS_FUGUE_VERSION
+#define GODELS_FUGUE_VERSION "1.4.0"
 #endif
 
 enum { EXIT_UNSAT = 1, EXIT_TOO_LARGE = 2, EXIT_LIMIT = 3, SETS_MAX = 64 };
 
 static void usage(FILE *f) {
     fprintf(f,
-            "usage: canon-collapse [options]\n"
+            "usage: godels-fugue [options]\n"
             "\n"
             "  --config FILE        load keys from FILE (\"key value\" lines, or JSON if\n"
             "                       the name ends in .json)\n"
@@ -309,7 +309,7 @@ int main(int argc, char **argv) {
             usage(stdout);
             return 0;
         } else if (strcmp(a, "--version") == 0) {
-            printf("canon-collapse %s\n", CANON_COLLAPSE_VERSION);
+            printf("godels-fugue %s\n", GODELS_FUGUE_VERSION);
             return 0;
         } else if (strcmp(a, "--list-presets") == 0) {
             config_print_presets(stdout);

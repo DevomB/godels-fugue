@@ -1,7 +1,7 @@
-// Runs canon-collapse (compiled to WebAssembly) off the main thread. Each run
+// Runs godels-fugue (compiled to WebAssembly) off the main thread. Each run
 // gets a fresh module instance, so no state carries over between pieces; the
 // compiled module is cached, so only the first run pays for compilation.
-importScripts("canon-collapse.js");
+importScripts("godels-fugue.js");
 
 const OUTPUTS = [
   "score.html", "canon.mid", "score.musicxml", "score.ly", "score.abc",
@@ -13,7 +13,7 @@ let compiled = null;
 function instantiate(imports, done) {
   const ready = compiled
     ? Promise.resolve(compiled)
-    : WebAssembly.compileStreaming(fetch("canon-collapse.wasm")).then(function (m) {
+    : WebAssembly.compileStreaming(fetch("godels-fugue.wasm")).then(function (m) {
         compiled = m;
         return m;
       });
@@ -28,7 +28,7 @@ onmessage = async function (e) {
   const log = [];
   const started = performance.now();
   try {
-    const mod = await CanonCollapse({
+    const mod = await GodelsFugue({
       print: function (s) { log.push(s); },
       printErr: function (s) { log.push(s); },
       instantiateWasm: instantiate,

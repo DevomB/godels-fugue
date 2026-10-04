@@ -38,7 +38,7 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir -p _site/examples
-          cp web/* build-web/canon-collapse.js build-web/canon-collapse.wasm _site/
+          cp web/* build-web/godels-fugue.js build-web/godels-fugue.wasm _site/
           cp examples/*.txt examples/*.json _site/examples/
       - uses: actions/upload-pages-artifact@v5
 

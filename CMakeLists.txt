@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(canon-collapse VERSION 1.4.0 LANGUAGES C)
+project(godels-fugue VERSION 1.4.0 LANGUAGES C)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
@@ -63,16 +63,16 @@ if(UNIX)
   target_link_libraries(canon PUBLIC m)
 endif()
 
-add_executable(canon-collapse src/main.c)
-target_link_libraries(canon-collapse PRIVATE canon)
-target_compile_definitions(canon-collapse PRIVATE CANON_COLLAPSE_VERSION="${PROJECT_VERSION}")
+add_executable(godels-fugue src/main.c)
+target_link_libraries(godels-fugue PRIVATE canon)
+target_compile_definitions(godels-fugue PRIVATE GODELS_FUGUE_VERSION="${PROJECT_VERSION}")
 
 if(EMSCRIPTEN)
   # The web demo (web/) runs main() in a worker and reads the score files back
   # from the in-memory file system; tests/web_smoke.mjs does the same in Node.
   # The other tests need a native build.
-  target_link_options(canon-collapse PRIVATE
-    -sMODULARIZE=1 -sEXPORT_NAME=CanonCollapse -sENVIRONMENT=worker,node
+  target_link_options(godels-fugue PRIVATE
+    -sMODULARIZE=1 -sEXPORT_NAME=GodelsFugue -sENVIRONMENT=worker,node
     -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1
     -sINITIAL_MEMORY=64MB -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=8MB
     -sEXPORTED_RUNTIME_METHODS=callMain,FS)
@@ -104,5 +104,5 @@ foreach(name IN ITEMS
 endforeach()
 
 add_test(NAME cli
-  COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:canon-collapse> -DSRC=${CMAKE_SOURCE_DIR}
+  COMMAND ${CMAKE_COMMAND} -DEXE=$<TARGET_FILE:godels-fugue> -DSRC=${CMAKE_SOURCE_DIR}
           -DOUT=${CMAKE_BINARY_DIR}/cli -P ${CMAKE_SOURCE_DIR}/tests/cli.cmake)

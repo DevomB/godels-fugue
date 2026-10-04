@@ -391,7 +391,7 @@ bool output_write_report(const char *path, const Run *run) {
     const SolverStats *st = &run->state.stats;
     FILE *f = fopen(path, "w");
     if (f == NULL) return false;
-    fprintf(f, "Canon Collapse report\nstatus: %s\n", solve_status_name(run->status));
+    fprintf(f, PROJECT_TITLE " report\nstatus: %s\n", solve_status_name(run->status));
     print_key_lines(f, run);
     fprintf(f, "voices: %d  delay: %d  length: %d  span: %d steps\n", m->voices,
             run->config.delay, run->config.length, m->span);

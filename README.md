@@ -1,10 +1,10 @@
-# Canon Collapse
+# Gödel's Fugue
 
 [![CI](https://github.com/DevomB/godels-fugue/actions/workflows/ci.yml/badge.svg)](https://github.com/DevomB/godels-fugue/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/DevomB/godels-fugue)](https://github.com/DevomB/godels-fugue/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Canon Collapse writes canons, pieces where one melody is played against delayed
+Gödel's Fugue writes canons, pieces where one melody is played against delayed
 copies of itself, by solving them as a constraint problem, and it can tell you why
 every note is there.
 
@@ -33,7 +33,7 @@ WAV, an SVG contour, a proof trace, and an interactive HTML score.
 
 Download an archive for Linux (x86_64, static), macOS (universal) or Windows (x86_64)
 from the [latest release](https://github.com/DevomB/godels-fugue/releases/latest).
-Each one holds the `canon-collapse` program, the examples and the docs. Or build it
+Each one holds the `godels-fugue` program, the examples and the docs. Or build it
 yourself with a C11 compiler and CMake:
 
 ```sh
@@ -44,7 +44,7 @@ cmake --build build
 ## Quick start
 
 ```sh
-./build/canon-collapse
+./build/godels-fugue
 ```
 
 ```text
@@ -64,7 +64,7 @@ see and hear the piece, and click any note to see why it is there.
 Ask the command line directly with `--explain`:
 
 ```sh
-./build/canon-collapse --config examples/cyclic.txt --explain x8
+./build/godels-fugue --config examples/cyclic.txt --explain x8
 ```
 
 ```text
@@ -87,7 +87,7 @@ candidates it weighed and what each one cost.
 When the rules can't all hold, the program says which ones clash:
 
 ```sh
-./build/canon-collapse --config examples/unsat.txt
+./build/godels-fugue --config examples/unsat.txt
 ```
 
 ```text
@@ -165,16 +165,16 @@ JSON works too, and so does starting from a preset:
 ```
 
 ```sh
-./build/canon-collapse --config piece.txt
-./build/canon-collapse --config examples/baroque.json
-./build/canon-collapse --preset minimalist --set tempo=140
+./build/godels-fugue --config piece.txt
+./build/godels-fugue --config examples/baroque.json
+./build/godels-fugue --preset minimalist --set tempo=140
 ```
 
 Settings apply in order: the defaults, then `--preset`, then the config file (whose own
 `preset` key applies before its other keys), then each `--set KEY=VALUE`, then
 `--melody-midi` and `--lock`.
 **[docs/config.md](docs/config.md) lists every key** with its default, range and
-meaning; `canon-collapse --list-config` prints the same list.
+meaning; `godels-fugue --list-config` prints the same list.
 
 The keys you are most likely to change:
 
@@ -232,7 +232,7 @@ note is broken when no values of its `?` notes (and ties) could satisfy it, and 
 broken one is named with the given notes involved (exit 1):
 
 ```text
-$ canon-collapse --set melody=60,61,?,?,62 --check
+$ godels-fugue --set melody=60,61,?,?,62 --check
 violation: scale: notes stay in the key (x1 = C#4, key = C major)
 violation: consonance: voices 1,2 must be consonant at step 4 (bar 2) (x4 = D4, x0 = C4)
 ```
@@ -267,7 +267,7 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 ## Command line
 
 ```text
-canon-collapse [options]
+godels-fugue [options]
   --config FILE        load keys from FILE (text, or JSON if the name ends in .json)
   --preset NAME        apply a style preset before the config file
   --set KEY=VALUE      override one key after the config file (repeatable)
@@ -346,7 +346,7 @@ one with several is a **bifurcation point**, and one with none means the rules h
 no piece at all; a value whose solve hits the search limit is listed as unknown.
 
 ```text
-$ canon-collapse --config examples/sensitivity.txt --count 1000 --sensitivity
+$ godels-fugue --config examples/sensitivity.txt --count 1000 --sensitivity
 count: 160 (exact)
 nodes: 259
 note  verdict            viable values
@@ -394,7 +394,7 @@ build the WebAssembly program and serve the page beside it:
 emcmake cmake -S . -B build-web
 cmake --build build-web
 mkdir -p site/examples
-cp web/* build-web/canon-collapse.js build-web/canon-collapse.wasm site/
+cp web/* build-web/godels-fugue.js build-web/godels-fugue.wasm site/
 cp examples/*.txt examples/*.json site/examples/
 python -m http.server --directory site
 ```
@@ -423,7 +423,7 @@ does. On top of `score.html` it adds:
 - **How many?** counts the pieces the config allows (`--count`, for up to four
   seconds): exactly 1,730 for the mirror example, at least a hundred thousand for the
   opening canon.
-- **piece.txt** downloads the config behind the piece, so `canon-collapse --config
+- **piece.txt** downloads the config behind the piece, so `godels-fugue --config
   piece.txt` composes it again note for note.
 
 Every push to `main` publishes it with GitHub Pages.
@@ -456,5 +456,5 @@ web/          the browser demo
 
 MIT. See [LICENSE](LICENSE).
 
-The repository keeps the project's working title, *Gödel's Fugue*, after Douglas
-Hofstadter's *Gödel, Escher, Bach*, whose dialogues are written as canons and fugues.
+The name nods to Douglas Hofstadter's *Gödel, Escher, Bach*, whose dialogues are
+written as canons and fugues.
