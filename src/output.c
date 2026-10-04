@@ -180,13 +180,17 @@ bool output_paths_distinct(const OutputPaths *paths, char *err, size_t cap) {
     return true;
 }
 
-const char *output_length_name(int steps) {
-    switch (steps) {
+const char *output_value_name(int eighths) {
+    switch (eighths) {
     case 1:
-        return "q";
+        return "e";
     case 2:
-        return "h";
+        return "q";
     case 3:
+        return "q.";
+    case 4:
+        return "h";
+    case 6:
         return "h.";
     default:
         return "w";
@@ -261,16 +265,24 @@ void output_print_summary(FILE *out, const Run *run) {
                 while (i + len < c->length && m->tie[i + len] >= 0 &&
                        run->values[m->tie[i + len]] == TIE_HOLD)
                     len++;
-                fprintf(out, " %s", output_length_name(len));
+                /* values tied with ~ when no single one fits */
+                fprintf(out, " ");
+                for (int left = len; left > 0;) {
+                    int part = score_written_steps(&run->score, left);
+                    fprintf(out, "%s%s", left < len ? "~" : "",
+                            output_value_name(score_eighths(&run->score, part)));
+                    left -= part;
+                }
             }
         }
         fprintf(out, "\n");
     }
     if (c->harmony) {
         fprintf(out, "chords:");
+        int bar_steps = config_bar_steps(&m->config);
         for (int b = 0; b < m->nbars; b++) {
             char name[16];
-            int key = run->values[m->key[model_section_at(m, b * 4)]];
+            int key = run->values[m->key[model_section_at(m, b * bar_steps)]];
             degree_name(key, run->values[m->chord[b]], name, sizeof(name));
             fprintf(out, " %s", name);
         }

@@ -419,6 +419,40 @@ static void test_longest_melody(void) {
     free(run);
 }
 
+/* An eighth-note canon with rhythm and harmony solves and keeps every
+ * rule: a chord to each eight-step bar, and the melody a mix of eighths
+ * and longer notes. */
+static void test_eighth_grid(void) {
+    static const char *const settings[] = {
+        "grid=eighth", "voices=3", "delay=8",       "length=32",      "rhythm=1",
+        "harmony=1",   "max_hold=3", "key=A",       "mode=minor",     "range_low=55",
+        "range_high=79", "optimize=2000"};
+    PieceConfig c = test_config();
+    for (size_t k = 0; k < sizeof(settings) / sizeof(settings[0]); k++) test_set(&c, settings[k]);
+    Run *run = malloc(sizeof(Run));
+    CHECK(run != NULL);
+    char err[200];
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->status == SOLVE_SAT);
+    CHECK(satisfies_model(&run->model, run->values));
+    CHECK(run->model.span == 48 && run->model.nbars == 6);
+    CHECK(run->score.beat_steps == 2);
+    int eighths = 0;
+    int longer = 0;
+    const ScoreVoice *lead = &run->score.voice[0];
+    for (int k = 0; k < lead->count; k++) {
+        if (lead->notes[k].pitch == SOUND_REST) continue;
+        if (lead->notes[k].length == 1) {
+            eighths++;
+        } else {
+            longer++;
+        }
+    }
+    CHECK(eighths > 0 && longer > 0);
+    run_free(run);
+    free(run);
+}
+
 static void test_run_pipeline(void) {
     Run *run = malloc(sizeof(Run));
     CHECK(run != NULL);
@@ -482,6 +516,7 @@ int main(void) {
     test_sat_backend();
     test_optimize();
     test_longest_melody();
+    test_eighth_grid();
     test_run_pipeline();
     printf("ok\n");
     return 0;

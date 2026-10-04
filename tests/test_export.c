@@ -268,6 +268,8 @@ static void test_documents(void) {
     CHECK(score != NULL && score->count == run->model.voices);
     CHECK(json_get(&doc, "chords")->count == run->model.nbars);
     CHECK(json_get(json_get(&doc, "energy"), "total")->number == run->energy);
+    CHECK(json_get(&doc, "stepsPerBeat")->number == 1);
+    CHECK(json_get(&doc, "stepsPerBar")->number == 4);
     json_free(&doc);
 
     CHECK(page_write("output/tests/score.html", run));

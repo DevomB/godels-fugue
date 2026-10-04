@@ -188,6 +188,21 @@ static void test_intervals(void) {
     CHECK(dissonance_grade(60, 71) == 3);
 }
 
+/* On the quarter grid a step is a beat; on the eighth grid only a step
+ * that starts a strong beat is strong. */
+static void test_strong_steps(void) {
+    for (int t = 0; t < 24; t++) {
+        CHECK(is_strong_step(t, 1, 0) == is_strong_time(t, 0));
+        CHECK(is_strong_step(t, 1, 1) == is_strong_time(t, 1));
+    }
+    for (int t = 0; t < 48; t++) CHECK(is_strong_step(t, 2, 0) == (t % 8 == 0));
+    CHECK(!is_strong_step(4, 2, 0)); /* beat 3 */
+    CHECK(!is_strong_step(9, 2, 0)); /* the eighth after a downbeat */
+    /* poly_meter: every third beat, steps 0, 6, 12 ... and never an off-beat */
+    CHECK(is_strong_step(6, 2, 1) && is_strong_step(12, 2, 1) && is_strong_step(8, 2, 1));
+    CHECK(!is_strong_step(3, 2, 1) && !is_strong_step(9, 2, 1) && !is_strong_step(4, 2, 1));
+}
+
 static void test_transforms_and_costs(void) {
     CHECK(invert_pitch(67, 62) == 72);
     CHECK(invert_pitch(67, invert_pitch(67, 62)) == 62);
@@ -301,6 +316,7 @@ int main(void) {
     test_signatures_and_names();
     test_chords();
     test_intervals();
+    test_strong_steps();
     test_transforms_and_costs();
     test_tension_curve();
     printf("ok\n");

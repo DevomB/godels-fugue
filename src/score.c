@@ -15,6 +15,7 @@ void score_build(Score *score, const Model *m, const int *values) {
     score->voices = m->voices;
     score->span = m->span;
     score->tempo = m->config.tempo;
+    score->beat_steps = config_beat_steps(&m->config);
     score->nsections = m->nsections;
     score->modulate_at = m->nsections > 1 ? m->config.modulate_at : -1;
     for (int s = 0; s < m->nsections; s++) score->key[s] = values[m->key[s]];
@@ -48,4 +49,27 @@ void score_build(Score *score, const Model *m, const int *values) {
             prev_attack = attack;
         }
     }
+}
+
+int score_beat_steps(const Score *score) {
+    return score->beat_steps > 1 ? score->beat_steps : 1;
+}
+
+int score_bar_steps(const Score *score) {
+    return 4 * score_beat_steps(score);
+}
+
+int score_eighths(const Score *score, int steps) {
+    return steps * 2 / score_beat_steps(score);
+}
+
+int score_written_steps(const Score *score, int steps) {
+    static const int values[] = {8, 6, 4, 3, 2, 1}; /* in eighths */
+    int beat = score_beat_steps(score);
+    for (size_t k = 0; k < sizeof(values) / sizeof(values[0]); k++) {
+        if (values[k] * beat % 2 != 0) continue; /* shorter than a step */
+        int written = values[k] * beat / 2;
+        if (written <= steps) return written;
+    }
+    return steps;
 }

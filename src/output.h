@@ -24,7 +24,8 @@ void output_print_summary(FILE *out, const Run *run);
 void output_print_failure(FILE *err, const Run *run);
 void output_print_counterfactual(FILE *out, const Run *run);
 
-/* "q", "h", "h.", "w" for a note of 1-4 steps. */
-const char *output_length_name(int steps);
+/* "e", "q", "q.", "h", "h.", "w" for a note value of 1, 2, 3, 4, 6 or 8
+ * eighths (score_written_steps). */
+const char *output_value_name(int eighths);
 
 #endif

@@ -48,7 +48,8 @@ void explain_label(const SolverState *s, int var, int value, char *buf, size_t c
         }
     }
     if (v->kind == VAR_CHORD) {
-        int key = final_key(s, model_section_at(m, v->index * 4));
+        int bar_start = v->index * config_bar_steps(&m->config);
+        int key = final_key(s, model_section_at(m, bar_start));
         if (key >= 0) {
             degree_name(key, value, buf, cap);
             return;

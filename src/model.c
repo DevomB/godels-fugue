@@ -359,7 +359,7 @@ static void build_vertical_rules(Builder *b) {
      * voice order, so the crossing rule knows which voice is which. */
     for (int t = 0; t < m->span; t++) {
         if (sounding_count(m, t) < 2) continue;
-        bool strong = is_strong_time(t, c->poly_meter);
+        bool strong = is_strong_step(t, config_beat_steps(c), c->poly_meter);
         bool consonant = c->consonance == CONSONANCE_ALL ||
                          (c->consonance == CONSONANCE_STRONG && strong);
         int rules[3];
@@ -424,14 +424,15 @@ static void build_harmony_rules(Builder *b) {
     Model *m = b->m;
     const PieceConfig *c = &m->config;
     if (!c->harmony) return;
+    int bar_steps = config_bar_steps(c);
     for (int t = 0; t < m->span; t++) {
-        if (!is_strong_time(t, c->poly_meter)) continue;
+        if (!is_strong_step(t, config_beat_steps(c), c->poly_meter)) continue;
         for (int v = 0; v < m->voices; v++) {
             int i = m->source[v][t];
             if (i < 0) continue;
             Constraint *k = add_con(b, CID_CHORD, C_CHORD_TONE);
             add_slot(k, m->pitch[i], v);
-            add_slot(k, m->chord[t / 4], -1);
+            add_slot(k, m->chord[t / bar_steps], -1);
             add_slot(k, m->key[model_section_at(m, t)], -1);
             if (k != NULL) k->time = t;
         }
@@ -439,11 +440,12 @@ static void build_harmony_rules(Builder *b) {
     if (!c->progression) return;
     for (int bar = 0; bar + 1 < m->nbars; bar++) {
         /* a key change between the bars acts as a pivot: any chord may follow */
-        if (model_section_at(m, bar * 4) != model_section_at(m, (bar + 1) * 4)) continue;
+        if (model_section_at(m, bar * bar_steps) != model_section_at(m, (bar + 1) * bar_steps))
+            continue;
         Constraint *p = add_con(b, CID_PROGRESSION, C_PROGRESSION);
         add_slot(p, m->chord[bar], -1);
         add_slot(p, m->chord[bar + 1], -1);
-        if (p != NULL) p->time = bar * 4;
+        if (p != NULL) p->time = bar * bar_steps;
     }
 }
 
@@ -654,22 +656,34 @@ static void build_terms(Builder *b) {
         }
     }
 
+    int beat = config_beat_steps(c);
+    int bar_steps = config_bar_steps(c);
     if (c->rhythm) {
         for (int i = 1; i < length; i++) {
             Constraint *t = add_term(b, TERM_HOLD, c->w_hold);
             add_slot(t, m->tie[i], -1);
             if (t != NULL) t->time = i;
-            if (i >= 2 && i % 2 == 0) {
+            /* a note attacked on beat 2 or 4 and held over beat 3 or 1 */
+            if (i >= 2 * beat && i % (2 * beat) == 0) {
+                t = add_term(b, TERM_SYNCOPATION, c->w_syncopation);
+                for (int j = i - beat; j <= i; j++) add_slot(t, m->tie[j], -1);
+                if (t != NULL) t->time = i;
+            }
+            /* on the eighth grid, a note attacked off the beat and held across the next */
+            if (beat > 1 && i % beat == 0) {
                 t = add_term(b, TERM_SYNCOPATION, c->w_syncopation);
                 add_slot(t, m->tie[i - 1], -1);
                 add_slot(t, m->tie[i], -1);
                 if (t != NULL) t->time = i;
             }
         }
-        for (int bar = 0; bar * 4 + 3 < length; bar++) {
+        for (int bar = 0; (bar + 1) * bar_steps <= length; bar++) {
             Constraint *t = add_term(b, TERM_RHYTHM, c->w_rhythm);
-            for (int j = 1; j <= 3; j++) add_slot(t, m->tie[bar * 4 + j], -1);
-            if (t != NULL) t->time = bar * 4;
+            for (int j = 1; j < bar_steps; j++) add_slot(t, m->tie[bar * bar_steps + j], -1);
+            if (t != NULL) {
+                t->time = bar * bar_steps;
+                t->param = beat;
+            }
         }
         if (length >= 2) {
             Constraint *t = add_term(b, TERM_FINAL, c->w_final);
@@ -682,21 +696,21 @@ static void build_terms(Builder *b) {
         for (int bar = 0; bar < m->nbars; bar++) {
             Constraint *t = add_term(b, TERM_CHORD, c->w_harmony);
             add_slot(t, m->chord[bar], -1);
-            if (t != NULL) t->time = bar * 4;
+            if (t != NULL) t->time = bar * bar_steps;
             if (bar == 0) continue;
             t = add_term(b, TERM_CHORD_MOTION, c->w_harmony);
             add_slot(t, m->chord[bar - 1], -1);
             add_slot(t, m->chord[bar], -1);
-            if (t != NULL) t->time = bar * 4;
+            if (t != NULL) t->time = bar * bar_steps;
         }
         for (int t = 0; t < m->span; t++) {
-            if (is_strong_time(t, c->poly_meter)) continue;
+            if (is_strong_step(t, beat, c->poly_meter)) continue;
             for (int v = 0; v < m->voices; v++) {
                 int i = m->source[v][t];
                 if (i < 0) continue;
                 Constraint *n = add_term(b, TERM_NONCHORD, c->w_harmony);
                 add_slot(n, m->pitch[i], v);
-                add_slot(n, m->chord[t / 4], -1);
+                add_slot(n, m->chord[t / bar_steps], -1);
                 add_slot(n, m->key[model_section_at(m, t)], -1);
                 if (n != NULL) n->time = t;
             }
@@ -771,7 +785,7 @@ bool model_build(Model *m, const PieceConfig *config, char *err, size_t cap) {
         return false;
     }
     m->voices = config_voice_count(config);
-    m->nbars = (m->span + 3) / 4;
+    m->nbars = (m->span + config_bar_steps(config) - 1) / config_bar_steps(config);
     m->nsections = config->modulate_at >= 0 ? 2 : 1;
     for (int v = 0; v < VOICE_MAX; v++) {
         for (int t = 0; t < SPAN_MAX; t++) {
@@ -1066,14 +1080,25 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
     case TERM_HOLD:
         return slot_value(t, vals, 0) == TIE_HOLD ? w : 0;
     case TERM_SYNCOPATION:
-        return slot_value(t, vals, 0) == TIE_NOTE && slot_value(t, vals, 1) == TIE_HOLD
-                   ? w
-                   : 0;
-    case TERM_RHYTHM:
-        for (int k = 0; k < t->nslots; k++) {
-            if (slot_value(t, vals, k) != TIE_NOTE) return 0;
+        /* attacked at the first slot and held through the others */
+        if (slot_value(t, vals, 0) != TIE_NOTE) return 0;
+        for (int k = 1; k < t->nslots; k++) {
+            if (slot_value(t, vals, k) != TIE_HOLD) return 0;
         }
         return w;
+    case TERM_RHYTHM: {
+        /* slot k is the tie at step k + 1 of the bar and param the steps
+         * per beat: every step attacked, or on a finer grid every beat
+         * attacked and held to the next */
+        bool plain = true;
+        bool beats = t->param > 1;
+        for (int k = 0; k < t->nslots; k++) {
+            int tie = slot_value(t, vals, k);
+            if (tie != TIE_NOTE) plain = false;
+            if (beats && tie != ((k + 1) % t->param == 0 ? TIE_NOTE : TIE_HOLD)) beats = false;
+        }
+        return plain || beats ? w : 0;
+    }
     case TERM_FINAL:
         return slot_value(t, vals, 0) == TIE_NOTE ? w : 0;
     case TERM_CHORD: {
@@ -1177,7 +1202,7 @@ void value_label(const Model *m, int var, int value, char *buf, size_t cap) {
 
 void constraint_describe(const Model *m, const Constraint *c, char *buf, size_t cap) {
     const PieceConfig *cfg = &m->config;
-    int bar = c->time >= 0 ? c->time / 4 + 1 : 0;
+    int bar = c->time >= 0 ? c->time / config_bar_steps(cfg) + 1 : 0;
     char voices[32];
     size_t used = 0;
     voices[0] = '\0';

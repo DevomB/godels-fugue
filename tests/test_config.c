@@ -300,6 +300,50 @@ static void test_files(void) {
     CHECK(strstr(err, "cannot read config") != NULL);
 }
 
+/* grid sets how long a step is: a quarter note, or an eighth. */
+static void test_grid(void) {
+    PieceConfig c;
+    char err[200];
+    config_defaults(&c);
+    CHECK(c.grid == GRID_QUARTER);
+    CHECK(config_beat_steps(&c) == 1 && config_bar_steps(&c) == 4);
+    CHECK(config_set(&c, "grid", "eighth", err, sizeof(err)));
+    CHECK(c.grid == GRID_EIGHTH);
+    CHECK(config_beat_steps(&c) == 2 && config_bar_steps(&c) == 8);
+    CHECK(config_set(&c, "grid", "quarter", err, sizeof(err)));
+    CHECK(c.grid == GRID_QUARTER);
+    CHECK(config_set(&c, "grid", "1", err, sizeof(err)));
+    CHECK(c.grid == GRID_EIGHTH);
+    CHECK(!config_set(&c, "grid", "sixteenth", err, sizeof(err)));
+    CHECK(strstr(err, "config value for grid is not valid: sixteenth") != NULL);
+    CHECK(!config_set(&c, "grid", "2", err, sizeof(err)));
+    CHECK(c.grid == GRID_EIGHTH);
+    /* a tie may hold a note to a whole note of eighths */
+    CHECK(config_set(&c, "max_hold", "7", err, sizeof(err)));
+    CHECK(!config_set(&c, "max_hold", "8", err, sizeof(err)));
+    CHECK(config_validate(&c, err, sizeof(err)));
+    c.grid = GRID_COUNT;
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "invalid grid") != NULL);
+
+    /* written as a word, and read back from text and JSON */
+    c.grid = GRID_EIGHTH;
+    char value[16] = "";
+    for (int i = 0; i < config_key_count(); i++) {
+        if (strcmp(config_key_name(i), "grid") == 0) config_key_value(&c, i, value, sizeof(value));
+    }
+    CHECK(strcmp(value, "eighth") == 0);
+    test_output_dir();
+    write_file("output/tests/grid.txt", "grid eighth\nlength 32\n");
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/grid.txt", err, sizeof(err)));
+    CHECK(c.grid == GRID_EIGHTH && c.length == 32);
+    write_file("output/tests/grid.json", "{\"grid\": \"eighth\", \"delay\": 8}");
+    config_defaults(&c);
+    CHECK(config_load_file(&c, "output/tests/grid.json", err, sizeof(err)));
+    CHECK(c.grid == GRID_EIGHTH && c.delay == 8);
+}
+
 /* Writing every key and loading it back gives the same config. */
 static void test_round_trip(void) {
     PieceConfig a;
@@ -511,6 +555,7 @@ int main(void) {
     test_presets();
     test_files();
     test_round_trip();
+    test_grid();
     test_longest_melody();
     test_reference();
     printf("ok\n");

@@ -276,11 +276,14 @@ void trace_write_json(FILE *f, const Run *run) {
     fprintf(f, "{\"title\":\"Canon Collapse\",\"status\":\"%s\",\"failed\":%d,",
             solve_status_name(run->status), s->failed ? s->failed_variable : -1);
     write_config(f, &run->config);
-    fprintf(f, ",\"span\":%d,\"voices\":%d,\"length\":%d,\"tempo\":%d,\"strong\":[", m->span,
-            m->voices, run->config.length, run->config.tempo);
+    int beat = config_beat_steps(&m->config);
+    int bar_steps = config_bar_steps(&m->config);
+    fprintf(f, ",\"span\":%d,\"voices\":%d,\"length\":%d,\"tempo\":%d,\"stepsPerBeat\":%d,"
+               "\"stepsPerBar\":%d,\"strong\":[",
+            m->span, m->voices, run->config.length, run->config.tempo, beat, bar_steps);
     bool first = true;
     for (int t = 0; t < m->span; t++) {
-        if (!is_strong_time(t, run->config.poly_meter)) continue;
+        if (!is_strong_step(t, beat, run->config.poly_meter)) continue;
         fprintf(f, "%s%d", first ? "" : ",", t);
         first = false;
     }
@@ -293,7 +296,7 @@ void trace_write_json(FILE *f, const Run *run) {
     for (int b = 0; b < m->nbars && m->chord[b] >= 0; b++) {
         char name[16] = "?";
         int chord = run->values[m->chord[b]];
-        int key = run->values[m->key[model_section_at(m, b * 4)]];
+        int key = run->values[m->key[model_section_at(m, b * bar_steps)]];
         if (chord >= 0 && key >= 0) degree_name(key, chord, name, sizeof(name));
         fprintf(f, "%s{\"bar\":%d,\"var\":%d,\"label\":", b ? "," : "", b + 1, m->chord[b]);
         json_string(f, name);

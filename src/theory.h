@@ -52,7 +52,12 @@ void pitch_name(int pitch, bool flats, char *buf, size_t cap);
 void key_spell(int key, int pitch, int *letter, int *alter, int *octave);
 void key_pitch_name(int key, int pitch, char *buf, size_t cap);
 
+/* A strong beat: the first of each 4/4 bar, and with poly_meter every
+ * third beat. t counts beats (quarter notes). */
 int is_strong_time(int t, int poly_meter);
+/* The same for step t of a grid with beat_steps steps to a beat: only a
+ * step that starts a strong beat is strong, so an off-beat eighth never is. */
+int is_strong_step(int t, int beat_steps, int poly_meter);
 int interval_class(int a, int b);
 bool same_direction(int delta_a, int delta_b);
 bool is_parallel_fifth(int v0_prev, int v1_prev, int v0_now, int v1_now);

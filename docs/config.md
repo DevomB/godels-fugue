@@ -11,13 +11,14 @@ style preset first, so every other key in the file overrides it.
 
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
-| `length` | 12 | 1..64 | Melody length in steps. One step is a quarter note; four steps make a bar. |
+| `length` | 12 | 1..64 | Melody length in steps: quarter notes, four to a bar, or eighth notes, eight to a bar, with grid eighth. |
+| `grid` | quarter | see meaning | Length of one step: quarter, or eighth for two steps to a beat and eight to a 4/4 bar. Every key counted in steps counts grid steps; tempo still counts quarter notes. Longer notes are tied steps (rhythm), so on the eighth grid a quarter note is 2 steps, a dotted quarter 3 and a half note 4. |
 | `voices` | 2 | 2..4 | Number of voices. Voice 1 plays the melody; the others follow it. |
-| `delay` | 4 | 0..128 | Steps between entries: voice v enters after v * delay steps. |
-| `delay_1` | 0 | 0..128 | Entry step of voice 2 (0 = 1 * delay). |
-| `delay_2` | 0 | 0..128 | Entry step of voice 3 (0 = 2 * delay). |
-| `delay_3` | 0 | 0..128 | Entry step of voice 4 (0 = 3 * delay). |
-| `phase` | 0 | 0..16 | Extra steps added to every follower's entry. |
+| `delay` | 4 | 0..128 | Steps between entries: voice v enters after v * delay steps (quarter notes, or eighths with grid eighth). |
+| `delay_1` | 0 | 0..128 | Entry step of voice 2 in grid steps (0 = 1 * delay). |
+| `delay_2` | 0 | 0..128 | Entry step of voice 3 in grid steps (0 = 2 * delay). |
+| `delay_3` | 0 | 0..128 | Entry step of voice 4 in grid steps (0 = 3 * delay). |
+| `phase` | 0 | 0..16 | Extra grid steps added to every follower's entry. |
 | `range_low` | 60 | 1..127 | Lowest MIDI pitch any voice may sound (60 = middle C). |
 | `range_high` | 72 | 1..127 | Highest MIDI pitch any voice may sound. |
 
@@ -44,7 +45,7 @@ style preset first, so every other key in the file overrides it.
 | --- | --- | --- | --- |
 | `key` | C | see meaning | Tonic of the key: C, C#, Db ... B, or search to let the solver choose. |
 | `mode` | major | see meaning | major, minor, dorian, phrygian, lydian, mixolydian, locrian, or search (major or minor). |
-| `modulate_at` | off | see meaning | Step (1 or later) where every voice switches to the second key (off = no modulation). |
+| `modulate_at` | off | see meaning | Grid step (1 or later) where every voice switches to the second key (off = no modulation). |
 | `key_second` | related | see meaning | Tonic of the second key, or related to search the closely related keys. |
 | `mode_second` | auto | see meaning | Mode of the second key, or auto: the first key's mode for a named key_second, major or minor for related. |
 
@@ -64,7 +65,7 @@ style preset first, so every other key in the file overrides it.
 | `harmony` | 0 | 0..1 | Give each bar a chord variable; strong-beat notes must be its chord tones. |
 | `progression` | 1 | 0..1 | With harmony, consecutive bar chords follow the usual root progressions. |
 | `cadence` | 1 | 0..1 | End on the tonic, approached from the dominant triad; followers end on tonic-triad notes. |
-| `poly_meter` | 0 | 0..1 | Treat every third step as strong as well as every fourth. |
+| `poly_meter` | 0 | 0..1 | Treat every third beat as strong as well as the first beat of each bar. |
 | `mirror` | 0 | 0..1 | Make the melody its own retrograde inversion: notes i and length - 1 - i sum to 2 * mirror_axis, a rest pairs only with a rest, and an odd length has the axis itself as its middle note. Only pitches are mirrored, not ties. |
 | `mirror_axis` | 66 | 1..127 | MIDI pitch the mirror reflects around; it must lie within range_low..range_high. The second degree of a major key keeps every scale note (D for C major). |
 
@@ -73,9 +74,9 @@ style preset first, so every other key in the file overrides it.
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
 | `rhythm` | 0 | 0..1 | Let notes be tied into longer values and let rests appear. |
-| `max_hold` | 1 | 1..3 | Longest tie in steps after the attack (1 = half notes, 3 = whole notes). |
+| `max_hold` | 1 | 1..7 | Longest tie in grid steps after the attack: 1 allows half notes and 3 whole notes on the quarter grid; on the eighth grid 1 allows quarter notes, 3 half notes and 7 whole notes. |
 | `rest_at` | off | see meaning | Force a rest at this melody index (needs rhythm). |
-| `max_rests` | 2 | 0..64 | Most rests the melody may contain. |
+| `max_rests` | 2 | 0..64 | Most rest steps the melody may contain (on the eighth grid a quarter rest is two). |
 
 ### Lock
 
@@ -113,10 +114,10 @@ style preset first, so every other key in the file overrides it.
 | `motif_d` | off | see meaning | Fourth interval (off = pattern ends). |
 | `w_modulate` | 1 | 0..100 | Cost per fifth between the two keys, and per accidental of a searched key. |
 | `w_harmony` | 1 | 0..100 | Cost of weaker chords (ii, vi, and twice for iii, vii), twice this for a chord repeated from the bar before, and of non-chord tones on weak beats. |
-| `w_rest` | 4 | 0..100 | Cost of each rest. |
-| `w_hold` | 1 | 0..100 | Cost of each tie. |
-| `w_syncopation` | 3 | 0..100 | Cost of a tie that carries a note over beat 1 or 3. |
-| `w_rhythm` | 3 | 0..100 | Cost of a bar of four plain quarter notes. |
+| `w_rest` | 4 | 0..100 | Cost of each step of rest. |
+| `w_hold` | 1 | 0..100 | Cost of each tied step. |
+| `w_syncopation` | 3 | 0..100 | Cost of a note attacked on beat 2 or 4 and tied over beat 3 or 1; on the eighth grid also of a note attacked on an off-beat eighth and held across the next beat. |
+| `w_rhythm` | 3 | 0..100 | Cost of a bar with no rhythmic variety: four plain quarter notes, or on the eighth grid eight plain eighths or four plain quarters. |
 | `w_final` | 2 | 0..100 | Cost of a short final note when rhythm is on. |
 | `w_corpus` | 4 | 0..100 | Largest pitch-class cost that --corpus --apply-weights may add. |
 | `pc_weight` | 0 | 12 x 0..100 | Twelve extra costs, one per pitch class C..B. |
@@ -140,5 +141,5 @@ style preset first, so every other key in the file overrides it.
 
 | Key | Default | Range | Meaning |
 | --- | --- | --- | --- |
-| `tempo` | 120 | 20..300 | Quarter notes per minute in MIDI and WAV. |
+| `tempo` | 120 | 20..300 | Quarter notes per minute in MIDI and WAV, whatever the grid. |
 | `instrument` | pluck | see meaning | Sound of voices.wav: pluck (a plucked string, like a harpsichord), organ, or sine. |
