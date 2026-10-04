@@ -1,6 +1,7 @@
 #include "export.h"
 
 #include "canon.h"
+#include "parts.h"
 #include "theory.h"
 
 #include <math.h>
@@ -73,15 +74,13 @@ static void write_segment(FILE *f, const Score *score, int pitch, int steps, int
     fprintf(f, "</note>\n");
 }
 
-static bool low_voice(const Score *score, int v) {
-    long sum = 0;
-    int n = 0;
-    for (int t = 0; t < score->span; t++) {
-        if (score->line[v][t] == SOUND_REST) continue;
-        sum += score->line[v][t];
-        n++;
-    }
-    return n > 0 && sum / n < 57;
+/* How to get from a transposing part's written notes to the sound: down the
+ * part's interval, within the octave plus whole octaves. */
+static void write_transpose(FILE *f, const Part *part) {
+    fprintf(f, "<transpose><diatonic>%d</diatonic><chromatic>%d</chromatic>", -(part->steps % 7),
+            -(part->up % 12));
+    if (part->up >= 12) fprintf(f, "<octave-change>%d</octave-change>", -(part->up / 12));
+    fprintf(f, "</transpose>");
 }
 
 bool export_musicxml(const char *path, const Score *score) {
@@ -97,13 +96,27 @@ bool export_musicxml(const char *path, const Score *score) {
                "  <work><work-title>" PROJECT_TITLE "</work-title></work>\n"
                "  <part-list>\n");
     for (int v = 0; v < score->voices; v++) {
-        fprintf(f, "    <score-part id=\"P%d\"><part-name>Voice %d</part-name></score-part>\n",
-                v + 1, v + 1);
+        char name[40];
+        score_part_name(score, v, name, sizeof(name));
+        const Part *part = score_part(score, v);
+        fprintf(f, "    <score-part id=\"P%d\"><part-name>%s</part-name>", v + 1, name);
+        if (part != NULL) {
+            /* MusicXML counts MIDI programs from 1 */
+            fprintf(f, "<score-instrument id=\"P%d-I1\"><instrument-name>%s</instrument-name>"
+                       "</score-instrument><midi-instrument id=\"P%d-I1\"><midi-channel>%d"
+                       "</midi-channel><midi-program>%d</midi-program></midi-instrument>",
+                    v + 1, name, v + 1, v + 1, part->program + 1);
+        }
+        fprintf(f, "</score-part>\n");
     }
     fprintf(f, "  </part-list>\n");
 
     for (int v = 0; v < score->voices; v++) {
         fprintf(f, "  <part id=\"P%d\">\n", v + 1);
+        /* a transposing part is written in its own key, its interval above
+         * the sound */
+        int up = score_written_up(score, v);
+        char clef = score_clef(score, v);
         /* Walk the voice's notes plus a padding rest to the end of the bar,
          * cutting each at barlines and at the key change. */
         ScoreNote notes[SPAN_MAX + 1];
@@ -131,16 +144,17 @@ bool export_musicxml(const char *path, const Score *score) {
                         /* a division is one step */
                         fprintf(f, "      <attributes><divisions>%d</divisions>",
                                 score_beat_steps(score));
-                        write_key(f, score->key[0]);
+                        write_key(f, score_written_key(score, v, score->key[0]));
                         fprintf(f, "<time><beats>4</beats><beat-type>4</beat-type></time>"
-                                   "<clef><sign>%s</sign><line>%d</line></clef>"
-                                   "</attributes>\n",
-                                low_voice(score, v) ? "F" : "G", low_voice(score, v) ? 4 : 2);
+                                   "<clef><sign>%c</sign><line>%d</line></clef>",
+                                clef, clef == 'F' ? 4 : clef == 'C' ? 3 : 2);
+                        if (up > 0) write_transpose(f, score_part(score, v));
+                        fprintf(f, "</attributes>\n");
                     }
                 }
                 if (score->nsections > 1 && t == score->modulate_at && t > 0) {
                     fprintf(f, "      <attributes>");
-                    write_key(f, score->key[1]);
+                    write_key(f, score_written_key(score, v, score->key[1]));
                     fprintf(f, "</attributes>\n");
                 }
                 int stop = (t / bar + 1) * bar;
@@ -151,10 +165,10 @@ bool export_musicxml(const char *path, const Score *score) {
                  * sixteenths, is tied */
                 stop = t + score_written_steps(score, stop - t);
                 /* a tied note keeps the spelling of its attack */
-                int spelling_key = key_at(score, n->start);
+                int spelling_key = score_written_key(score, v, key_at(score, n->start));
                 bool tied = n->pitch != SOUND_REST;
-                write_segment(f, score, n->pitch, stop - t, spelling_key, tied && t > n->start,
-                              tied && stop < end);
+                write_segment(f, score, tied ? n->pitch + up : SOUND_REST, stop - t, spelling_key,
+                              tied && t > n->start, tied && stop < end);
                 t = stop;
             }
         }

@@ -3,6 +3,7 @@
 #include "json.h"
 #include "output.h"
 #include "page.h"
+#include "parts.h"
 #include "run.h"
 #include "score.h"
 #include "theory.h"
@@ -588,9 +589,102 @@ static void test_shared_explanations(void) {
     free(run);
 }
 
+/* An ensemble gives each voice an instrument by register. A transposing one
+ * is written its interval above the sound, in its own key: an alto sax in
+ * E-flat reads concert D minor as B minor and a sounding D4 as a B4, and
+ * MusicXML says how far down the sound is. */
+static void test_parts(void) {
+    test_output_dir();
+    Score s;
+    memset(&s, 0, sizeof(s));
+    s.voices = 1;
+    s.span = 4;
+    s.tempo = 90;
+    s.nsections = 1;
+    s.key[0] = key_id(2, MODE_MINOR);
+    ScoreNote d4 = {0, 4, 62, 0};
+    s.voice[0].count = 1;
+    s.voice[0].notes[0] = d4;
+    for (int t = 0; t < 4; t++) s.line[0][t] = 62;
+    /* one voice takes the ensemble's highest instrument */
+    parts_assign(&s, ENSEMBLE_SAXES, WRITTEN_TRANSPOSED);
+    CHECK(s.part[0] == PART_SOPRANO_SAX && !s.concert);
+
+    s.part[0] = PART_ALTO_SAX;
+    CHECK(score_written_up(&s, 0) == 9);
+    CHECK(export_musicxml("output/tests/alto.musicxml", &s));
+    char *xml = test_slurp("output/tests/alto.musicxml", NULL);
+    CHECK(strstr(xml, "<part-name>Alto Sax in Eb</part-name>") != NULL);
+    CHECK(strstr(xml, "<midi-program>66</midi-program>") != NULL);
+    CHECK(strstr(xml, "<key><fifths>2</fifths><mode>minor</mode></key>") != NULL);
+    CHECK(strstr(xml, "<clef><sign>G</sign><line>2</line></clef><transpose><diatonic>-5"
+                      "</diatonic><chromatic>-9</chromatic></transpose></attributes>") != NULL);
+    CHECK(strstr(xml, "<pitch><step>B</step><octave>4</octave></pitch>") != NULL);
+    free(xml);
+
+    /* a tenor sax in B-flat sounds a ninth below its part */
+    s.part[0] = PART_TENOR_SAX;
+    CHECK(export_musicxml("output/tests/tenor.musicxml", &s));
+    xml = test_slurp("output/tests/tenor.musicxml", NULL);
+    CHECK(strstr(xml, "<key><fifths>1</fifths><mode>minor</mode></key>") != NULL);
+    CHECK(strstr(xml, "<transpose><diatonic>-1</diatonic><chromatic>-2</chromatic>"
+                      "<octave-change>-1</octave-change></transpose>") != NULL);
+    CHECK(strstr(xml, "<pitch><step>E</step><octave>5</octave></pitch>") != NULL);
+    free(xml);
+
+    /* at concert pitch the part reads as it sounds */
+    s.part[0] = PART_ALTO_SAX;
+    s.concert = true;
+    CHECK(score_written_up(&s, 0) == 0);
+    CHECK(export_musicxml("output/tests/alto_concert.musicxml", &s));
+    xml = test_slurp("output/tests/alto_concert.musicxml", NULL);
+    CHECK(strstr(xml, "<key><fifths>-1</fifths><mode>minor</mode></key>") != NULL);
+    CHECK(strstr(xml, "<pitch><step>D</step><octave>4</octave></pitch>") != NULL);
+    CHECK(strstr(xml, "<transpose>") == NULL);
+    free(xml);
+    s.concert = false;
+
+    /* a double bass is written an octave up, in the same key */
+    s.part[0] = PART_DOUBLE_BASS;
+    CHECK(score_written_up(&s, 0) == 12);
+    CHECK(score_written_key(&s, 0, s.key[0]) == s.key[0]);
+    CHECK(score_clef(&s, 0) == 'F');
+
+    /* a flute cannot play below middle C */
+    s.part[0] = PART_FLUTE;
+    CHECK(score_out_of_range(&s, 0) == 0);
+    s.voice[0].notes[0].pitch = 58;
+    CHECK(score_out_of_range(&s, 0) == 1);
+
+    /* three voices take the highest, the next and the lowest instrument by
+     * register, whatever their order */
+    Score r;
+    memset(&r, 0, sizeof(r));
+    r.voices = 3;
+    r.span = 4;
+    for (int t = 0; t < 4; t++) {
+        r.line[0][t] = 60;
+        r.line[1][t] = 72;
+        r.line[2][t] = 48;
+    }
+    parts_assign(&r, ENSEMBLE_SAXES, WRITTEN_TRANSPOSED);
+    CHECK(r.part[1] == PART_SOPRANO_SAX && r.part[0] == PART_ALTO_SAX &&
+          r.part[2] == PART_BARITONE_SAX);
+    CHECK(score_clef(&r, 2) == 'G'); /* saxes all read treble clef */
+    parts_assign(&r, ENSEMBLE_STRINGS, WRITTEN_TRANSPOSED);
+    CHECK(r.part[1] == PART_VIOLIN && r.part[0] == PART_VIOLIN && r.part[2] == PART_CELLO);
+    CHECK(score_clef(&r, 2) == 'F');
+    parts_assign(&r, ENSEMBLE_NONE, WRITTEN_TRANSPOSED);
+    CHECK(score_part(&r, 2) == NULL && score_clef(&r, 2) == 'F' && score_clef(&r, 1) == 'G');
+    char name[40];
+    score_part_name(&r, 2, name, sizeof(name));
+    CHECK(strcmp(name, "Voice 3") == 0);
+}
+
 int main(void) {
     test_score();
     test_musicxml();
+    test_parts();
     test_eighth_grid();
     test_sixteenth_grid();
     test_documents();

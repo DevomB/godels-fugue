@@ -1,4 +1,5 @@
 #include "midi.h"
+#include "parts.h"
 #include "theory.h"
 #include "test_util.h"
 
@@ -143,6 +144,26 @@ int main(void) {
     const Track *v2 = &tracks[2];
     CHECK(v2->nnotes == 2);
     CHECK(v2->notes[0].on == 4 * MIDI_PPQ && v2->notes[0].channel == 1);
+
+    /* an ensemble names each track and sets its General MIDI program; MIDI
+     * stays at sounding pitch whatever the parts are written in */
+    Score sax = s;
+    sax.part[0] = PART_ALTO_SAX;
+    sax.part[1] = PART_BARITONE_SAX;
+    CHECK(midi_write_score("output/tests/parts.mid", &sax));
+    CHECK(read_file("output/tests/parts.mid", tracks, 4) == 3);
+    CHECK(strcmp(tracks[1].name, "Alto Sax in Eb") == 0);
+    CHECK(strcmp(tracks[2].name, "Baritone Sax in Eb") == 0);
+    CHECK(tracks[1].notes[0].pitch == 60);
+    long midi_size = 0;
+    unsigned char *bytes = (unsigned char *)test_slurp("output/tests/parts.mid", &midi_size);
+    int programs = 0;
+    for (long i = 0; i + 1 < midi_size; i++) {
+        if (bytes[i] == 0xC0 && bytes[i + 1] == 65) programs |= 1; /* alto sax */
+        if (bytes[i] == 0xC1 && bytes[i + 1] == 67) programs |= 2; /* baritone sax */
+    }
+    CHECK(programs == 3);
+    free(bytes);
 
     /* on the eighth grid a step is half a quarter */
     Score e;

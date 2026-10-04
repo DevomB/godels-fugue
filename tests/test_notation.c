@@ -1,4 +1,5 @@
 #include "notation.h"
+#include "parts.h"
 #include "theory.h"
 #include "test_util.h"
 
@@ -333,8 +334,50 @@ static void test_sixteenth_grid(void) {
     free(abc);
 }
 
+/* An alto sax in E-flat is written a major sixth above its sound, in its own
+ * key: concert D minor reads as B minor and a sounding D4 as a B4. LilyPond
+ * gets \transposition so its MIDI sounds the written notes right. */
+static void test_parts(void) {
+    test_output_dir();
+    static const int notes[1][8][3] = {{{0, 4, 62}}};
+    static const int counts[1] = {1};
+    Score s;
+    build(&s, 1, 4, notes, counts);
+    s.key[0] = key_id(2, MODE_MINOR);
+    s.part[0] = PART_ALTO_SAX;
+    CHECK(export_lilypond("output/tests/alto.ly", &s));
+    char *ly = test_slurp("output/tests/alto.ly", NULL);
+    CHECK(strstr(ly, "instrumentName = \"Alto Sax in Eb\"") != NULL);
+    CHECK(strstr(ly, "\\clef treble \\transposition ees \\key b \\minor") != NULL);
+    CHECK(strstr(ly, " b'1") != NULL);
+    free(ly);
+    CHECK(export_abc("output/tests/alto.abc", &s));
+    char *abc = test_slurp("output/tests/alto.abc", NULL);
+    CHECK(strstr(abc, "V:1 clef=treble name=\"Alto Sax in Eb\"\nK:Dm\n") != NULL);
+    CHECK(strstr(abc, "\nV:1\n[K:Bm] B4 |]\n") != NULL);
+    free(abc);
+
+    /* at concert pitch the part reads as it sounds */
+    s.concert = true;
+    CHECK(export_abc("output/tests/alto_concert.abc", &s));
+    abc = test_slurp("output/tests/alto_concert.abc", NULL);
+    CHECK(strstr(abc, "\nV:1\nD4 |]\n") != NULL);
+    free(abc);
+    s.concert = false;
+
+    /* a viola reads alto clef, untransposed */
+    s.part[0] = PART_VIOLA;
+    CHECK(export_lilypond("output/tests/viola.ly", &s));
+    ly = test_slurp("output/tests/viola.ly", NULL);
+    CHECK(strstr(ly, "\\clef alto \\key d \\minor") != NULL);
+    CHECK(strstr(ly, " d'1") != NULL);
+    CHECK(strstr(ly, "\\transposition") == NULL);
+    free(ly);
+}
+
 int main(void) {
     test_modulating();
+    test_parts();
     test_keys();
     test_eighth_grid();
     test_sixteenth_grid();

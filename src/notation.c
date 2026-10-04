@@ -1,6 +1,7 @@
 #include "notation.h"
 
 #include "canon.h"
+#include "parts.h"
 #include "theory.h"
 
 #include <stdio.h>
@@ -27,9 +28,12 @@ static int key_at(const Score *score, int step) {
     return score->key[0];
 }
 
-/* The voice's notes plus a rest padding the last bar. */
+/* The voice's notes plus a rest padding the last bar, as written: a
+ * transposing instrument's notes sit its interval above the sound and are
+ * spelled in its own key. */
 static int voice_segments(const Score *score, int v, Segment *out) {
     const ScoreVoice *voice = &score->voice[v];
+    int up = score_written_up(score, v);
     int bar = score_bar_steps(score);
     int pad = (score->span + bar - 1) / bar * bar - score->span;
     int n = 0;
@@ -50,8 +54,10 @@ static int voice_segments(const Score *score, int v, Segment *out) {
                 stop = score->modulate_at;
             if (stop > end) stop = end;
             stop = t + score_written_steps(score, stop - t);
-            Segment s = {t, stop - t, note.pitch, key_at(score, note.start),
-                         note.pitch != SOUND_REST && stop < end};
+            bool sounds = note.pitch != SOUND_REST;
+            Segment s = {t, stop - t, sounds ? note.pitch + up : SOUND_REST,
+                         score_written_key(score, v, key_at(score, note.start)),
+                         sounds && stop < end};
             out[n++] = s;
             t = stop;
         }
@@ -59,15 +65,8 @@ static int voice_segments(const Score *score, int v, Segment *out) {
     return n;
 }
 
-static bool low_voice(const Score *score, int v) {
-    long sum = 0;
-    int n = 0;
-    for (int t = 0; t < score->span; t++) {
-        if (score->line[v][t] == SOUND_REST) continue;
-        sum += score->line[v][t];
-        n++;
-    }
-    return n > 0 && sum / n < 57;
+static const char *clef_name(char clef) {
+    return clef == 'F' ? "bass" : clef == 'C' ? "alto" : "treble";
 }
 
 static bool finish(FILE *f) {
@@ -147,16 +146,21 @@ bool export_lilypond(const char *path, const Score *score) {
     for (int v = 0; v < score->voices; v++) {
         Segment segs[SEGMENT_MAX];
         int n = voice_segments(score, v, segs);
-        fprintf(f, "    \\new Staff \\with { instrumentName = \"Voice %d\" } {\n      \\clef %s ",
-                v + 1, low_voice(score, v) ? "bass" : "treble");
-        ly_key(f, score->key[0]);
+        char name[40];
+        score_part_name(score, v, name, sizeof(name));
+        fprintf(f, "    \\new Staff \\with { instrumentName = \"%s\" } {\n      \\clef %s ", name,
+                clef_name(score_clef(score, v)));
+        /* written pitches; \transposition lets LilyPond's MIDI sound them */
+        if (score_written_up(score, v) > 0)
+            fprintf(f, "\\transposition %s ", score_part(score, v)->lily);
+        ly_key(f, score_written_key(score, v, score->key[0]));
         fprintf(f, " \\time 4/4");
         if (v == 0) fprintf(f, " \\tempo 4 = %d", score->tempo > 0 ? score->tempo : 120);
         fprintf(f, "\n     ");
         for (int k = 0; k < n; k++) {
             if (modulates(score) && segs[k].start == score->modulate_at) {
                 fprintf(f, " ");
-                ly_key(f, score->key[1]);
+                ly_key(f, score_written_key(score, v, score->key[1]));
             }
             fprintf(f, " ");
             ly_segment(f, score, &segs[k]);
@@ -220,8 +224,9 @@ bool export_abc(const char *path, const Score *score) {
     fprintf(f, "X:1\nT:" PROJECT_TITLE "\nM:4/4\nL:1/%d\nQ:1/4=%d\n", 4 * score_beat_steps(score),
             score->tempo > 0 ? score->tempo : 120);
     for (int v = 0; v < score->voices; v++) {
-        fprintf(f, "V:%d clef=%s name=\"Voice %d\"\n", v + 1,
-                low_voice(score, v) ? "bass" : "treble", v + 1);
+        char name[40];
+        score_part_name(score, v, name, sizeof(name));
+        fprintf(f, "V:%d clef=%s name=\"%s\"\n", v + 1, clef_name(score_clef(score, v)), name);
     }
     abc_key(f, score->key[0]);
     fprintf(f, "\n");
@@ -230,14 +235,22 @@ bool export_abc(const char *path, const Score *score) {
         int n = voice_segments(score, v, segs);
         int sig[7];
         bool marked[7] = {false};
-        signature(score->key[0], sig);
+        int key = score_written_key(score, v, score->key[0]);
+        signature(key, sig);
         fprintf(f, "V:%d\n", v + 1);
+        /* a transposing part starts in its own key */
+        if (key != score->key[0]) {
+            fputc('[', f);
+            abc_key(f, key);
+            fprintf(f, "] ");
+        }
         for (int k = 0; k < n; k++) {
             if (modulates(score) && segs[k].start == score->modulate_at) {
+                int second = score_written_key(score, v, score->key[1]);
                 fputc('[', f);
-                abc_key(f, score->key[1]);
+                abc_key(f, second);
                 fprintf(f, "] ");
-                signature(score->key[1], sig);
+                signature(second, sig);
             }
             abc_segment(f, &segs[k], sig, marked);
             int end = segs[k].start + segs[k].steps;

@@ -1,9 +1,11 @@
 #include "midi.h"
 
 #include "canon.h"
+#include "parts.h"
 #include "theory.h"
 
 #include <stdio.h>
+#include <string.h>
 
 static int write_u16be(FILE *f, unsigned v) {
     unsigned char b[2] = {(unsigned char)((v >> 8) & 0xFF), (unsigned char)(v & 0xFF)};
@@ -97,10 +99,14 @@ static int write_conductor(FILE *f, const Score *score) {
 static int write_voice(FILE *f, const Score *score, int v) {
     long len_pos = begin_track(f);
     if (len_pos < 0) return -1;
-    char name[16];
-    int n = snprintf(name, sizeof(name), "Voice %d", v + 1);
-    unsigned char program[3] = {0, (unsigned char)(0xC0 | v), 0};
-    if (write_meta(f, 0, 0x03, (const unsigned char *)name, (unsigned)n) != 0 ||
+    /* the instrument's name and General MIDI program; MIDI is always at
+     * sounding pitch, whatever the part is written in */
+    char name[40];
+    score_part_name(score, v, name, sizeof(name));
+    const Part *part = score_part(score, v);
+    unsigned char program[3] = {0, (unsigned char)(0xC0 | v),
+                                (unsigned char)(part != NULL ? part->program : 0)};
+    if (write_meta(f, 0, 0x03, (const unsigned char *)name, (unsigned)strlen(name)) != 0 ||
         write_bytes(f, program, 3) != 0)
         return -1;
     unsigned last = 0;

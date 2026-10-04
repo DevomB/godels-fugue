@@ -6,6 +6,7 @@
 #include "midi.h"
 #include "notation.h"
 #include "page.h"
+#include "parts.h"
 #include "theory.h"
 #include "trace.h"
 
@@ -216,6 +217,23 @@ static void print_key_lines(FILE *out, const Run *run) {
     }
 }
 
+/* Each voice's instrument, and the notes it cannot play. */
+static void print_parts_line(FILE *out, const Run *run) {
+    const Score *s = &run->score;
+    if (run->status != SOLVE_SAT || score_part(s, 0) == NULL) return;
+    fprintf(out, "parts:");
+    for (int v = 0; v < s->voices; v++) {
+        char name[40];
+        score_part_name(s, v, name, sizeof(name));
+        fprintf(out, "%s voice %d %s", v > 0 ? "," : "", v + 1, name);
+        int out_of_range = score_out_of_range(s, v);
+        if (out_of_range > 0)
+            fprintf(out, " (%d note%s outside its range)", out_of_range,
+                    out_of_range == 1 ? "" : "s");
+    }
+    fprintf(out, "%s\n", s->concert ? "; written at concert pitch" : "");
+}
+
 static void print_optimize_line(FILE *out, const Run *run) {
     const SolverStats *st = &run->state.stats;
     if (run->status != SOLVE_SAT || run->config.optimize <= 0) return;
@@ -399,6 +417,7 @@ bool output_write_report(const char *path, const Run *run) {
     print_key_lines(f, run);
     fprintf(f, "voices: %d  delay: %d  length: %d  span: %d steps\n", m->voices,
             run->config.delay, run->config.length, m->span);
+    print_parts_line(f, run);
     fprintf(f, "variables: %d  constraints: %d  soft terms: %d\n", m->nvars, m->ncons, m->nterms);
     fprintf(f, "to the first piece: nodes: %ld  decisions: %ld  backtracks: %ld  "
                "backjumps: %ld  learned: %ld\n",
