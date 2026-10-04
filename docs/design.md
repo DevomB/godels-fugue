@@ -313,9 +313,11 @@ which steps are strong for every voice), and form as a state machine.
 - **Backtracking** with snapshots on the heap (one per depth). A trail would use less
   memory; at up to about 320 variables (a 128-note melody with ties, a chord per
   bar and two keys), snapshots are simple and fast enough. A solver's own state, with
-  the record of every decision, is about 270 KB at that size; `--sensitivity` keeps
-  two of them on the stack under a deep search, so the Windows build asks for the
-  8 MB main-thread stack that Linux, macOS and the WebAssembly build already have.
+  the record of every decision, is about 280 KB at that size (most of it the 323
+  decision records with their ranked candidates); `--sensitivity` keeps two of them
+  on the stack under the model and a search up to 322 levels deep, close to 700 KB
+  in all, so the Windows build asks for the 8 MB main-thread stack that Linux, macOS
+  and the WebAssembly build already have rather than its default 1 MB.
 - **Conflict-directed backjumping**: every variable carries the set of decisions its
   domain depends on. A dead end jumps straight back to the latest decision in that
   set, and the failed value is removed with that set as its reason.

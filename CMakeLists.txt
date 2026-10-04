@@ -20,7 +20,7 @@ endif()
 if(WIN32)
   # Clang on Windows uses the same C runtime headers as MSVC.
   add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-  # A solver's state for the longest pieces takes about 270 KB, and
+  # A solver's state for the longest pieces takes about 280 KB, and
   # --sensitivity holds two on the stack under a deep search: give the main
   # thread the 8 MB stack it has on Linux and macOS and in the WebAssembly build.
   if(MSVC)
