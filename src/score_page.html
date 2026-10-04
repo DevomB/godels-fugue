@@ -152,6 +152,8 @@ svg text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
 #ties .dot.on { fill: var(--series-2); }
 #ties .dot.picked { stroke: var(--select); stroke-width: 2; }
 #ties .dot-label { fill: var(--text-muted); font-size: 10px; }
+.story { margin: 14px 2px 0; color: var(--text-secondary); max-width: 92ch; }
+.story b { color: var(--text-primary); font-weight: 600; }
 .tries { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .try { font-size: 13px; padding: 3px 9px; border-color: var(--accent); }
 .try.removed { border-color: var(--border); color: var(--text-muted); }
@@ -229,6 +231,7 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
     <button id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
   </div>
   <div class="tiles" id="tiles"></div>
+  <p class="story" id="story" hidden></p>
 
   <section class="card" id="score-card">
     <h2>Score</h2>
@@ -1487,6 +1490,52 @@ const PIECE = /*PIECE_DATA*/;
     drawEntropy();
     drawBars();
   }
+  /* ---------- in short ---------- */
+  (function story() {
+    if (P.status !== "solved") return;
+    const box = document.getElementById("story");
+    const st = P.stats || {};
+    let bits = 0;
+    for (const v of vars) if ((v.initial || []).length > 1) bits += Math.log2(v.initial.length);
+    const removed = {};
+    let total = 0;
+    for (const e of events) {
+      if (e.type !== "remove") continue;
+      removed[e.rule] = (removed[e.rule] || 0) + 1;
+      total++;
+    }
+    const top = Object.keys(removed).sort(function (a, b) { return removed[b] - removed[a]; }).slice(0, 3);
+    const forced = countStatus("forced"), chosen = countStatus("chosen");
+    const others = vars.length - melody.length - vars.filter(function (v) { return v.kind === "key"; }).length;
+    const parts = [];
+    function add(text, bold) { parts.push(bold ? el("b", {}, text) : document.createTextNode(text)); }
+    add("In short: ");
+    add("before any rule, the " + melody.length + " melody notes" + (others > 0 ? " and " + others + " ties and chords" : "") +
+        " could be combined in about ");
+    const exp = Math.round(bits * Math.LN2 / Math.LN10);
+    parts.push(document.createTextNode("10"));
+    parts.push(el("sup", {}, String(exp)));
+    add(" ways. Collapsing to this piece removed ");
+    add(total.toLocaleString() + " candidate values", true);
+    if (top.length) {
+      add("; " + top[0] + " did the most (" + removed[top[0]] + ")");
+      if (top.length > 1) add(", then " + top.slice(1).map(function (r) { return r + " (" + removed[r] + ")"; }).join(" and "));
+    }
+    add(". ");
+    if (forced) {
+      add(forced + " value" + (forced === 1 ? " was" : "s were") + " forced", true);
+      add(" because every alternative broke a rule, and the search chose the other " + chosen);
+    } else {
+      add("Nothing was forced outright: the search chose all " + chosen + " values");
+    }
+    const back = st.firstBacktracks || 0;
+    add(back ? ", backtracking " + back + " time" + (back === 1 ? "" : "s") + " before its first piece. " : " without a single backtrack. ");
+    if (P.energy && st.firstEnergy !== undefined && st.firstEnergy > P.energy.total)
+      add("The optimizer then lowered the energy from " + st.firstEnergy + " to " + P.energy.total + ".");
+    for (const n of parts) box.appendChild(n);
+    box.hidden = false;
+  })();
+
   drawAll();
   renderEvents(true);
   cxRender();
