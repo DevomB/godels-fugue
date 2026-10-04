@@ -124,6 +124,15 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   (`leading_tone`), no two large leaps in a row in one direction (`double_leaps 0`),
   and a mirror melody that is its own retrograde inversion (it sounds the same
   backwards and upside down).
+- **Real instrument parts**: `ensemble` gives each voice an instrument by register
+  (a saxophone quartet, a string quartet, woodwinds, brass, a concert band, ...). The
+  score files name each part, use its clef (alto clef for the viola, bass clef for the
+  cello, bassoon, trombone and tuba) and write transposing instruments the way their
+  players read them: B-flat clarinet, trumpet and soprano sax a step above the sound,
+  E-flat alto sax a sixth, B-flat tenor sax a ninth, E-flat baritone sax an octave and
+  a sixth, horn in F a fifth, double bass an octave, each in its own key. MIDI gives
+  every track its instrument, `report.txt` flags notes outside an instrument's range,
+  and `written concert` prints a concert-pitch score instead.
 - **Given notes**: fix any notes of the melody and the solver completes the rest, or
   give the whole melody, typed in or read from a MIDI file, to check it against the
   rules and see what it costs.
@@ -203,6 +212,7 @@ The keys you are most likely to change:
 | `optimize` | 10000 | Nodes spent lowering the energy after the first solution |
 | `seed`, `temperature` | 1, 0 | Sampling instead of always taking the cheapest value |
 | `tempo`, `instrument` | 120, pluck | Quarter notes per minute; the sound of `voices.wav`: `pluck`, `organ` or `sine` |
+| `ensemble`, `written` | none, transposed | The instruments the parts are written for (`saxes`, `strings`, `brass`, ...), transposed or at concert pitch |
 
 The `examples/` directory has a config for each feature. Each file starts with a
 comment saying what it shows.
@@ -253,10 +263,10 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 
 | File | Contents |
 | --- | --- |
-| `canon.mid` | Standard MIDI file: a tempo, meter and key-signature track, then one track per voice |
-| `score.musicxml` | MusicXML 3.1 for notation software, with ties across barlines and key changes |
+| `canon.mid` | Standard MIDI file: a tempo, meter and key-signature track, then one track per voice, named and set to its instrument's General MIDI program with an `ensemble` |
+| `score.musicxml` | MusicXML 3.1 for notation software, with ties across barlines and key changes; with an `ensemble`, named parts, their clefs, and transposing parts written in their own key with `<transpose>` so notation software plays them at concert pitch |
 | `score.ly` | LilyPond source: one staff per voice in a staff group, the same spelling, ties, clefs and key changes |
-| `score.abc` | ABC notation: one voice per canon voice, with accidentals written out relative to the key signature |
+| `score.abc` | ABC notation: one voice per canon voice, with accidentals written out relative to the key signature (and each transposing part in its own key) |
 | `voices.wav` | Stereo, 16-bit, 44.1 kHz: the voices on a plucked string, or the organ or sine that `instrument` picks, panned from left to right in a small reverb that rings on for 1.5 s after the last note |
 | `contour.svg` | Pitch over time for every voice |
 | `score.html` | Interactive score: a plain-words summary of how the piece collapsed, piano roll per voice, playback on sampled instruments (ensembles such as flute, violin and cello, a string quartet, woodwinds or brass give each voice its own instrument, highest voice first, with a bass line on the chord roots; piano, harpsichord, organ, harp and mallets; built-in synths offline), each voice panned in stereo, notes lighting up as they sound, looping for rounds, any voice muted from the legend, why each note is there, the canon's fingerprint (which notes sound against which), a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart, with each note plucked as the solver decides it), what the given notes changed, entropy and energy charts, and the proof log |

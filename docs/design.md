@@ -457,6 +457,15 @@ already expose the research data: entropy, statistics, and removals by rule.
   HTML page. The notation exports share one spelling (`key_spell`), cut notes at
   barlines and at the key change with ties, tie a length no single note value writes,
   and pad the last bar with a rest.
+  With `ensemble`, `parts.c` gives each voice an instrument, ranked by average
+  sounding pitch, and the exports write real parts: the instrument's name and clef,
+  its General MIDI program on its MIDI track, and for a transposing instrument the
+  written pitch, its interval above the sound, spelled in the written key (the
+  sounding key's tonic moved by that interval, same mode). MusicXML adds the
+  `<transpose>` that takes it back to the sound, LilyPond `\transposition`, ABC an
+  inline key per voice. MIDI and WAV stay at sounding pitch. `written concert` keeps
+  every part at sounding pitch, and `report.txt` counts notes outside each
+  instrument's range.
   The WAV plays each note on a Karplus-Strong plucked string (or an organ of four
   harmonics, or a sine), pans the voices with equal power from left to right, and
   runs the mix through a small Schroeder reverb; the noise that excites each string
