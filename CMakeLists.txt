@@ -69,9 +69,10 @@ target_compile_definitions(canon-collapse PRIVATE CANON_COLLAPSE_VERSION="${PROJ
 
 if(EMSCRIPTEN)
   # The web demo (web/) runs main() in a worker and reads the score files back
-  # from the in-memory file system. The tests need a native build.
+  # from the in-memory file system; tests/web_smoke.mjs does the same in Node.
+  # The other tests need a native build.
   target_link_options(canon-collapse PRIVATE
-    -sMODULARIZE=1 -sEXPORT_NAME=CanonCollapse -sENVIRONMENT=worker
+    -sMODULARIZE=1 -sEXPORT_NAME=CanonCollapse -sENVIRONMENT=worker,node
     -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM=1
     -sINITIAL_MEMORY=64MB -sALLOW_MEMORY_GROWTH=1 -sSTACK_SIZE=8MB
     -sEXPORTED_RUNTIME_METHODS=callMain,FS)
