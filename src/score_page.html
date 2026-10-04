@@ -1475,18 +1475,81 @@ const PIECE = /*PIECE_DATA*/;
     return { parts: parts, bass: bass };
   }
 
-  /* Phrasing: downbeats and strong beats a little louder than off-beats, an
-     arch of loudness over the piece, each voice's entry announced, and a few
-     milliseconds of looseness off the downbeat, all repeatable. */
+  /* ---------- expression ----------
+     How a player shapes the piece. The mood sets the dynamics (soft, at the
+     climax, at the end), how strongly the metre is accented, how legato the
+     lines are, how much the closing bars broaden (rit), how long phrases
+     breathe and push (breathe, rubato) and how long the last chord is held.
+     The climax is the piece's own: where its highest note sounds. */
+  const MOODS = {
+    plain: { dyn: [0.62, 0.82, 0.6], accent: 1, legato: 0.92, rit: 0.82, breathe: 0.96, rubato: 0.02, hold: 1.6 },
+    lament: { dyn: [0.4, 0.86, 0.3], accent: 0.55, legato: 1.02, rit: 0.62, breathe: 0.86, rubato: 0.05, hold: 2.6 },
+    hymn: { dyn: [0.48, 0.8, 0.4], accent: 0.4, legato: 1.02, rit: 0.7, breathe: 0.88, rubato: 0.02, hold: 2.4 },
+    triumph: { dyn: [0.62, 0.92, 1.0], accent: 1.35, legato: 0.84, rit: 0.8, breathe: 0.97, rubato: 0.01, hold: 2.2 },
+    longing: { dyn: [0.38, 0.96, 0.34], accent: 0.7, legato: 1.0, rit: 0.64, breathe: 0.86, rubato: 0.07, hold: 2.6 },
+    dance: { dyn: [0.72, 0.9, 0.82], accent: 1.6, legato: 0.6, rit: 0.92, breathe: 1.0, rubato: 0, hold: 1.3 },
+    nocturne: { dyn: [0.32, 0.66, 0.26], accent: 0.5, legato: 1.02, rit: 0.66, breathe: 0.9, rubato: 0.06, hold: 2.8 },
+  };
+  /* without a mood key: slow minor laments, slow major is a hymn, fast dances */
+  const firstKey = (P.keys && P.keys[0] && P.keys[0].name) || "";
+  const pace = P.tempo || 120;
+  const moodName = MOODS[cfg.mood] ? cfg.mood
+    : pace <= 72 ? (/ minor/.test(firstKey) ? "lament" : "hymn") : pace >= 120 ? "dance" : "plain";
+  const mood = MOODS[moodName];
+  if (moodName !== "plain") document.getElementById("subtitle").textContent += " · played as a " + moodName;
+  const PHRASE = 4 * BAR; /* four-bar phrases */
+  /* the climax: the highest note's onset nearest two thirds of the way through */
+  const climax = (function () {
+    let top = -1, best = Math.round(P.span * 0.66);
+    for (const voice of score) for (const n of voice) {
+      if (n.pitch > top) { top = n.pitch; best = n.start; }
+      else if (n.pitch === top && Math.abs(n.start - P.span * 0.66) < Math.abs(best - P.span * 0.66)) best = n.start;
+    }
+    return Math.max(P.span * 0.35, Math.min(P.span * 0.85, best));
+  })();
+  function level(step) {
+    const ease = function (u) { return 0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, Math.min(1, u))); };
+    if (step <= climax) return mood.dyn[0] + (mood.dyn[1] - mood.dyn[0]) * ease(step / Math.max(1, climax));
+    return mood.dyn[1] + (mood.dyn[2] - mood.dyn[1]) * ease((step - climax) / Math.max(1, P.span - climax));
+  }
+  /* Seconds from the start to each step. Phrases push a little in the middle
+     and breathe on their last beat; the closing two bars broaden. A round that
+     loops keeps a steady pulse at its ends. */
+  function timeMap(base, looping) {
+    const times = new Float64Array(P.span + 1);
+    const ritFrom = Math.max(0, P.span - 2 * BAR);
+    for (let s = 0; s < P.span; s++) {
+      let stretch = 1;
+      const inPhrase = (s % PHRASE) / PHRASE, phraseEnd = s % PHRASE >= PHRASE - SPB;
+      stretch *= 1 - mood.rubato * Math.sin(Math.PI * inPhrase);
+      if (phraseEnd && s < ritFrom) stretch /= mood.breathe;
+      if (!looping && s >= ritFrom) {
+        const w = (s - ritFrom + 0.5) / Math.max(1, P.span - ritFrom);
+        stretch *= 1 + (1 / mood.rit - 1) * w * w;
+      }
+      times[s + 1] = times[s] + base * stretch;
+    }
+    return times;
+  }
+  function stepAt(times, t) {
+    let lo = 0, hi = times.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (times[mid] <= t) lo = mid; else hi = mid; }
+    return lo + (t - times[lo]) / Math.max(1e-9, times[lo + 1] - times[lo]);
+  }
+  /* Loudness of one note: the arc, the metre's accents scaled by the mood, a
+     swell across each phrase, the subject brought out at each entry, and a
+     little life; plus a few milliseconds of looseness off the beat. */
   function feel(v, n, pass, entry) {
     let h = Math.imul(((v + 1) * 2654435761) ^ ((n.start + 1) * 40503) ^ ((pass + 1) * 9973), 2246822519) >>> 0;
     h ^= h >>> 15;
     const r = (h % 2001) / 1000 - 1;
     const inBar = n.start % BAR, onBeat = inBar % SPB === 0, beatNo = Math.floor(inBar / SPB);
-    let vel = 70 + (inBar === 0 ? 16 : onBeat ? (beatNo % 2 === 0 ? 9 : 4) : -5);
-    vel += 10 * Math.sin((Math.PI * n.start) / Math.max(1, P.span)) + 5 * r;
-    if (entry) vel += 10;
-    return { vel: Math.max(30, Math.min(118, Math.round(vel))), shift: inBar === 0 ? 0 : r * 0.012 };
+    let vel = 24 + 96 * level(n.start);
+    vel += mood.accent * (inBar === 0 ? 9 : onBeat ? (beatNo % 2 === 0 ? 5 : 2) : -4);
+    vel += 6 * Math.sin((Math.PI * (n.start % PHRASE)) / PHRASE);
+    if (entry) vel += 8;
+    vel += 3 * r;
+    return { vel: Math.max(18, Math.min(124, Math.round(vel))), shift: inBar === 0 ? 0 : r * 0.01 };
   }
 
   function stop() {
@@ -1531,15 +1594,19 @@ const PIECE = /*PIECE_DATA*/;
       }
       play.disabled = false;
     }
-    const beat = 60 / (P.tempo || 120) / SPB; /* seconds per step */
+    const beat = 60 / (P.tempo || 120) / SPB; /* seconds per step at the written tempo */
+    const looping = loop.checked;
+    const times = timeMap(beat, looping);
+    /* the last chord is held, longer for the slower moods */
+    const hold = looping ? 0 : (mood.hold - 1) * 2 * SPB * beat;
     const t0 = audio.currentTime + 0.15;
     const wave = kind === "synth" ? organWave() : null;
-    const level = (kit ? 1 : kind === "pluck" ? 1.3 : 0.45) / Math.sqrt(Math.max(1, voices));
+    const gain0 = (kit ? 1 : kind === "pluck" ? 1.3 : 0.45) / Math.sqrt(Math.max(1, voices));
     channels.forEach(function (ch, v) {
-      ch.level = level * (kit ? trim(partOf(kind, v)) : 1);
+      ch.level = gain0 * (kit ? trim(partOf(kind, v)) : 1);
       ch.gain.value = muted.has(v) ? 0 : ch.level;
     });
-    bassChannel.level = level * 0.8 * (kit && kit.bass ? trim(ENSEMBLES[kind].bass) : 1);
+    bassChannel.level = gain0 * 0.8 * (kit && kit.bass ? trim(ENSEMBLES[kind].bass) : 1);
     bassChannel.gain.value = bassBox.checked ? bassChannel.level : 0;
     if (kit) voicesOn = kit.parts.concat(kit.bass ? [kit.bass] : []);
 
@@ -1575,34 +1642,41 @@ const PIECE = /*PIECE_DATA*/;
           if (n.pitch <= 0) continue;
           const f = feel(v, n, pass, first && pass === 0);
           first = false;
-          const on = begin + n.start * beat + f.shift, written = n.length * beat;
+          const last = n.start + n.length >= P.span;
+          const on = begin + times[n.start] + f.shift;
+          const written = times[n.start + n.length] - times[n.start] + (last ? hold : 0);
           if (kit) {
             const part = partOf(kind, v);
-            /* sustained parts slightly detached on short notes; struck ones ring on a little */
-            const dur = STRUCK[part] ? written + 0.25 : written * (n.length <= SPB ? 0.86 : 0.96);
+            /* struck parts ring on; sustained ones are as legato as the mood,
+               a little shorter on notes under a beat */
+            const dur = STRUCK[part] ? written + 0.3
+              : written * (n.length < SPB ? Math.min(mood.legato, 0.9) : mood.legato);
             kit.parts[v].start({ note: n.pitch, velocity: f.vel, time: on, duration: dur });
           } else {
-            synthNote(n.pitch, on, on + written, channels[v], f.vel, v);
+            synthNote(n.pitch, on, on + written * Math.min(1, mood.legato), channels[v], f.vel, v);
           }
         }
       });
       for (const n of bassNotes) {
-        const on = begin + n.start * beat, written = n.length * beat, vel = n.down ? 74 : 62;
+        const last = n.start + n.length >= P.span;
+        const on = begin + times[n.start];
+        const written = times[n.start + n.length] - times[n.start] + (last ? hold : 0);
+        const vel = Math.round((n.down ? 0.92 : 0.8) * (24 + 96 * level(n.start)));
         if (kit && kit.bass) kit.bass.start({ note: n.pitch, velocity: vel, time: on, duration: written * 0.95 });
         else synthNote(n.pitch, on, on + written, bassChannel, vel, voices);
       }
     }
-    const total = P.span * beat;
+    const total = times[P.span];
     let passes = 1;
     schedule(t0, 0);
     play.textContent = "Stop";
     function tick() {
       const t = audio.currentTime - t0;
       if (loop.checked && t > passes * total - 1) { schedule(t0 + total * passes, passes); passes++; }
-      if (t > passes * total + 0.4) { stop(); return; }
+      if (t > passes * total + hold + 0.4) { stop(); return; }
       const head = document.getElementById("playhead");
       const left = Number(roll.dataset.left), stepW = Number(roll.dataset.stepW);
-      const step = t >= 0 ? (t % total) / beat : -1;
+      const step = t >= 0 && t < passes * total ? stepAt(times, t % total) : -1;
       for (const n of noteNodes)
         n.node.classList.toggle("sounding", step >= n.start && step < n.start + n.length);
       tellBar(step >= 0 ? Math.floor(step / BAR) : -1);
