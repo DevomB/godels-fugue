@@ -581,6 +581,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     { key: "w_leap", label: "Smooth lines", low: "leaps welcome", high: "stepwise", def: 1 },
     { key: "w_dissonance", label: "Consonance", low: "spicy", high: "sweet", def: 1 },
     { key: "w_contrary", label: "Contrary motion", low: "voices move freely", high: "voices move apart", def: 0 },
+    { key: "tempo", label: "Tempo (beats per minute)", low: "slow", high: "fast", def: 120, min: 48, max: 180, step: 4 },
   ];
   const SLIDER_MAX = 8, CURVE_POINTS = 8, ARCH = [0, 1, 2, 3, 3, 2, 1, 0];
   const curveSvg = $("curve"), sliderBox = $("sliders");
@@ -617,7 +618,9 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     box.innerHTML = '<span></span><output></output><input type="range" min="0" step="1"><span class="ends"><span></span><span></span></span>';
     box.children[0].textContent = w.label;
     const input = box.querySelector("input");
-    input.max = String(SLIDER_MAX);
+    input.min = String(w.min || 0);
+    input.max = String(w.max || SLIDER_MAX);
+    input.step = String(w.step || 1);
     input.setAttribute("aria-label", w.label);
     box.querySelectorAll(".ends span")[0].textContent = w.low;
     box.querySelectorAll(".ends span")[1].textContent = w.high;
@@ -683,7 +686,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     WEIGHTS.forEach(function (w) {
       const v = Number(keyValue(config.value, w.key));
       const n = Number.isFinite(v) && keyValue(config.value, w.key) !== null ? v : w.def;
-      w.input.value = String(Math.min(SLIDER_MAX, n));
+      w.input.value = String(Math.min(w.max || SLIDER_MAX, n));
       w.output.textContent = String(n);
     });
     const t = keyValue(config.value, "tension");
