@@ -53,7 +53,7 @@ melody: 64 67 64 62 60 62 64 67 64 65 67 60
 voice 2: rest rest rest rest 64 67 64 62 60 62 64 67 64 65 67 60
 backtracks: 0
 search: 13 nodes, 12 decisions, 0 backjumps, 0 learned
-optimize: energy 27 -> 24, 1 improvement in 6 windows and 3644 more nodes, no window improves it
+optimize: energy 27 -> 24, 1 improvement in 5 windows and 3104 more nodes, no window improves it
 entropy: 0.000000
 energy: 24 (gravity 9, curve 12, leap 1, dissonance 2)
 ```
@@ -124,15 +124,20 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   (`leading_tone`), no two large leaps in a row in one direction (`double_leaps 0`),
   and a mirror melody that is its own retrograde inversion (it sounds the same
   backwards and upside down).
-- **Real instrument parts**: `ensemble` gives each voice an instrument by register
-  (a saxophone quartet, a string quartet, woodwinds, brass, a concert band, ...). The
-  score files name each part, use its clef (alto clef for the viola, bass clef for the
-  cello, bassoon, trombone and tuba) and write transposing instruments the way their
-  players read them: B-flat clarinet, trumpet and soprano sax a step above the sound,
-  E-flat alto sax a sixth, B-flat tenor sax a ninth, E-flat baritone sax an octave and
-  a sixth, horn in F a fifth, double bass an octave, each in its own key. MIDI gives
-  every track its instrument, `report.txt` flags notes outside an instrument's range,
-  and `written concert` prints a concert-pitch score instead.
+- **Players**: each voice is a player with an instrument, a range, a mix and a way
+  of playing. `ensemble` gives each voice an instrument by its transposition (a
+  saxophone quartet, a string quartet, woodwinds, brass, a concert band, ...), and
+  `parts` names any voice's instrument itself (`parts flute, cello`). An instrument's
+  range is a rule, so every note a voice sounds is one its player can play;
+  `part_low` and `part_high` narrow it further, and an impossible combination is
+  explained before the search. The score files name each part, use its clef (alto
+  clef for the viola, bass clef for the cello, bassoon, trombone and tuba) and write
+  transposing instruments the way their players read them: B-flat clarinet, trumpet
+  and soprano sax a step above the sound, E-flat alto sax a sixth, B-flat tenor sax a
+  ninth, E-flat baritone sax an octave and a sixth, horn in F a fifth, double bass an
+  octave, each in its own key; `written concert` prints a concert-pitch score instead.
+  `volume`, `pan`, `articulation` and `intensity` set each voice's mix and playing,
+  in the score page, `canon.mid` and `voices.wav`.
 - **Given notes**: fix any notes of the melody and the solver completes the rest, or
   give the whole melody, typed in or read from a MIDI file, to check it against the
   rules and see what it costs.
@@ -142,40 +147,49 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   recovering after a leap, a repeating motif, contrary rather than similar motion
   between voices (`w_contrary`), pitch-class weights learned from a corpus, and more.
   Their sum is the piece's *energy*.
-- **A shape for the melody**: `w_arc` makes the melody climb to one high point, its
-  climax, placed on a strong beat at `climax` percent of the way through (66 by
-  default), and keeps the opening well below it so the peak is earned. `w_sequence`
-  asks each bar to echo the contour of the bar before, so a figure is heard again a
-  step higher or lower, the way a sequence builds tension.
+- **A form for the melody** (`phrase`): the melody is planned in phrases of that many
+  bars. The first states a subject; later phrases bring back its first bar, its head,
+  in the same rhythm and contour (rules) as a sequence at another pitch, or upside down where
+  it would sound against another voice entering with the subject, so the two move in
+  contrary motion instead of parallels; the phrase holding the climax contrasts with
+  it in how busily it moves; the last brings the subject back at its own pitch before
+  the cadence. Every phrase but the last breathes on a long note or a rest, and with
+  harmony arrives on a prepared dominant. `w_arc` makes the melody climb to one high
+  point placed at `climax` percent of the way through; with a form it is the melody's
+  single top. The canon repeats the subject
+  at every entry; the form makes the melody between the entries develop it.
 - **Search** with minimum-remaining-values, entropy or look-ahead variable ordering,
   conflict-directed backjumping, learned conflicts, node and time limits, and a
-  neighbourhood optimizer that lowers the energy after the first solution.
+  neighbourhood optimizer that lowers the energy after the first solution, spending its
+  budget where the piece costs most.
 - **Explanations**: a proof log of every removal with its parent events, the decisions
   each forced value rests on (a minimal set whenever propagation from them forces it:
   dropping any one leaves the value unforced; a set left whole, because propagation
   alone does not force the value or a very large piece ran out of budget, is marked
   "full reason, not minimized"), an unsat core for impossible rule sets, and a
   counterfactual for given notes.
-- **Moods**: six presets, each a feeling rather than a period. A preset picks the
-  ensemble, key, mode, tempo, rhythm, where the climax falls and the costs that shape
-  the line:
+- **Moods**: six presets, each a feeling rather than a period, and each a starting
+  point to change. A preset starts from the defaults and picks the ensemble, key, mode,
+  tempo, rhythm, a form of two-bar phrases, where the climax falls and the costs that
+  shape the line:
 
   | Preset | Feeling | Sound |
   | --- | --- | --- |
-  | `lament` | grief | strings in D minor, slow, crying out early and falling a long way by step |
-  | `hymn` | calm | an organ in G major, long notes moving by step, rising to a peak and coming to rest |
-  | `triumph` | victory | brass in C major, leaping like fanfares, climbing to the peak near the end |
-  | `longing` | longing | a flute and a cello in A minor that turn to C major, reaching up late and letting go |
-  | `dance` | joy | a round for woodwinds in F major, quick and light, a bouncing motif that keeps coming back |
-  | `nocturne` | night | a quiet piano duet in E-flat major, slow and songlike, rising once and falling away |
+  | `lament` | grief | strings in D minor, slow; the subject sighs downward and cries out early |
+  | `hymn` | calm | an organ in G major, long notes by step, each phrase coming to rest |
+  | `triumph` | victory | brass in C major, a fanfare that climbs in sequence to a late peak |
+  | `longing` | longing | a flute and a cello in A minor that turn to C major, reaching up late |
+  | `dance` | joy | a quick round for woodwinds in F major |
+  | `nocturne` | night | a quiet piano duet in E-flat major that rises once and falls away |
 
-- **Played with expression**: the score page does not play the notes flat. Its
-  `mood` (set by each preset, or guessed from the tempo and key) shapes the
-  performance: the dynamics swell toward the climax and fall away after it, strong
-  beats are accented, phrases breathe at their ends, the tempo bends a little
-  (rubato) and slows over the last two bars, and the final chord is held. A lament
-  is played quietly and legato with a long ritardando, a dance lightly and in strict
-  time, a triumph loud to the end.
+- **Performed with expression, the same everywhere**: the engine works out how the
+  piece is played, once, and the score page, `canon.mid` and `voices.wav` all play it.
+  The `mood` (set by each preset, or guessed from the tempo and key) shapes it: the
+  dynamics swell toward the climax as each voice reaches it and fall away after,
+  strong beats are accented, each entry and each statement of the subject is brought
+  out a little, phrases breathe at their ends, the tempo bends a little and broadens
+  over the last two bars, and the final chord is held. `mood plain` plays exactly as
+  written, for comparison. Nothing is random: a piece plays the same every time.
 - **A SAT cross-check** (`--sat`) that encodes the same rules for a separate DPLL
   solver.
 - **Counting and sensitivity** (`--count`, `--sensitivity`): how many pieces the
@@ -232,13 +246,16 @@ The keys you are most likely to change:
 | `melody` | all free | The notes to keep, `?` for the ones to choose |
 | `w_leap`, `w_step` | 1, 0 | Costs of melodic leaps: per four semitones, and by size past a whole step (for stepwise lines) |
 | `w_arc`, `climax` | 0, 66 | Cost of notes that rise above the climax note, and where the climax falls (percent of the way through) |
-| `w_sequence` | 0 | Cost of a bar whose contour does not echo the bar before |
+| `w_sequence` | 0 | With a form, the cost of each step where a return of the subject breaks its rhythm or contour, and of a climax that does not contrast; without one, of a bar whose contour does not echo the bar before |
+| `phrase` | 0 | Bars in each phrase of the melody's form: the subject, its returns as sequences or inversions, a contrasting climax, breaths and arrivals (0 = no form) |
 | `w_figure` | 3 | On the sixteenth grid, the cost of each beat's rhythm figure: nothing for a quarter or two eighths, more for sixteenths, most for one off the beat |
 | `optimize` | 10000 | Nodes spent lowering the energy after the first solution |
 | `seed`, `temperature` | 1, 0 | Sampling instead of always taking the cheapest value |
-| `tempo`, `instrument` | 120, pluck | Quarter notes per minute; the sound of `voices.wav`: `pluck`, `organ` or `sine` |
+| `tempo`, `instrument` | 120, auto | Quarter notes per minute; the synth of `voices.wav`: `auto` (by each voice's instrument), `pluck`, `organ` or `sine` |
 | `ensemble`, `written` | none, transposed | The instruments the parts are written for (`saxes`, `strings`, `brass`, ...), transposed or at concert pitch |
-| `mood` | auto | How the score page performs the piece: `plain`, `lament`, `hymn`, `triumph`, `longing`, `dance`, `nocturne`, or `auto` to guess from tempo and key |
+| `mood` | auto | How the piece is performed in the score page, `canon.mid` and `voices.wav`: `lament`, `hymn`, `triumph`, `longing`, `dance`, `nocturne`, `plain` (exactly as written), or `auto` to guess from tempo and key |
+| `parts`, `part_low`, `part_high` | auto, 0, 0 | Each voice's instrument (over the ensemble's) and its range, narrower than the instrument's if given; a list, one value per voice |
+| `volume`, `pan`, `articulation`, `intensity` | 100, auto, auto, 100 | Each voice's mix and playing; they never change the notes |
 
 The `examples/` directory has a config for each feature. Each file starts with a
 comment saying what it shows.
@@ -289,13 +306,13 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 
 | File | Contents |
 | --- | --- |
-| `canon.mid` | Standard MIDI file: a tempo, meter and key-signature track, then one track per voice, named and set to its instrument's General MIDI program with an `ensemble` |
-| `score.musicxml` | MusicXML 3.1 for notation software, with ties across barlines and key changes; with an `ensemble`, named parts, their clefs, and transposing parts written in their own key with `<transpose>` so notation software plays them at concert pitch |
-| `score.ly` | LilyPond source: one staff per voice in a staff group, the same spelling, ties, clefs and key changes |
-| `score.abc` | ABC notation: one voice per canon voice, with accidentals written out relative to the key signature (and each transposing part in its own key) |
-| `voices.wav` | Stereo, 16-bit, 44.1 kHz: the voices on a plucked string, or the organ or sine that `instrument` picks, panned from left to right in a small reverb that rings on for 1.5 s after the last note |
+| `canon.mid` | Standard MIDI file as performed: a tempo map (rubato, breaths, the closing broadening), meter and key signatures, then one track per voice, named, set to its instrument's General MIDI program, volume and pan, each note with its velocity and sounding length (`mood plain` writes the notes as written) |
+| `score.musicxml` | MusicXML 3.1 for notation software, with the tempo, ties across barlines and key changes; with instruments, named parts, their clefs, and transposing parts written in their own key with `<transpose>` so notation software plays them at concert pitch |
+| `score.ly` | LilyPond source: one staff per voice in a staff group, the same spelling, ties, clefs and key changes, and each instrument's MIDI sound |
+| `score.abc` | ABC notation: one voice per canon voice, with accidentals written out relative to the key signature, each transposing part in its own key, and `%%MIDI` program and transposition lines so ABC players sound each part as written for |
+| `voices.wav` | Stereo, 16-bit, 44.1 kHz, performed as `canon.mid` is: synths, not the page's sampled instruments (a plucked string for struck or plucked parts and voices without one, an organ tone for sustained parts, or the one `instrument` names), each voice at its volume and pan, in a small reverb that rings on for 1.5 s after the last note |
 | `contour.svg` | Pitch over time for every voice |
-| `score.html` | Interactive score: a plain-words summary of how the piece collapsed, piano roll per voice, playback on sampled instruments (ensembles such as flute, violin and cello, a string quartet, woodwinds or brass give each voice its own instrument, highest voice first, with a bass line on the chord roots; piano, harpsichord, organ, harp and mallets; built-in synths offline), each voice panned in stereo, notes lighting up as they sound, looping for rounds, any voice muted from the legend, why each note is there, the canon's fingerprint (which notes sound against which), a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart, with each note plucked as the solver decides it), what the given notes changed, entropy and energy charts, and the proof log |
+| `score.html` | Interactive score: the players (each voice's instrument, range, entry, transposition, articulation, intensity, volume, pan, mute and solo), playback of the performance on sampled instruments (synths offline, voice by voice, said plainly), a piano roll with the form's phrases and the climax marked, notes lighting up as they sound, looping for rounds, an optional bass line on the chord roots (playback only), why each note is there, and, under the hood, how the piece collapsed: a summary, the canon's fingerprint, a step-by-step replay of the collapse, entropy and energy charts, and the proof log |
 | `explain.txt` | The explanation for every variable, as `--explain` prints it |
 | `report.txt` | Keys, search statistics, energy by rule, values removed by each rule, the unsat core, the rules given notes break, and every config key used |
 | `proof.txt` | Every proof event in order: removals, decisions, forced collapses, and entropy after each round of propagation |
@@ -304,15 +321,18 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 | `entropy.txt` | Remaining entropy in bits after each round of propagation |
 
 `--proof` and `--entropy` move the proof and entropy files; `proof.dag` and
-`proof.json` follow `--proof`. A run that finds no piece still writes the proof files,
-`report.txt`, `explain.txt` and `score.html`.
+`proof.json` follow `--proof`. Each file is written in full beside its name and then
+moved into place, so a failure never leaves half a file. A run that finds no piece
+still writes the proof files, `report.txt`, `explain.txt` and `score.html`, and keeps
+the score files an earlier run left there, saying they are not its own.
 
 ## Command line
 
 ```text
 godels-fugue [options]
   --config FILE        load keys from FILE (text, or JSON if the name ends in .json)
-  --preset NAME        apply a style preset before the config file
+  --preset NAME        start from a preset (the defaults, then its keys) before the
+                       config file
   --set KEY=VALUE      override one key after the config file (repeatable)
   --lock INDEX PITCH   fix melody note INDEX to MIDI PITCH and report what changed
   --melody-midi FILE   take the melody and its length from a MIDI file
@@ -330,9 +350,15 @@ godels-fugue [options]
   --max-nodes N        give up after N search nodes (0 = no limit)
   --time-limit MS      give up after MS milliseconds (0 = no limit)
   --list-config        print every config key (--markdown for a table)
-  --list-presets       print the style presets
+  --resolve            print the settings a run would use, as JSON (every key,
+                       each voice's instrument and range, the form), without composing
+  --list-presets       print the presets
   --version            print the version
 ```
+
+Each option but `--set` may be given once, and `--set` cannot apply a preset (a preset
+replaces every key; use `--preset` or a `preset` line). `--time-limit` holds for the
+whole command, every solve it runs.
 
 Exit status: 0 solved, 1 unsatisfiable or bad input, 2 too large for `--sat`, 3 search
 limit reached. `--count` and `--sensitivity` exit 0 with an answer, even "no pieces",
@@ -442,32 +468,34 @@ cp examples/*.txt examples/*.json site/examples/
 python -m http.server --directory site
 ```
 
-`node tests/web_smoke.mjs build-web examples` runs the WebAssembly program the way the
-page does and checks its output; CI runs it on every push and before each deploy.
-
 The page runs `main()` in a web worker with the config written to an in-memory file
 system and reads the output files back, so it composes exactly what the command line
-does. On top of `score.html` it adds:
+does. It is laid out as the work goes:
 
-- **What if?** The inspector offers every other value of a melody note. Picking one
-  writes it into the config's `melody` line and composes again; the page outlines the
-  notes that changed to fit in every voice, or names the rule the value breaks, and can
-  undo.
-- **Shape the piece**: drag the tension curve's points and move sliders for following
-  it, smooth lines, consonance, contrary motion and tempo; each change writes the
-  matching config line (`tension`, `w_curve`, `w_leap`, `w_dissonance`, `w_contrary`,
-  `tempo`) and composes again.
-- **Surprise me** rolls a new kind of piece: two or three voices, a random key and mode,
-  an entry delay, a tension curve and a tempo, written out as a commented config.
-- **Sheet music**, engraved from `score.abc` by [abcjs](https://www.abcjs.net), with the
-  bar being played lit up in every voice.
-- **Share links**: the address carries the config and the variation, so a link
-  composes the same piece again.
-- **How many?** counts the pieces the config allows (`--count`, for up to four
-  seconds): exactly 1,730 for the mirror example, at least a hundred thousand for the
-  opening canon.
-- **piece.txt** downloads the config behind the piece, so `godels-fugue --config
-  piece.txt` composes it again note for note.
+1. **Start** from a mood or a feature demonstration, at a variation, or Surprise me.
+2. **Shape the piece**: mood, tempo, the form's phrases, the subject's returns, the
+   climb to the climax and where it falls, stepwise lines, consonance, contrary motion,
+   and the tension curve, drawn. Each control shows the value the piece uses,
+   including what its starting point sets (the engine's `--resolve`), and writes that
+   key; a ♪ marks the controls that only change how it is played, which keep the notes
+   and update the player without reloading it.
+3. **The score**, with its Players card (instrument, range, entry, transposition,
+   articulation, intensity, volume, pan, mute, solo per voice), playback, sheet music
+   engraved from `score.abc` by [abcjs](https://www.abcjs.net) with the bar being
+   played lit up, and **What if?**: the inspector offers every other value of a melody
+   note; picking one fixes it and composes again, outlining the notes that changed to
+   fit or naming the rule the value breaks.
+4. **Save**: every output file, and `piece.txt` (or `piece.json`) with the settings
+   and the variation, so `godels-fugue --config piece.txt` composes it again note for
+   note. A link carries the same, and Undo and Redo move between composed pieces.
+5. **Advanced**: the settings as text or JSON, How many? (`--count` for up to four
+   seconds), Watch it collapse, and the program's output.
+
+A failed run keeps the last piece on screen, marked as the last that worked, with no
+downloads for the settings that failed. `node tests/web_smoke.mjs build-web examples`
+runs the WebAssembly program the way the page does; `tests/browser_test.mjs` drives the
+page itself in Chrome (`npm install playwright-core`, then
+`node tests/browser_test.mjs site`). CI runs both on every push.
 
 Every push to `main` publishes it with GitHub Pages.
 
@@ -484,11 +512,14 @@ src/
   proof.c     the proof log
   explain.c   why each variable has its value
   score.c     notes with durations for every voice
+  parts.c     instruments: names, programs, clefs, transpositions, ranges
+  perform.c   how the piece is played: dynamics, timing, articulation
   midi.c, export.c, notation.c, page.c, trace.c    output files
   midi_read.c MIDI input for --melody-midi and --corpus
   sat.c       SAT encoding and DPLL
   run.c, output.c, main.c              the command-line program
-tests/        unit, property and command-line tests
+tests/        unit, property, command-line and browser tests, and
+              music_report.py, which compares two builds' music
 examples/     one config per feature
 corpus/       sample pitch files for --corpus
 docs/         config reference and design notes

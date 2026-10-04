@@ -118,7 +118,8 @@ can be broken down by rule (`report.txt`, `score.html`):
   begins low enough that the climb is heard. The cost can only be paid where the range
   leaves room: a peak at the top of the range is free, so a preset that wants an
   early peak widens the range below it;
-- **sequence** – a bar that does not echo the bar before (`w_sequence`): for each
+- **subject**, **contrast**, **breath**, **arrival** – the form's terms, below;
+- **sequence** – without a form, a bar that does not echo the bar before (`w_sequence`): for each
   step, the direction of the interval into it is compared with the one a bar earlier.
   Opposite directions cost the weight, a different interval in the same direction
   half of it, and a match or a move of a semitone or less nothing. Bars then repeat a
@@ -140,20 +141,68 @@ The cost the search gives a value is the sum of the terms it completes. When eve
 other variable is fixed, that is exactly the change the value makes to the total
 energy; a test checks this across every canon shape.
 
+**Form.** A melody that only avoids mistakes is forgettable: nothing in it comes
+back, nothing contrasts, and it never stops to breathe. With `phrase` set, the melody
+gets a plan of phrases that many bars long (`form_plan` in `model.c`): the first
+states the subject; the phrase holding the climax contrasts with it; the last returns;
+the others develop. The plan is computed once from the config and shared by the
+model, the performance and the score page (`form` in `proof.json`), and its terms
+reuse the existing weights:
+
+- **subject**: each development and the return bring back the subject's head, its
+  first bar. Its rhythm, its rests and its contour (each move up, down or level) are
+  rules (`form`), since they are what makes a theme recognizable; the sizes of the
+  moves are a cost (`w_sequence`): the same size or a semitone off is free, another
+  size costs half, so a return can be a sequence a step higher or a variation, and the
+  counterpoint keeps room. The return also starts on the subject's own first pitch. In a canon whose
+  entries fall on phrase starts, the leader's development sounds while the next voice
+  states the subject; the same contour there would move in parallel against it, which
+  the rules forbid at the octave. So where a head would sound against another voice's
+  subject (`head_collides`), it is brought back upside down instead, the classical
+  inversion, which moves in contrary motion against the entry.
+- **contrast** (`w_sequence`): the climax's bar moves in clearly more or fewer notes
+  than the head (attacks sampled every step, or every eighth on the sixteenth grid,
+  differing by a quarter of the samples).
+- **breath** (`w_rhythm`): every phrase but the last ends with a long note or a rest
+  in its last half bar; rests and ties cost nothing there.
+- **arrival** (`w_harmony`): with harmony, each of those phrase ends has a dominant
+  chord prepared by IV or ii, and so does the final cadence, so the harmony moves
+  toward its arrivals instead of choosing each bar on its own.
+
+With the arc (`w_arc`, the climax placed by `climax`), the form makes the climax a
+rule too: it sounds, nothing rises above it, and only notes within a held note's
+length of it reach its pitch, so it is the melody's single top rather than a ceiling
+touched again and again. As costs, both the returns and
+the climax were broken in most pieces: they relate notes far apart, and the
+optimizer's windows only see a few neighbouring notes at a time; measured over the
+presets and several variations, raising the weights only raised the cost of breaking
+them, and with the rhythm alone a rule, a repeated note or a dissonance still
+outweighed the contour. Together this gives a subject that is heard again, a contrasting climax, places to breathe and a prepared ending. The
+canon itself already repeats the subject at every entry; the form is what makes the
+melody between the entries develop it. `phrase 0` keeps the old bar-to-bar sequence
+cost, so strict canons without a form work as before.
+
 **Temperature.** With `temperature` $T > 0$, values are sampled with probability
 $P \propto e^{-c/T}$ instead of taken cheapest first. `anneal_*` cools $T$ linearly
 or geometrically over the decisions; a schedule whose end is above its start heats
 instead, which is the "reverse annealing" idea.
 
 **Optimization.** The search keeps the first solution it reaches. With `optimize`,
-the engine then runs large neighbourhood search. A window of six notes slides along
-the melody, everything outside it is fixed to the best piece so far, and branch and
-bound looks for a strictly cheaper piece inside the window. The best piece is replayed
-from the root so the proof describes it.
+the engine then runs large neighbourhood search. A window of six notes is freed,
+everything outside it is fixed to the best piece so far, and branch and bound looks
+for a strictly cheaper piece inside the window. The next window is the one whose notes
+the best piece's costs fall on most, among those not tried since the last
+improvement; a window no cost touches cannot improve and is skipped. A fixed sweep from
+the first note spent the whole budget on the opening and never reached a far return
+of the subject. The best piece is replayed from the root so the proof describes it.
+"No window improves it" is said only when every window was searched; a run that
+`max_nodes` or `time_limit` cut short says so, since another machine may get further.
+`time_limit` holds for the whole command: the piece, the delays tried, the unsat core,
+the counterfactual and the SAT backend share one deadline.
 
-**Built.** **Not built**: emergent motif detection and "motif pressure" that
-reinforces discovered motifs, rule weights that change with musical form, and
-weights learned from example pieces.
+**Built.** **Partly built**: weights that follow musical form (the form's terms).
+**Not built**: emergent motif detection and "motif pressure" that reinforces
+discovered motifs, and weights learned from example pieces.
 
 ## 6. Information and entropy
 
@@ -412,14 +461,21 @@ When the config gives notes, a panel shows the piece solved without them and whi
 notes changed.
 
 The web demo (`web/`, published with GitHub Pages) runs the same program compiled to
-WebAssembly in a web worker: it edits a config, composes, and shows this page with
-every output file to download, staff notation engraved from the ABC export, and a link
-that composes the same piece again. Hosted there, the inspector becomes a
-counterfactual tool: it offers every other value of a melody note, and picking one
-fixes the note in the config and composes again, reporting the notes that changed to
-fit or the rule the value breaks. A Shape card draws the tension curve as draggable
-points and offers sliders for four soft weights; each change rewrites that config line
-and composes again.
+WebAssembly in web workers. Its state has one owner each: the settings text is the
+draft; a *piece* is what one run made of a draft (its text, variation, files and
+proof); the engine's resolved settings (`--resolve`, then `proof.json`) are what the
+controls show, so a value a preset sets, or a key given twice, reads as the engine
+uses it. Every edit, from a control, the Players card or a what-if, goes through one
+function that sets the key (its last line, as the engine applies, or the JSON member)
+and either composes again or, for a key that keeps the notes, performs again and
+hands the new performance to the page without reloading it. Every request and every
+message from the page carries its run id; a newer request cancels an older one; a
+failed run keeps the last good piece on screen marked as such, with no downloads for
+the failed settings. Undo and redo move through composed pieces without composing
+again. Hosted there, the inspector becomes a counterfactual tool: it offers every
+other value of a melody note, and picking one fixes the note in the config (releasing
+a lock on it) and composes again, reporting the notes that changed to fit or the rule
+the value breaks. `tests/browser_test.mjs` drives these workflows in Chrome.
 
 A fingerprint card draws the canon's coupling as an arc diagram: an arc for every pair
 of melody notes heard at the same step in different voices, weighted by how long they
@@ -432,31 +488,47 @@ before the first piece, and what the optimizer gained. In the demo, How many? ru
 `--count` for up to four seconds, and the sheet music lights the bar being played.
 `tests/web_smoke.mjs` checks the WebAssembly build the way the demo uses it.
 
-Playback gives each voice its own sampled instrument (General MIDI soundfonts loaded
-through smplr), chosen by register from an ensemble, so the imitation is heard moving
-between timbres; a bass line plays each bar's chord root on beat one and the root or
-fifth on beat three. Notes are phrased by metre (downbeats louder, off-beats softer),
-by each voice's entry and by an expression plan, below. Without the network the
-synths of `voices.wav` play instead.
+**Players.** Each voice is a player (`parts.c` holds the one instrument table: names,
+General MIDI programs, clefs, written transpositions, sounding ranges, and the
+soundfont and level the page plays each with). An `ensemble` gives out instruments
+by the voices' transpositions, highest first, never by the notes, so composing again
+never swaps them; `parts` names any voice's instrument itself and wins. The model
+makes each voice's range a rule: range_low..range_high narrowed by the instrument and
+by `part_low` and `part_high`. A combination that cannot work is explained before the
+search ("voice 1 (Flute, 60..96) and voice 2 (Tuba, ...) cannot play the same
+melody"), and a note the range removes says which voice and instrument removed it.
+The Players card in the page sets each voice's instrument, range, entry and
+transposition (these compose again), its articulation and intensity (these perform
+again, the notes kept) and its volume, pan, mute and solo (these change only what
+you hear; the first two also go into canon.mid and voices.wav).
 
-**Expression.** A piece played exactly as written sounds mechanical, so the page
-performs it. The `mood` key names a profile (`plain`, `lament`, `hymn`, `triumph`,
-`longing`, `dance`, `nocturne`); `auto` guesses one from the first key and the tempo
-(slow minor is a lament, slow major a hymn, 120 and faster a dance, the rest plain).
-A profile sets:
+**Performance.** A piece played exactly as written sounds mechanical, so the engine
+performs it, once, and every output plays that performance (`perform.c`): canon.mid
+gets a tempo change wherever the time bends, each note's velocity and sounding length,
+and each track's volume and pan; voices.wav renders the same timing and loudness on
+synths (a pluck for struck or plucked parts, the organ tone for sustained ones); the
+page plays the same plan on sampled instruments. The `mood` key names a profile
+(`lament`, `hymn`, `triumph`, `longing`, `dance`, `nocturne`); `plain` is no shaping at
+all, one tempo and one loudness, to compare with; `auto` guesses from the first key and
+the tempo. A profile sets:
 
-- a dynamic arc of three levels, at the start, at the climax and at the end, joined
-  by cosine easing; the climax is the onset of the highest note nearest two thirds of
-  the way through, kept between 35 and 85 percent. A lament starts quiet, cries out
-  and fades; a triumph keeps growing to the last chord;
-- the strength of metric accents and how legato the notes are (a dance is short and
-  accented, a hymn joined);
-- a time map from steps to seconds: rubato (a gentle wave in the tempo), a breath
-  that lengthens the last step of each four-bar phrase, and a ritardando over the last
-  two bars; a loop drops the ritardando so it stays in time;
+- a dynamic arc of three levels, at the start, at the climax and at the end, joined by
+  cosine easing. The climax is the form's (`climax`), and each voice follows its own
+  place in the melody, so a follower swells as it reaches the climax itself;
+- metric accents, a swell across each phrase of the form, and a lift at each entry
+  and on the subject's head wherever it is stated, scaled by each voice's `intensity`;
+- the articulation (a dance detached, a hymn joined), unless a voice sets its own;
+- one time map for all voices, so the canon keeps one pulse: rubato inside each phrase,
+  a breath on the last beat of each phrase of the leading voice, and a ritardando over
+  the last two bars (a loop keeps its own map without it);
 - how long the final chord is held, as a fermata.
 
-The plan applies to every voice alike, so the canon's voices still line up.
+Nothing in it is random: a small per-note variation of loudness is a hash of the voice
+and step, so a piece plays the same every time. The page schedules the plan ahead from
+a timer, never playing a note late after a stalled background tab; a voice whose
+samples cannot load plays its synth and the page says which; the bass line on the
+chord roots is a separate playback option, off by default, outside the canon, the
+proof and the files.
 
 **Built.** **Partly built**: the fingerprint shows the coupling through simultaneous
 notes; a full constraint graph (chords, keys, ties and every rule as nodes) is not
@@ -465,12 +537,13 @@ built.
 ## 13. Presets and modes
 
 The presets are moods: `lament`, `hymn`, `triumph`, `longing`, `dance` and
-`nocturne`. Each bundles an ensemble, a key and mode, a tempo, rhythm and harmony, the
-arc's climax and the costs that make the line sound like its feeling. A lament falls a
-long way by step from an early peak, slowly, on strings in D minor; a hymn moves in
-long consonant steps on an organ; a triumph leaps in fanfares and sequences up to a
-late peak on brass; longing turns from A minor to C major and peaks late; a dance is a
-quick round with a recurring motif; a nocturne is a quiet piano duet that rises once.
+`nocturne`. Each starts from the defaults and bundles an ensemble, a key and mode, a
+tempo, rhythm and harmony, a form of two-bar phrases with the canon's entries on
+phrase starts, the climax and the costs that make the line sound like its feeling. A
+lament sighs downward by step and cries out early, on strings in D minor; a hymn moves
+in long consonant steps on an organ, each phrase coming to rest; a triumph climbs a
+fanfare in sequence to a late peak on brass; longing turns from A minor to C major and
+peaks late; a dance is a quick round; a nocturne is a quiet piano duet that rises once.
 Each preset also sets `mood`, so the score page performs it in kind. They are a
 starting point to change with `--set`, not a guarantee of the feeling: the solver
 weighs these costs against every rule, and how a piece moves a listener is not
@@ -484,9 +557,13 @@ already expose the research data: entropy, statistics, and removals by rule.
 
 - C11, no dependencies, builds warning-free with GCC, Clang and MSVC, and with
   Emscripten for the browser.
-- Config: one table of keys drives text and JSON configs, `--set`, validation,
-  presets and [config.md](config.md). `report.txt` records every key used, so a piece
-  can be reproduced from it.
+- Config: one table of keys drives text and JSON configs, `--set`, `--resolve`,
+  validation, presets and [config.md](config.md). `report.txt` records every key used,
+  so a piece can be reproduced from it. A list key (one value per voice, or the
+  melody) changes only when the whole list is valid.
+- Outputs are written beside their final names and moved into place when complete,
+  so a failure never leaves part of a file; a run that finds no piece keeps the last
+  piece's score files and says they are not its own.
 - Inputs: text and JSON configs, and Standard MIDI files of format 0, 1 or 2
   (`midi_read.c`). `--melody-midi` reads a melody from the first track with notes,
   rounding onsets and ends to the nearest step (a quarter note, or an eighth or a
