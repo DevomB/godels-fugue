@@ -1286,6 +1286,13 @@ const PIECE = /*PIECE_DATA*/;
     src.start(t);
     src.stop(t + 0.65);
   }
+  /* the web demo highlights the bar being played in its sheet music */
+  let toldBar = -1;
+  function tellBar(bar) {
+    if (!host || bar === toldBar) return;
+    toldBar = bar;
+    host.postMessage({ type: "canon-collapse:bar", bar: bar }, "*");
+  }
   function stop() {
     for (const o of playing) { try { o.stop(); } catch (err) { /* already stopped */ } }
     playing = [];
@@ -1293,6 +1300,7 @@ const PIECE = /*PIECE_DATA*/;
     const head = document.getElementById("playhead");
     if (head) head.setAttribute("visibility", "hidden");
     for (const n of noteNodes) n.node.classList.remove("sounding");
+    tellBar(-1);
     play.textContent = "Play";
   }
   instrument.addEventListener("change", function () { if (playing.length) stop(); });
@@ -1368,6 +1376,7 @@ const PIECE = /*PIECE_DATA*/;
       const step = t >= 0 ? (t % total) / beat : -1;
       for (const n of noteNodes)
         n.node.classList.toggle("sounding", step >= n.start && step < n.start + n.length);
+      tellBar(step >= 0 ? Math.floor(step / 4) : -1);
       if (head && t >= 0) {
         const x = left + step * stepW;
         head.setAttribute("x1", x);

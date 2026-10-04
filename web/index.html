@@ -153,6 +153,7 @@ pre {
 .sheet-card summary { list-style-position: outside; margin-left: 16px; }
 .sheet-card h2 { display: inline; font-size: 15px; font-weight: 650; color: var(--text-primary); }
 .sheet { margin-top: 8px; }
+#sheet .playing path { fill: var(--accent); stroke: var(--accent); }
 iframe { display: block; width: 100%; height: 1400px; border: 0; margin-top: 4px; background: var(--page); }
 .empty { padding: 48px 16px; text-align: center; color: var(--text-muted); }
 footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 13px; color: var(--text-muted); }
@@ -447,6 +448,15 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     return lines.join("\n") + "\n";
   }
 
+  // Follow along: the score page reports the bar it is playing.
+  window.addEventListener("message", function (e) {
+    const m = e.data || {};
+    if (e.source !== frame.contentWindow || m.type !== "canon-collapse:bar") return;
+    document.querySelectorAll("#sheet .playing").forEach(function (g) { g.classList.remove("playing"); });
+    if (m.bar >= 0)
+      document.querySelectorAll("#sheet .abcjs-mm" + m.bar + ".abcjs-note, #sheet .abcjs-mm" + m.bar + ".abcjs-rest")
+        .forEach(function (g) { g.classList.add("playing"); });
+  });
   window.addEventListener("message", function (e) {
     const m = e.data || {};
     if (e.source !== frame.contentWindow || m.type !== "canon-collapse:what-if") return;
