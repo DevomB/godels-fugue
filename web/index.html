@@ -448,6 +448,14 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     return lines.join("\n") + "\n";
   }
 
+  // The score page's Theme button switches this page too, and the sheet music
+  // is engraved again in the new text colour.
+  window.addEventListener("message", function (e) {
+    const m = e.data || {};
+    if (e.source !== frame.contentWindow || m.type !== "canon-collapse:theme") return;
+    document.documentElement.dataset.theme = m.theme;
+    if (lastAbc) showSheet(lastAbc);
+  });
   // Follow along: the score page reports the bar it is playing.
   window.addEventListener("message", function (e) {
     const m = e.data || {};
@@ -531,8 +539,9 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   }
 
   // Staff notation, engraved from score.abc by abcjs, which loads on first use.
-  let abcjs = null;
+  let abcjs = null, lastAbc = null;
   function showSheet(bytes) {
+    lastAbc = bytes || null;
     const card = $("sheet-card");
     if (!bytes) { card.hidden = true; return; }
     const text = new TextDecoder().decode(bytes);
@@ -594,7 +603,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     observer.observe(doc.body);
     fit();
     // Tell the score page it can offer other values, then show the note just tried.
-    frame.contentWindow.postMessage({ type: "canon-collapse:host" }, "*");
+    frame.contentWindow.postMessage({ type: "canon-collapse:host", theme: document.documentElement.dataset.theme || null }, "*");
     if (pendingChanged.length) frame.contentWindow.postMessage({ type: "canon-collapse:changed", notes: pendingChanged }, "*");
     if (pendingSelect) frame.contentWindow.postMessage({ type: "canon-collapse:select", var: pendingSelect }, "*");
     pendingSelect = null;

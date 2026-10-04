@@ -373,6 +373,7 @@ const PIECE = /*PIECE_DATA*/;
       : window.matchMedia("(prefers-color-scheme: dark)").matches;
     root.dataset.theme = dark ? "light" : "dark";
     drawAll();
+    if (host) host.postMessage({ type: "canon-collapse:theme", theme: root.dataset.theme }, "*");
   });
 
   /* ---------- header ---------- */
@@ -657,6 +658,10 @@ const PIECE = /*PIECE_DATA*/;
     if (e.source !== window.parent || window.parent === window) return;
     if (m.type === "canon-collapse:host") {
       host = e.source;
+      if (m.theme === "light" || m.theme === "dark") {
+        document.documentElement.dataset.theme = m.theme;
+        drawAll();
+      }
       if (selected >= 0) select(selected);
     } else if (m.type === "canon-collapse:select") {
       const v = vars.find(function (x) { return x.var === m.var; });
