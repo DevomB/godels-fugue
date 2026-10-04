@@ -114,9 +114,10 @@ can be broken down by rule (`report.txt`, `score.html`):
   motion into a fifth or octave;
 - **contrary motion** – each pair of voices both moving up or both moving down from
   one step to the next (`w_contrary`), the motion balance between voices;
-- **rest**, **hold**, **syncopation**, **rhythm**, **final** – rhythm preferences, and
+- **rest**, **hold**, **syncopation**, **rhythm**, **final** – rhythm preferences,
   **run** – two notes shorter than a beat in a row that leap more than a whole step,
-  on the eighth and sixteenth grids (`w_run`);
+  on the eighth and sixteenth grids (`w_run`), and **figure** – the rhythm figure of
+  each beat on the sixteenth grid (`w_figure`, section 9);
 - **chord**, **chord motion**, **non-chord tone** – harmony preferences;
 - **key**, **key distance** – accidentals of a searched key, and the distance between
   the two keys of a modulation;
@@ -247,6 +248,42 @@ to a beat (`config_beat_steps`):
   than a beat away on either side: an attack among those before makes the first note
   short, and one among those after the second.
 
+**Rhythm figures.** A grid where every step may start a note gives frantic,
+random-sounding rhythm: nothing stops a sixteenth on the "e" of one beat, an eighth
+across the next and three more sixteenths after it. Real music builds each beat from a
+small vocabulary of figures, and its sixteenths come in beat-sized groups that start
+on the beat. So on the sixteenth grid each whole beat of the melody has a term over
+the ties of its four steps (`w_figure`, default 3, the same as `w_syncopation` and
+`w_rhythm`). Writing x for a step where a note or a rest starts and . for one held
+from before, the cost is `w_figure` times the figure's grade:
+
+| Grade | Figures |
+| --- | --- |
+| 0 | `x...` a quarter or a longer note from the beat, `x.x.` two eighths, `....` a beat held over |
+| 1 | `x.xx`, `xxx.`, `xxxx` (sixteenth figures from the beat), `x..x` (a dotted eighth and a sixteenth), `..x.` (an eighth on the "and" after a held one) |
+| 2 | `xx..`, the snap: a sixteenth and a dotted eighth |
+| 3 | `xx.x`, `...x`, `..xx`, `.xxx` |
+| 4 | `.x..`, `.x.x`, `.xx.`: a sixteenth on the "e" after a held one |
+
+The grades rise with how rarely a figure sounds intended: the plain values cost
+nothing, the common sixteenth groups a little, the snap more, and a lone sixteenth on
+the "e" or the "a" after a held note most. A held beat is free because
+**syncopation** already charges a note attacked off the beat and held across this
+one; the figure judges only where attacks fall inside the beat. A rest step counts as
+an attack, since rests are not tied. Wall-to-wall sixteenths are held back twice:
+each `xxxx` beat pays its grade, and a bar of sixteen plain sixteenths pays **rhythm**
+as well. Two `xxxx` beats in a row pay nothing extra, since a run of sixteenths over
+two beats (a scale, a broken chord) is idiomatic, above all over a slower bass.
+
+The cost comes in three parts, over the ties of the beat's first two, three and four
+steps: the least grade any figure starting so can still reach, then how much that
+least rises with the third step, then the rest. The parts add up to the grade, never
+go below zero, and read only ties, so the search weighs a figure tie by tie while it
+decides the rhythm, before most pitches (a tie has two values and a pitch many), and
+the optimizer's bound sees it early. Charged only on the beat's last tie, the cost
+could not steer the first three: each would take the cheaper note on its own, and the
+first piece would run in sixteenths until the last one.
+
 Keys counted in steps (`length`, `delay`, `phase`, `modulate_at`, `rest_at`,
 `max_hold`, `max_rests`) count grid steps, and their defaults are not rescaled: on the
 eighth grid `max_hold 1` allows quarter notes at most and `max_rests 2` two eighth
@@ -260,7 +297,9 @@ length no single value writes, such as five eighths or five sixteenths, and pad 
 last bar to its eight or sixteen steps; MIDI gives a step 240 or 120 ticks, and
 `proof.json` and the page data carry `stepsPerBeat` and `stepsPerBar`.
 
-**Built.** The quarter, eighth and sixteenth grids. **Not built**: cadence type as a variable
+**Built.** The quarter, eighth and sixteenth grids, and the rhythm figures of the
+sixteenth grid. **Not built**: figures for the eighth grid (two steps make only four
+patterns, which syncopation and rhythm already cover), cadence type as a variable
 (authentic, half, deceptive), phrase boundaries as variables, meter as a variable
 (4/4 and the grid are fixed for the piece), per-voice meters (`poly_meter` changes
 which steps are strong for every voice), and form as a state machine.

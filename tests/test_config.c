@@ -316,6 +316,18 @@ static void test_grid(void) {
     CHECK(config_set(&c, "w_run", "5", err, sizeof(err)));
     CHECK(c.w_run == 5);
     CHECK(!config_set(&c, "w_run", "101", err, sizeof(err)));
+    /* the cost of a beat's rhythm figure on the sixteenth grid */
+    CHECK(c.w_figure == 3);
+    CHECK(config_set(&c, "w_figure", "0", err, sizeof(err)));
+    CHECK(c.w_figure == 0);
+    CHECK(config_set(&c, "w_figure", "100", err, sizeof(err)));
+    CHECK(c.w_figure == 100);
+    CHECK(!config_set(&c, "w_figure", "101", err, sizeof(err)));
+    CHECK(strstr(err, "w_figure must be 0..100") != NULL);
+    CHECK(!config_set(&c, "w_figure", "-1", err, sizeof(err)));
+    CHECK(!config_set(&c, "w_figure", "plenty", err, sizeof(err)));
+    CHECK(c.w_figure == 100);
+    CHECK(config_set(&c, "w_figure", "4", err, sizeof(err)));
     CHECK(config_set(&c, "grid", "eighth", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH);
     CHECK(config_beat_steps(&c) == 2 && config_bar_steps(&c) == 8);
@@ -365,15 +377,25 @@ static void test_grid(void) {
     config_defaults(&c);
     CHECK(config_load_file(&c, "output/tests/grid.json", err, sizeof(err)));
     CHECK(c.grid == GRID_EIGHTH && c.delay == 8);
-    write_file("output/tests/grid16.txt", "grid sixteenth\nlength 128\ndelay 48\n");
+    write_file("output/tests/grid16.txt", "grid sixteenth\nlength 128\ndelay 48\nw_figure 5\n");
     config_defaults(&c);
     CHECK(config_load_file(&c, "output/tests/grid16.txt", err, sizeof(err)));
-    CHECK(c.grid == GRID_SIXTEENTH && c.length == 128 && c.delay == 48);
+    CHECK(c.grid == GRID_SIXTEENTH && c.length == 128 && c.delay == 48 && c.w_figure == 5);
     CHECK(config_validate(&c, err, sizeof(err)));
-    write_file("output/tests/grid16.json", "{\"grid\": \"sixteenth\", \"delay\": 16}");
+    write_file("output/tests/grid16.json",
+               "{\"grid\": \"sixteenth\", \"delay\": 16, \"w_figure\": 2}");
     config_defaults(&c);
     CHECK(config_load_file(&c, "output/tests/grid16.json", err, sizeof(err)));
-    CHECK(c.grid == GRID_SIXTEENTH && c.delay == 16);
+    CHECK(c.grid == GRID_SIXTEENTH && c.delay == 16 && c.w_figure == 2);
+    /* the report's config lists the key */
+    FILE *f = fopen("output/tests/grid16_written.txt", "wb");
+    CHECK(f != NULL);
+    config_write(f, &c);
+    CHECK(fclose(f) == 0);
+    char *written = test_slurp("output/tests/grid16_written.txt", NULL);
+    CHECK(strstr(written, "\ngrid sixteenth\n") != NULL);
+    CHECK(strstr(written, "\nw_figure 2\n") != NULL);
+    free(written);
 }
 
 /* Writing every key and loading it back gives the same config. */

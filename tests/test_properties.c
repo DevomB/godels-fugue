@@ -455,6 +455,7 @@ int main(void) {
         c.length = pick(8, 32);
         c.delay = pick(1, 24);
         c.max_hold = pick(1, 7);
+        c.w_figure = pick(0, 6);
         if (c.modulate_at > c.length) c.modulate_at = c.length;
         for (int i = c.length; i < MELODY_MAX; i++) c.melody[i] = -1;
         char err[200];

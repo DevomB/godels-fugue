@@ -24,7 +24,7 @@ const char *term_name(int term) {
         "gravity",   "curve",       "corpus", "rest",  "leap",       "repeat",
         "recovery",  "motif",       "dissonance", "direct perfect", "contrary motion", "hold",
         "syncopation", "rhythm",    "final",  "chord", "chord motion", "non-chord tone", "key",
-        "key distance", "run", "step"};
+        "key distance", "run", "step", "figure"};
     if (term < 0 || term >= TERM_COUNT) return "unknown";
     return names[term];
 }
@@ -696,6 +696,21 @@ static void build_terms(Builder *b) {
             add_slot(t, m->tie[length - 1], -1);
             if (t != NULL) t->time = length - 1;
         }
+        /* on the sixteenth grid, the figure of each whole beat of the
+         * melody, in three parts over the ties of its first two, three and
+         * four steps (param), so the search weighs it tie by tie */
+        if (beat == 4) {
+            for (int start = 0; start + beat <= length; start += beat) {
+                for (int steps = 2; steps <= beat; steps++) {
+                    Constraint *t = add_term(b, TERM_FIGURE, c->w_figure);
+                    for (int j = start; j < start + steps; j++) add_slot(t, m->tie[j], -1);
+                    if (t != NULL) {
+                        t->time = start;
+                        t->param = steps;
+                    }
+                }
+            }
+        }
     }
     /* on a finer grid, the notes sounding at steps i and i + 1 are two
      * notes shorter than a beat when step i + 1 is an attack and so are a
@@ -1015,6 +1030,26 @@ static int iabs(int x) {
     return x < 0 ? -x : x;
 }
 
+/* Grade of a beat's rhythm figure on the sixteenth grid, indexed by its
+ * attacks, bit k for its kth sixteenth (x below; . is held from before):
+ * 0 for x... (a quarter or longer), x.x. (two eighths) and .... (held);
+ * 1 for x.xx, xxx., xxxx, x..x and ..x. (sixteenth figures from the beat,
+ * and an eighth on the "and" after a held one); 2 for xx.. (the snap);
+ * 3 for xx.x, ...x, ..xx and .xxx; 4 for .x.., .x.x and .xx., a sixteenth
+ * on the "e" after a held one. */
+static const int figure_grade[16] = {0, 0, 4, 2, 1, 0, 4, 1, 3, 1, 4, 3, 3, 1, 3, 1};
+
+/* The least grade of a figure whose first steps sixteenths have these
+ * attacks; for all four, its own grade. */
+static int figure_least(int steps, int attacks) {
+    int least = figure_grade[attacks];
+    for (int rest = 1; rest < (1 << (4 - steps)); rest++) {
+        int grade = figure_grade[attacks | (rest << steps)];
+        if (grade < least) least = grade;
+    }
+    return least;
+}
+
 int term_cost(const Model *m, const Constraint *t, const int *vals) {
     const PieceConfig *cfg = &m->config;
     int w = t->weight;
@@ -1169,6 +1204,23 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
             if (j > next) after = after || attack;
         }
         return before && after ? w : 0;
+    }
+    case TERM_FIGURE: {
+        /* the ties of the beat's first param steps that have one (the
+         * melody's first step has none and always starts a note). The part
+         * over two steps charges the least grade any figure starting so can
+         * reach, the one over three how much that least rises, the one over
+         * four the rest, so the three add up to the figure's grade. */
+        int attacks = 0;
+        int k = 0;
+        for (int j = 0; j < t->param; j++) {
+            bool attack = true;
+            if (m->tie[t->time + j] >= 0) attack = slot_value(t, vals, k++) == TIE_NOTE;
+            if (attack) attacks |= 1 << j;
+        }
+        int shorter = t->param - 1;
+        int charged = shorter >= 2 ? figure_least(shorter, attacks & ((1 << shorter) - 1)) : 0;
+        return w * (figure_least(t->param, attacks) - charged);
     }
     case TERM_STEP: {
         /* 0 for a unison or a step, 1 for a third, 2 for a fourth or

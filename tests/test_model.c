@@ -314,6 +314,94 @@ static void test_sixteenth_grid(void) {
     test_close(r);
 }
 
+/* The figure parts of the beat at step start, for its ties in step order (N
+ * an attack, H a held step), and their sum. The melody's first step has no
+ * tie, so the first beat's ties are three. */
+static int figure_cost(const Model *m, int start, const char *ties, int *parts) {
+    int missing = start == 0 ? 1 : 0;
+    int total = 0;
+    for (int steps = 2; steps <= 4; steps++) {
+        char prefix[5];
+        int n = steps - missing;
+        memcpy(prefix, ties, (size_t)n);
+        prefix[n] = '\0';
+        const Constraint *t = find_term(m, TERM_FIGURE, start, n);
+        CHECK(t != NULL && t->param == steps);
+        parts[steps - 2] = tie_cost(m, t, prefix);
+        CHECK(parts[steps - 2] >= 0);
+        total += parts[steps - 2];
+    }
+    return total;
+}
+
+/* On the sixteenth grid each whole beat of the melody costs its figure,
+ * graded from 0 (a quarter, two eighths, a held beat) to 4 (a sixteenth on
+ * the "e" after a held one); no other grid has one. The cost comes in three
+ * parts, over the ties of the beat's first two, three and four steps: the
+ * least grade any figure starting so can reach, then how much it rises. */
+static void test_figures(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "grid=sixteenth");
+    test_set(&c, "length=22");
+    test_set(&c, "rhythm=1");
+    test_set(&c, "max_hold=7");
+    test_set(&c, "w_figure=2");
+    TestRun *r = test_open(&c);
+    const Model *m = &r->model;
+    CHECK(strcmp(term_name(TERM_FIGURE), "figure") == 0);
+    /* beats at steps 0, 4, 8, 12 and 16; steps 20 and 21 make no whole beat */
+    CHECK(count_term(m, TERM_FIGURE) == 3 * 5);
+    CHECK(find_term(m, TERM_FIGURE, 20, 2) == NULL);
+    const Constraint *whole = find_term(m, TERM_FIGURE, 4, 4);
+    CHECK(whole != NULL && whole->vars[whole->slot[0]] == m->tie[4]);
+    CHECK(whole->vars[whole->slot[3]] == m->tie[7]);
+    static const struct {
+        const char *ties;
+        int grade;
+    } figures[] = {
+        {"NHHH", 0}, {"NHNH", 0}, {"HHHH", 0}, /* x... x.x. .... */
+        {"NHNN", 1}, {"NNNH", 1}, {"NNNN", 1}, /* x.xx xxx. xxxx */
+        {"NHHN", 1}, {"HHNH", 1},              /* x..x ..x. */
+        {"NNHH", 2},                           /* xx.. */
+        {"NNHN", 3}, {"HHHN", 3}, {"HHNN", 3}, {"HNNN", 3}, /* xx.x ...x ..xx .xxx */
+        {"HNHH", 4}, {"HNHN", 4}, {"HNNH", 4},              /* .x.. .x.x .xx. */
+    };
+    int parts[3];
+    for (size_t k = 0; k < sizeof(figures) / sizeof(figures[0]); k++)
+        CHECK(figure_cost(m, 4, figures[k].ties, parts) == 2 * figures[k].grade);
+    /* after two steps a beat is charged the least it can still cost: x. can
+     * become x... for nothing, xx at best xxx. or xxxx, .x at best .xxx */
+    CHECK(figure_cost(m, 4, "NHHH", parts) == 0 && parts[0] == 0);
+    CHECK(figure_cost(m, 4, "NNNN", parts) == 2 && parts[0] == 2 && parts[1] == 0);
+    CHECK(figure_cost(m, 4, "NNHH", parts) == 4 && parts[0] == 2 && parts[1] == 2);
+    CHECK(figure_cost(m, 4, "HNHH", parts) == 8 && parts[0] == 6 && parts[1] == 2);
+    CHECK(figure_cost(m, 4, "HHHN", parts) == 6 && parts[0] == 0 && parts[2] == 6);
+    /* the melody's first step has no tie and always starts a note */
+    const Constraint *first = find_term(m, TERM_FIGURE, 0, 3);
+    CHECK(first != NULL && first->vars[first->slot[0]] == m->tie[1] && first->param == 4);
+    CHECK(figure_cost(m, 0, "HHH", parts) == 0);     /* x... */
+    CHECK(figure_cost(m, 0, "NNN", parts) == 2);     /* xxxx */
+    CHECK(figure_cost(m, 0, "NHH", parts) == 2 * 2); /* xx.. */
+    CHECK(figure_cost(m, 0, "HNN", parts) == 2);     /* x.xx */
+    test_close(r);
+
+    /* none without the weight, without rhythm, or on the eighth grid */
+    test_set(&c, "w_figure=0");
+    r = test_open(&c);
+    CHECK(count_term(&r->model, TERM_FIGURE) == 0);
+    test_close(r);
+    test_set(&c, "w_figure=3");
+    test_set(&c, "rhythm=0");
+    r = test_open(&c);
+    CHECK(count_term(&r->model, TERM_FIGURE) == 0);
+    test_close(r);
+    test_set(&c, "rhythm=1");
+    test_set(&c, "grid=eighth");
+    r = test_open(&c);
+    CHECK(count_term(&r->model, TERM_FIGURE) == 0);
+    test_close(r);
+}
+
 /* w_step charges each melodic interval by its size beyond a whole step:
  * (semitones - 1) / 2, so a third 1, a fourth 2, a fifth 3, an octave 5. */
 static void test_step(void) {
@@ -634,6 +722,7 @@ int main(void) {
     test_mirror();
     test_eighth_grid();
     test_sixteenth_grid();
+    test_figures();
     test_step();
     test_energy();
     printf("ok\n");

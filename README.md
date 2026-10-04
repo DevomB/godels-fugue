@@ -114,7 +114,10 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   and the rhythm costs follow the bar, eighth notes that leap cost extra (`w_run`),
   and every score file writes the real values. With `grid sixteenth` a step is a
   sixteenth, a bar sixteen steps, and the ties give eighths, dotted eighths, quarters,
-  dotted quarters and halves; notes shorter than a beat that leap cost extra.
+  dotted quarters and halves; notes shorter than a beat that leap cost extra, and each
+  beat's rhythm figure has a cost (`w_figure`), so sixteenths come in the figures real
+  music builds a beat from (four sixteenths, an eighth and two sixteenths, a dotted
+  eighth and a sixteenth) rather than scattered off the beat.
 - **Rules you can turn on or off**: consonance, parallel fifths and octaves, maximum
   leap, voice spacing and crossing, cadence, leading tones rising to the tonic
   (`leading_tone`), no two large leaps in a row in one direction (`double_leaps 0`),
@@ -195,6 +198,7 @@ The keys you are most likely to change:
 | `max_spacing`, `crossing` | off, allowed | Widest interval between voices; whether a later voice may sound above an earlier one |
 | `melody` | all free | The notes to keep, `?` for the ones to choose |
 | `w_leap`, `w_step` | 1, 0 | Costs of melodic leaps: per four semitones, and by size past a whole step (for stepwise lines) |
+| `w_figure` | 3 | On the sixteenth grid, the cost of each beat's rhythm figure: nothing for a quarter or two eighths, more for sixteenths, most for one off the beat |
 | `optimize` | 10000 | Nodes spent lowering the energy after the first solution |
 | `seed`, `temperature` | 1, 0 | Sampling instead of always taking the cheapest value |
 | `tempo`, `instrument` | 120, pluck | Quarter notes per minute; the sound of `voices.wav`: `pluck`, `organ` or `sine` |

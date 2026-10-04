@@ -461,6 +461,14 @@ static const KeyDef keys[] = {
      "tone (over 2 semitones), so fast notes move by step: eighths on the eighth grid; "
      "sixteenths, eighths and dotted eighths on the sixteenth grid; nothing on the quarter "
      "grid."},
+    {"w_figure", F(w_figure), 1, 0, 100, 3, NULL, NULL, "energy",
+     "On the sixteenth grid, cost of each beat's rhythm figure, times its grade. Writing x "
+     "for a sixteenth where a note or rest starts and . for one held from before: 0 for "
+     "x... (a quarter or a longer note), x.x. (two eighths) and .... (a beat held over); 1 "
+     "for x.xx, xxx., xxxx, x..x (sixteenth figures from the beat) and ..x. (an eighth on "
+     "the and after a held one); 2 for xx.. (the snap); 3 for xx.x, ...x, ..xx and .xxx; "
+     "4 for .x.., .x.x and .xx. (a sixteenth on the e after a held one). Nothing on the "
+     "other grids."},
     {"w_final", F(w_final), 1, 0, 100, 2, NULL, NULL, "energy",
      "Cost of a short final note when rhythm is on."},
     {"w_corpus", F(w_corpus), 1, 0, 100, 4, NULL, NULL, "energy",
