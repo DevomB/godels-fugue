@@ -452,6 +452,15 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
 
   // The score page's Theme button switches this page too, and the sheet music
   // is engraved again in the new text colour.
+  // Picking an ensemble in the score page composes again with it, so the
+  // sheet music and downloads name each part and write transposing ones
+  // (an E-flat alto sax, a B-flat tenor) in their own keys.
+  window.addEventListener("message", function (e) {
+    const m = e.data || {};
+    if (e.source !== frame.contentWindow || m.type !== "godels-fugue:ensemble") return;
+    if (keyValue(config.value, "ensemble") === m.value) return;
+    steer("ensemble", m.value);
+  });
   window.addEventListener("message", function (e) {
     const m = e.data || {};
     if (e.source !== frame.contentWindow || m.type !== "godels-fugue:theme") return;

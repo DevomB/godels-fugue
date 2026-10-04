@@ -1252,6 +1252,8 @@ const PIECE = /*PIECE_DATA*/;
   function partName(part) { return (PART_NAMES[part] || part).replace(/_/g, " "); }
   if (cfg.instrument === "organ") instrument.value = "organ";
   else if (cfg.instrument === "sine") instrument.value = "sine";
+  /* the ensemble the score files were written for (ensemble key) */
+  if (ENSEMBLES[cfg.ensemble]) instrument.value = cfg.ensemble;
 
   /* the bass line: each bar's chord root, around C2..B2, from the key in force */
   const SCALES = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], dorian: [0, 2, 3, 5, 7, 9, 10],
@@ -1503,6 +1505,10 @@ const PIECE = /*PIECE_DATA*/;
   instrument.addEventListener("change", function () {
     if (playing.length || voicesOn.length) stop();
     drawRoll(); /* the legend names each voice's instrument */
+    /* in the web demo, write the score files for the new ensemble too, so
+       the sheet music shows each part as its player reads it */
+    if (host && ENSEMBLES[instrument.value] && instrument.value !== cfg.ensemble)
+      host.postMessage({ type: "godels-fugue:ensemble", value: instrument.value }, "*");
   });
   /* A cyclic canon is a round: Loop schedules each next pass ahead of time,
      so it repeats without a gap. */
