@@ -242,8 +242,8 @@ or beats follows the grid:
 Keys counted in steps (`length`, `delay`, `phase`, `modulate_at`, `rest_at`,
 `max_hold`, `max_rests`) count grid steps, and their defaults are not rescaled: on the
 eighth grid `max_hold 1` allows quarter notes at most and `max_rests 2` two eighth
-rests, so `examples/eighths.txt` sets `max_hold 3` for half notes. A melody is still
-at most 64 steps (eight bars of eighths) and a piece 128. `tempo` counts quarter notes
+rests, so `examples/eighths.txt` sets `max_hold 3` for half notes. A melody is at
+most 128 steps (sixteen bars of eighths) and a piece 256. `tempo` counts quarter notes
 on either grid. The score files write eighths (MusicXML with two divisions to the
 quarter, LilyPond `8`, ABC `L:1/8`), tie a length no single value writes, such as five
 eighths, and pad the last bar to its eight steps; `proof.json` and the page data carry
@@ -260,8 +260,11 @@ which steps are strong for every voice), and form as a state machine.
   last support found cached per value; a counting propagator for the rest limit; a
   queue of constraints to revisit.
 - **Backtracking** with snapshots on the heap (one per depth). A trail would use less
-  memory; at up to about 160 variables (a 64-note melody with ties, a chord per
-  bar and two keys), snapshots are simple and fast enough.
+  memory; at up to about 320 variables (a 128-note melody with ties, a chord per
+  bar and two keys), snapshots are simple and fast enough. A solver's own state, with
+  the record of every decision, is about 270 KB at that size; `--sensitivity` keeps
+  two of them on the stack under a deep search, so the Windows build asks for the
+  8 MB main-thread stack that Linux, macOS and the WebAssembly build already have.
 - **Conflict-directed backjumping**: every variable carries the set of decisions its
   domain depends on. A dead end jumps straight back to the latest decision in that
   set, and the failed value is removed with that set as its reason.

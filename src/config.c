@@ -30,6 +30,10 @@ typedef struct KeyDef {
 /* An array key that may be given fewer than n values; the rest keep the default. */
 #define OPEN(n) (-(n))
 
+/* A config line, or one key's value: the longest melody, MELODY_MAX values
+ * of up to four characters, with room for the spaces a person types. */
+enum { TEXT_MAX = 8 * MELODY_MAX };
+
 static int key_count(const KeyDef *def) {
     return def->count < 0 ? -def->count : def->count;
 }
@@ -589,7 +593,7 @@ bool config_set(PieceConfig *config, const char *key, const char *value, char *e
     int count = key_count(def);
     if (count == 1) return set_scalar(def, slot, value, err, cap);
 
-    char buf[512];
+    char buf[TEXT_MAX];
     if (strlen(value) >= sizeof(buf)) {
         snprintf(err, cap, "config value for %s is too long", def->name);
         return false;
@@ -750,7 +754,7 @@ static bool load_text(PieceConfig *config, char *text, const char *path, char *e
         while (cursor != NULL && *cursor != '\0') {
             char *next = strchr(cursor, '\n');
             size_t len = next != NULL ? (size_t)(next - cursor) : strlen(cursor);
-            char line[512];
+            char line[TEXT_MAX];
             line_no++;
             if (len >= sizeof(line)) {
                 snprintf(err, cap, "%s:%d: line too long", path, line_no);
@@ -825,7 +829,7 @@ static bool load_json(PieceConfig *config, const char *text, const char *path,
             const char *key = root.keys[i];
             const JsonValue *v = &root.items[i];
             if ((strcmp(key, "preset") == 0) != (pass == 0)) continue;
-            char value[512];
+            char value[TEXT_MAX];
             if (v->type == JSON_ARRAY) {
                 size_t used = 0;
                 value[0] = '\0';

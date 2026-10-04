@@ -5,8 +5,9 @@
 
 #include <stdio.h>
 
-/* CHECK_TEXT_MAX fits the rest limit naming a melody of MELODY_MAX rests. */
-enum { CHECK_MAX = 64, CHECK_TEXT_MAX = 1024 };
+/* CHECK_TEXT_MAX fits the rest limit naming a melody of MELODY_MAX rests,
+ * at most 13 characters each ("x127 = rest, "). */
+enum { CHECK_MAX = 64, CHECK_TEXT_MAX = 16 * MELODY_MAX };
 
 /* A hard rule broken by values the config fixes before any search. */
 typedef struct Violation {

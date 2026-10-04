@@ -158,16 +158,18 @@ run(mirror_odd_off_key 1
     ERROR "axis 68: the middle note must be the axis, which is not in C major; axis 62 keeps them all"
     ARGS --config "${SRC}/examples/mirror.txt" --set length=11 --set mirror_axis=68)
 run(set 0 MATCH "voice 3:" ARGS --set voices=3)
-# the longest melody has 64 notes
-run(length_max 0 MATCH "melody:" ARGS --set length=64)
+# the longest melody has 128 notes, and a canon spans up to 256 steps
+run(length_max 0 MATCH "melody:" ARGS --set length=128)
 string(REGEX MATCH "melody:[ 0-9a-z]*" melody_line "${last_out}")
 string(REGEX MATCHALL " [0-9a-z]+" melody_notes "${melody_line}")
 list(LENGTH melody_notes count)
-if(NOT count EQUAL 64)
-  fail("length_max: the melody has ${count} notes, not 64")
+if(NOT count EQUAL 128)
+  fail("length_max: the melody has ${count} notes, not 128")
 endif()
 expect_file("${last_dir}/score.musicxml" "<?xml")
-run(length_over 1 ERROR "length must be 1\\.\\.64: 65" ARGS --set length=65)
+run(length_over 1 ERROR "length must be 1\\.\\.128: 129" ARGS --set length=129)
+run(span_over 1 ERROR "canon spans more than 256 steps"
+    ARGS --set length=128 --set voices=3 --set delay=65)
 run(sat 0 MATCH "melody:" ARGS --sat)
 run(sat_unsat 1 MATCH "unsat" ARGS --config "${SRC}/examples/unsat.txt" --sat)
 run(count 0 MATCH "count: 160 \\(exact\\)" ARGS --config "${SRC}/examples/sensitivity.txt" --count 1000)

@@ -3,11 +3,12 @@
 
 /* Size limits shared by every module.
  * A melody step is one quarter note, or one eighth on the eighth grid
- * (config_beat_steps); a 4/4 bar is four steps, or eight. */
+ * (config_beat_steps); a 4/4 bar is four steps, or eight. A melody is at
+ * most 32 bars of quarters and a piece 64. */
 enum {
-    MELODY_MAX = 64,
+    MELODY_MAX = 128,
     VOICE_MAX = 4,
-    SPAN_MAX = 128,
+    SPAN_MAX = 256,
     BAR_MAX = SPAN_MAX / 4, /* bars of the quarter grid; the eighth grid has fewer */
     SECTION_MAX = 2,
     /* pitch + tie per melody note, one chord per bar, one key per section */

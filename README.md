@@ -180,7 +180,7 @@ The keys you are most likely to change:
 
 | Key | Default | What it does |
 | --- | --- | --- |
-| `length` | 12 | Melody notes, up to 64 (one step each; four steps make a bar) |
+| `length` | 12 | Melody notes, up to 128 (one step each; four steps make a bar) |
 | `grid` | quarter | Length of a step: `quarter`, or `eighth` for eight steps to a bar |
 | `voices` | 2 | Number of voices |
 | `delay` | 4 | Steps between voice entries |

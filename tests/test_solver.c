@@ -381,13 +381,17 @@ static void test_optimize(void) {
     test_close(r);
 }
 
-/* Canons of the longest melody solve and keep every rule; with rhythm and
- * harmony the decisions go past level 64, and every forced value is still
- * explained by a minimal set of them. */
+/* Canons of 64 notes and of the longest melody, 128, solve and keep every
+ * rule; with rhythm and harmony the decisions go past level 64 (or 128).
+ * Every forced value is explained by a part of its reason, a minimal one
+ * while the explanation budget lasts, which covers every forced value of a
+ * 64-note piece. */
 static void test_longest_melody(void) {
     static const char *const cases[][5] = {
         {"length=64", NULL},
         {"length=64", "voices=3", "rhythm=1", "harmony=1", NULL},
+        {"length=128", NULL},
+        {"length=128", "voices=3", "rhythm=1", "harmony=1", NULL},
     };
     Run *run = malloc(sizeof(Run));
     CHECK(run != NULL);
@@ -397,23 +401,25 @@ static void test_longest_melody(void) {
         for (int j = 0; cases[k][j] != NULL; j++) test_set(&c, cases[k][j]);
         CHECK(run_piece(run, &c, err, sizeof(err)));
         CHECK(run->status == SOLVE_SAT);
-        CHECK(run->model.config.length == MELODY_MAX);
+        CHECK(run->model.config.length == (k < 2 ? 64 : MELODY_MAX));
         CHECK(satisfies_model(&run->model, run->values));
-        CHECK(run->model.span == MELODY_MAX + (c.voices - 1) * c.delay);
-        if (c.rhythm) CHECK(run->state.level > 64);
+        CHECK(run->model.span == c.length + (c.voices - 1) * c.delay);
+        if (c.rhythm) CHECK(run->state.level > c.length);
         CHECK(run_explain(run));
         int forced = 0;
+        int minimized = 0;
         for (int v = 0; v < run->model.nvars; v++) {
             const Explanation *e = &run->explained[v];
             CHECK(e->status != WHY_OPEN);
             if (e->status != WHY_FORCED) continue;
             forced++;
-            CHECK(e->minimized);
+            minimized += e->minimized;
+            if (c.length == 64) CHECK(e->minimized);
             LevelSet both = e->minimal;
             levelset_union(&both, &e->reason);
             CHECK(memcmp(&both, &e->reason, sizeof(both)) == 0);
         }
-        if (c.rhythm) CHECK(forced > 0);
+        if (c.rhythm) CHECK(forced > 0 && minimized > 0);
         run_free(run);
     }
     free(run);

@@ -163,7 +163,7 @@ static void test_validation(void) {
     config_defaults(&c);
     c.length = 32;
     c.voices = 4;
-    c.delay = 40;
+    c.delay = 80;
     CHECK(!config_validate(&c, err, sizeof(err)));
     CHECK(strstr(err, "too long") != NULL);
 
@@ -388,30 +388,43 @@ static void test_round_trip(void) {
     CHECK(config_key_name(config_key_count()) == NULL);
 }
 
-/* A melody takes up to 64 notes, from text or JSON, and writing the
- * config keeps every one of them. */
+/* A melody takes up to 128 notes, from text or JSON, and writing the
+ * config keeps every one of them; a canon spans up to 256 steps. */
 static void test_longest_melody(void) {
     PieceConfig a;
     PieceConfig b;
     char err[300];
     test_output_dir();
-    CHECK(MELODY_MAX == 64);
+    CHECK(MELODY_MAX == 128 && SPAN_MAX == 256);
     config_defaults(&b);
-    CHECK(config_set(&b, "lock_index", "63", err, sizeof(err)));
-    CHECK(!config_set(&b, "lock_index", "64", err, sizeof(err)));
-    CHECK(config_set(&b, "rest_at", "63", err, sizeof(err)));
-    CHECK(!config_set(&b, "rest_at", "64", err, sizeof(err)));
+    CHECK(config_set(&b, "lock_index", "127", err, sizeof(err)));
+    CHECK(!config_set(&b, "lock_index", "128", err, sizeof(err)));
+    CHECK(config_set(&b, "rest_at", "127", err, sizeof(err)));
+    CHECK(!config_set(&b, "rest_at", "128", err, sizeof(err)));
+    CHECK(config_set(&b, "delay", "256", err, sizeof(err)));
+    CHECK(!config_set(&b, "delay", "257", err, sizeof(err)));
+    CHECK(config_set(&b, "delay_max", "256", err, sizeof(err)));
+    CHECK(config_set(&b, "modulate_at", "256", err, sizeof(err)));
     config_defaults(&a);
-    CHECK(config_set(&a, "length", "64", err, sizeof(err)));
-    CHECK(a.length == 64);
-    CHECK(!config_set(&a, "length", "65", err, sizeof(err)));
-    CHECK(strstr(err, "must be 1..64") != NULL);
-    CHECK(config_set(&a, "max_rests", "64", err, sizeof(err)));
-    CHECK(!config_set(&a, "max_rests", "65", err, sizeof(err)));
+    CHECK(config_set(&a, "length", "128", err, sizeof(err)));
+    CHECK(a.length == 128);
+    CHECK(!config_set(&a, "length", "129", err, sizeof(err)));
+    CHECK(strstr(err, "must be 1..128") != NULL);
+    CHECK(config_set(&a, "max_rests", "128", err, sizeof(err)));
+    CHECK(!config_set(&a, "max_rests", "129", err, sizeof(err)));
+    /* three voices 64 steps apart fill the longest span exactly */
+    config_defaults(&b);
+    test_set(&b, "length=128");
+    test_set(&b, "voices=3");
+    test_set(&b, "delay=64");
+    CHECK(config_validate(&b, err, sizeof(err)));
+    test_set(&b, "phase=1");
+    CHECK(!config_validate(&b, err, sizeof(err)));
+    CHECK(strstr(err, "more than 256 steps") != NULL);
 
     /* rests and three-digit pitches make the longest text a melody has */
     char text[5 * MELODY_MAX] = "";
-    char json[16 * MELODY_MAX] = "{\"length\": 64, \"rhythm\": 1, \"max_rests\": 64, \"melody\": [";
+    char json[16 * MELODY_MAX] = "{\"length\": 128, \"rhythm\": 1, \"max_rests\": 128, \"melody\": [";
     for (int i = 0; i < MELODY_MAX; i++) {
         strcat(text, i ? "," : "");
         strcat(text, i % 2 ? "127" : "rest");
@@ -424,10 +437,10 @@ static void test_longest_melody(void) {
     for (int i = 0; i < MELODY_MAX; i++) CHECK(a.melody[i] == (i % 2 ? 127 : PITCH_REST));
     test_set(&a, "rhythm=1");
     CHECK(config_validate(&a, err, sizeof(err)));
-    a.length = 63; /* the last note is past the end */
+    a.length = 127; /* the last note is past the end */
     CHECK(!config_validate(&a, err, sizeof(err)));
-    CHECK(strstr(err, "note 63 is past the end") != NULL);
-    a.length = 64;
+    CHECK(strstr(err, "note 127 is past the end") != NULL);
+    a.length = 128;
 
     write_file("output/tests/longest.json", json);
     config_defaults(&b);
@@ -490,10 +503,10 @@ static void test_file_edges(void) {
     CHECK(config_load_file(&c, "output/tests/sharp_round.txt", err, sizeof(err)));
     CHECK(memcmp(&a, &c, sizeof(a)) == 0);
 
-    char longline[700];
+    char longline[1200];
     memset(longline, ' ', sizeof(longline));
     memcpy(longline, "seed", 4);
-    memcpy(longline + 600, "1234\n", 6);
+    memcpy(longline + 1100, "1234\n", 6);
     write_file("output/tests/long.txt", longline);
     CHECK(!config_load_file(&c, "output/tests/long.txt", err, sizeof(err)));
     CHECK(strstr(err, "too long") != NULL);
