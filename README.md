@@ -389,6 +389,9 @@ cp examples/*.txt examples/*.json site/examples/
 python -m http.server --directory site
 ```
 
+`node tests/web_smoke.mjs build-web examples` runs the WebAssembly program the way the
+page does and checks its output; CI runs it on every push and before each deploy.
+
 The page runs `main()` in a web worker with the config written to an in-memory file
 system and reads the output files back, so it composes exactly what the command line
 does. On top of `score.html` it adds:
