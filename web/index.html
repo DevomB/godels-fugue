@@ -463,6 +463,15 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
       a.textContent = d[1];
       files.appendChild(a);
     });
+    // The config that made this piece, to run again with canon-collapse --config piece.txt.
+    const piece = document.createElement("a");
+    piece.href = URL.createObjectURL(new Blob([composed.config +
+      (composed.seed !== "0" ? "seed " + composed.seed + "\ntemperature " + SAMPLE_TEMPERATURE + "\n" : "")], { type: "text/plain" }));
+    urls.push(piece.href);
+    piece.download = "piece.txt";
+    piece.textContent = "piece.txt";
+    piece.title = "The config behind this piece: canon-collapse --config piece.txt";
+    files.appendChild(piece);
     if (out["score.html"]) {
       const url = URL.createObjectURL(new Blob([out["score.html"]], { type: "text/html" }));
       urls.push(url);
