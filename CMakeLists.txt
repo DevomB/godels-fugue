@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(godels-fugue VERSION 1.5.0 LANGUAGES C)
+project(godels-fugue VERSION 1.6.0 LANGUAGES C)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
