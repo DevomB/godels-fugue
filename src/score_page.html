@@ -221,11 +221,28 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
       <div class="subtitle" id="subtitle"></div>
     </div>
     <span class="badge" id="status"></span>
-    <select id="instrument" aria-label="Instrument">
-      <option value="pluck">Harpsichord</option>
-      <option value="organ">Organ</option>
-      <option value="sine">Sine</option>
+    <select id="instrument" aria-label="Instruments" title="Each voice gets its own instrument, highest voice first">
+      <optgroup label="Ensembles">
+        <option value="chamber" selected>Chamber: flute, violin, cello</option>
+        <option value="strings">String quartet</option>
+        <option value="winds">Woodwinds</option>
+        <option value="brass">Brass</option>
+        <option value="orchestra">Orchestra</option>
+      </optgroup>
+      <optgroup label="One instrument">
+        <option value="piano">Piano</option>
+        <option value="harpsichord">Harpsichord</option>
+        <option value="organ">Organ</option>
+        <option value="harp">Harp</option>
+        <option value="mallets">Vibraphone and marimba</option>
+      </optgroup>
+      <optgroup label="Synth (works offline)">
+        <option value="pluck">Plucked string</option>
+        <option value="synth">Synth organ</option>
+        <option value="sine">Sine</option>
+      </optgroup>
     </select>
+    <label class="loop" title="A bass line on each bar's chord root"><input id="bass" type="checkbox" checked> Bass</label>
     <label class="loop"><input id="loop" type="checkbox"> Loop</label>
     <button id="play" type="button">Play</button>
     <button id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
@@ -467,15 +484,15 @@ const PIECE = /*PIECE_DATA*/;
     roll.setAttribute("viewBox", "0 0 " + width + " " + height);
 
     const strong = new Set(P.strong || []);
-    const bars = Math.ceil(P.span / 4);
+    const bars = Math.ceil(P.span / BAR);
     for (let b = 0; b < bars; b++) {
-      const x = left + b * 4 * stepW;
+      const x = left + b * BAR * stepW;
       const t = svgEl("text", { x: x + 3, y: 12 });
       t.textContent = "bar " + (b + 1);
       roll.appendChild(t);
     }
     (P.chords || []).forEach(function (c) {
-      const t = svgEl("text", { x: left + (c.bar - 1) * 4 * stepW + 3, y: 28, class: "chord-label" });
+      const t = svgEl("text", { x: left + (c.bar - 1) * BAR * stepW + 3, y: 28, class: "chord-label" });
       t.textContent = c.label;
       roll.appendChild(t);
     });
@@ -502,7 +519,7 @@ const PIECE = /*PIECE_DATA*/;
       }
       for (let s = 0; s <= P.span; s++) {
         const x = left + s * stepW;
-        const bar = s % 4 === 0;
+        const bar = s % BAR === 0;
         roll.appendChild(svgEl("line", { x1: x, x2: x, y1: y0, y2: y0 + laneH, stroke: bar ? "var(--axis)" : (strong.has(s) ? "var(--grid)" : "none"), "stroke-width": 1 }));
       }
       const label = svgEl("text", { x: 4, y: y0 + 12, class: "lane-label" });
@@ -514,7 +531,8 @@ const PIECE = /*PIECE_DATA*/;
       const box = el("span", { class: "swatch" });
       box.style.background = "var(--series-" + (v + 1) + ")";
       sw.appendChild(box);
-      sw.appendChild(document.createTextNode(v === 0 ? "Voice 1 (melody)" : "Voice " + (v + 1)));
+      const part = partOf(instrument.value, v);
+      sw.appendChild(document.createTextNode((v === 0 ? "Voice 1 (melody)" : "Voice " + (v + 1)) + (part ? " · " + partName(part) : "")));
       sw.addEventListener("click", function () { toggleVoice(v, sw); });
       legend.appendChild(sw);
 
@@ -563,7 +581,7 @@ const PIECE = /*PIECE_DATA*/;
       const attack = attackOf(v.index);
       match = function (n) { return n.source === attack; };
     }
-    if (v && v.kind === "chord") match = function (n) { return n.start < 4 * (v.index + 1) && n.start + n.length > 4 * v.index; };
+    if (v && v.kind === "chord") match = function (n) { return n.start < BAR * (v.index + 1) && n.start + n.length > BAR * v.index; };
     const any = v && v.kind !== "key";
     for (const n of noteNodes) {
       const hit = match(n);
@@ -1177,21 +1195,86 @@ const PIECE = /*PIECE_DATA*/;
   }
   document.getElementById("config").appendChild(ctable);
 
-  /* ---------- playback ---------- */
-  /* The same instruments as voices.wav: a Karplus-Strong plucked string, an
-     additive organ and a sine, each voice panned across the stereo field, with
-     a little reverb. */
+  /* ---------- playback ----------
+     Ensembles give each voice its own sampled instrument, the highest voice the
+     brightest, so the imitation can be heard passing from one timbre to the
+     next; a bass line plays the root of each bar's chord. The samples load from
+     the web (smplr and the MusyngKite General MIDI soundfonts); the synths are
+     the ones voices.wav uses and need nothing, so they are the fallback. */
   const play = document.getElementById("play");
   const instrument = document.getElementById("instrument");
-  if (["pluck", "organ", "sine"].indexOf(cfg.instrument) >= 0) instrument.value = cfg.instrument;
-  let audio = null, playing = [], raf = 0, bus = null, lanes = [];
-  function toggleVoice(v, button) {
-    if (muted.has(v)) muted.delete(v); else muted.add(v);
-    button.classList.toggle("off", muted.has(v));
-    button.setAttribute("aria-pressed", String(!muted.has(v)));
-    if (lanes[v]) lanes[v].gain.setTargetAtTime(muted.has(v) ? 0 : lanes[v].level, audio.currentTime, 0.02);
-    markSelection();
+  const bassBox = document.getElementById("bass");
+  const SPB = P.stepsPerBeat || 1, BAR = 4 * SPB;
+  const SMPLR = "https://cdn.jsdelivr.net/npm/smplr@1.1.0/+esm";
+  const ENSEMBLES = {
+    chamber: { parts: ["flute", "violin", "clarinet", "cello"], bass: "harpsichord" },
+    strings: { parts: ["violin", "violin", "viola", "cello"], bass: "contrabass" },
+    winds: { parts: ["flute", "oboe", "clarinet", "bassoon"], bass: "bassoon" },
+    brass: { parts: ["trumpet", "french_horn", "trumpet", "trombone"], bass: "tuba" },
+    orchestra: { parts: ["flute", "french_horn", "clarinet", "cello"], bass: "contrabass" },
+    piano: { parts: ["piano", "piano", "piano", "piano"], bass: "piano" },
+    harpsichord: { parts: ["harpsichord", "harpsichord", "harpsichord", "harpsichord"], bass: "harpsichord" },
+    organ: { parts: ["church_organ", "church_organ", "church_organ", "church_organ"], bass: "church_organ" },
+    harp: { parts: ["orchestral_harp", "orchestral_harp", "orchestral_harp", "orchestral_harp"], bass: "orchestral_harp" },
+    mallets: { parts: ["vibraphone", "marimba", "vibraphone", "marimba"], bass: "marimba" },
+  };
+  const SYNTHS = { pluck: 1, synth: 1, sine: 1 };
+  const STRUCK = { piano: 1, harpsichord: 1, orchestral_harp: 1, marimba: 1, vibraphone: 1 };
+  const PART_NAMES = { french_horn: "horn", church_organ: "organ", orchestral_harp: "harp", contrabass: "double bass" };
+  const PICK = [[0], [0, 3], [0, 1, 3], [0, 1, 2, 3]];
+  /* the soundfonts are recorded quietly and unevenly: gain per part, measured */
+  const TRIM = { piano: 2.4, church_organ: 2.4, orchestral_harp: 3.6, vibraphone: 6.5, marimba: 6.5 };
+  function trim(part) { return TRIM[part] || 5; }
+  /* voices from highest to lowest average pitch */
+  const byRegister = score.map(function (voice, v) {
+    let sum = 0, n = 0;
+    for (const note of voice) if (note.pitch > 0) { sum += note.pitch * note.length; n += note.length; }
+    return { v: v, mean: n ? sum / n : 0 };
+  }).sort(function (a, b) { return b.mean - a.mean; }).map(function (x) { return x.v; });
+  function partOf(kind, v) {
+    const ens = ENSEMBLES[kind];
+    if (!ens) return null;
+    const pick = PICK[Math.min(4, Math.max(1, voices)) - 1];
+    const rank = Math.min(byRegister.indexOf(v), pick.length - 1);
+    return ens.parts[pick[Math.max(0, rank)]];
   }
+  function partName(part) { return (PART_NAMES[part] || part).replace(/_/g, " "); }
+  if (cfg.instrument === "organ") instrument.value = "organ";
+  else if (cfg.instrument === "sine") instrument.value = "sine";
+
+  /* the bass line: each bar's chord root, around C2..B2, from the key in force */
+  const SCALES = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], dorian: [0, 2, 3, 5, 7, 9, 10],
+    phrygian: [0, 1, 3, 5, 7, 8, 10], lydian: [0, 2, 4, 6, 7, 9, 11], mixolydian: [0, 2, 4, 5, 7, 9, 10],
+    locrian: [0, 1, 3, 5, 6, 8, 10] };
+  const DEGREES = ["i", "ii", "iii", "iv", "v", "vi", "vii"];
+  function chordRoot(label, at) {
+    let key = (P.keys || [])[0];
+    for (const k of P.keys || []) if (k.from <= at) key = k;
+    const m = key && /^([A-G])(#|b)?\s+(\w+)/.exec(key.name);
+    const d = /^(vii|vi|iv|v|iii|ii|i)/i.exec(label || "");
+    if (!m || !d) return -1;
+    const tonic = ({ C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 })[m[1]] + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0);
+    const degree = DEGREES.indexOf(d[1].toLowerCase());
+    const scale = SCALES[m[3]] || SCALES.major;
+    const step = m[3] === "minor" && degree === 6 ? 11 : scale[degree]; /* harmonic minor's vii */
+    return 36 + (((tonic + step) % 12) + 12) % 12;
+  }
+  const bassNotes = [];
+  (P.chords || []).forEach(function (c, i, all) {
+    const start = (c.bar - 1) * BAR, root = chordRoot(c.label, start);
+    if (root < 0 || start >= P.span) return;
+    const next = all[i + 1];
+    const half = Math.min(2 * SPB, P.span - start);
+    bassNotes.push({ start: start, length: half, pitch: root, down: true });
+    if (start + 2 * SPB < P.span) {
+      /* beat three: the fifth on the way to a new chord, else the root again */
+      const fifth = root + 7 > 50 ? root - 5 : root + 7;
+      bassNotes.push({ start: start + 2 * SPB, length: Math.min(2 * SPB, P.span - start - 2 * SPB),
+                      pitch: next && next.label !== c.label ? fifth : root, down: false });
+    }
+  });
+  if (!bassNotes.length) bassBox.parentElement.hidden = true;
+
   const plucks = {};
   function hz(pitch) { return 440 * Math.pow(2, (pitch - 69) / 12); }
   function noise(seed) {
@@ -1298,90 +1381,214 @@ const PIECE = /*PIECE_DATA*/;
     toldBar = bar;
     host.postMessage({ type: "canon-collapse:bar", bar: bar }, "*");
   }
+  let audio = null, bus = null, channels = [], bassChannel = null, playing = [], voicesOn = [], raf = 0;
+  /* one channel per voice: gain (mute) -> pan -> the dry and reverb buses */
+  function ensureAudio() {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return false;
+    audio = audio || new Ctx();
+    if (audio.state === "suspended") audio.resume();
+    bus = bus || makeBus();
+    function channel(pan) {
+      const p = audio.createStereoPanner();
+      p.pan.value = pan;
+      const g = audio.createGain();
+      g.connect(p);
+      p.connect(bus.dry);
+      p.connect(bus.verb);
+      g.level = 1;
+      return g;
+    }
+    if (!channels.length) {
+      channels = score.map(function (voice, v) { return channel(voices > 1 ? -0.6 + (1.2 * v) / (voices - 1) : 0); });
+      bassChannel = channel(0);
+    }
+    return true;
+  }
+  function toggleVoice(v, button) {
+    if (muted.has(v)) muted.delete(v); else muted.add(v);
+    button.classList.toggle("off", muted.has(v));
+    button.setAttribute("aria-pressed", String(!muted.has(v)));
+    const ch = channels[v];
+    if (ch) ch.gain.setTargetAtTime(muted.has(v) ? 0 : ch.level, audio.currentTime, 0.02);
+    markSelection();
+  }
+
+  /* sampled instruments, one per voice and part, kept once loaded */
+  let smplr = null;
+  const loaded = {};
+  function usedPitches(extra) {
+    const set = new Set(extra || []);
+    for (const voice of score) for (const n of voice) if (n.pitch > 0) set.add(n.pitch);
+    return Array.from(set);
+  }
+  function sampler(part, dest, slot, notes) {
+    const key = part + ":" + slot;
+    if (!loaded[key]) {
+      loaded[key] = part === "piano"
+        ? smplr.SplendidGrandPiano(audio, { destination: dest, notesToLoad: { notes: notes } })
+        : smplr.Soundfont(audio, { instrument: part, destination: dest, notesToLoad: { notes: notes } });
+    }
+    return loaded[key];
+  }
+  function within(ms, promise) {
+    return Promise.race([promise, new Promise(function (resolve, reject) {
+      setTimeout(function () { reject(new Error("timeout")); }, ms);
+    })]);
+  }
+  async function loadEnsemble(kind) {
+    smplr = smplr || await within(15000, import(SMPLR));
+    const notes = usedPitches(bassNotes.map(function (n) { return n.pitch; }));
+    const parts = score.map(function (voice, v) { return sampler(partOf(kind, v), channels[v], v, notes); });
+    const bass = bassNotes.length ? sampler(ENSEMBLES[kind].bass, bassChannel, "bass", notes) : null;
+    const all = parts.concat(bass ? [bass] : []);
+    let done = false;
+    (function progress() {
+      if (done) return;
+      let got = 0, want = 0;
+      for (const s of all) {
+        const p = s.loadProgress || { loaded: 0, total: 1 };
+        got += p.loaded;
+        want += p.total || 1;
+      }
+      play.textContent = "Loading " + Math.round((100 * got) / Math.max(1, want)) + "%";
+      requestAnimationFrame(progress);
+    })();
+    try {
+      await within(30000, Promise.all(all.map(function (s) { return s.ready; })));
+    } finally {
+      done = true;
+    }
+    return { parts: parts, bass: bass };
+  }
+
+  /* Phrasing: downbeats and strong beats a little louder than off-beats, an
+     arch of loudness over the piece, each voice's entry announced, and a few
+     milliseconds of looseness off the downbeat, all repeatable. */
+  function feel(v, n, pass, entry) {
+    let h = Math.imul(((v + 1) * 2654435761) ^ ((n.start + 1) * 40503) ^ ((pass + 1) * 9973), 2246822519) >>> 0;
+    h ^= h >>> 15;
+    const r = (h % 2001) / 1000 - 1;
+    const inBar = n.start % BAR, onBeat = inBar % SPB === 0, beatNo = Math.floor(inBar / SPB);
+    let vel = 70 + (inBar === 0 ? 16 : onBeat ? (beatNo % 2 === 0 ? 9 : 4) : -5);
+    vel += 10 * Math.sin((Math.PI * n.start) / Math.max(1, P.span)) + 5 * r;
+    if (entry) vel += 10;
+    return { vel: Math.max(30, Math.min(118, Math.round(vel))), shift: inBar === 0 ? 0 : r * 0.012 };
+  }
+
   function stop() {
     for (const o of playing) { try { o.stop(); } catch (err) { /* already stopped */ } }
+    for (const s of voicesOn) { try { s.stop(); } catch (err) { /* nothing sounding */ } }
     playing = [];
+    voicesOn = [];
     cancelAnimationFrame(raf);
     const head = document.getElementById("playhead");
     if (head) head.setAttribute("visibility", "hidden");
     for (const n of noteNodes) n.node.classList.remove("sounding");
     tellBar(-1);
     play.textContent = "Play";
+    play.disabled = !score.length;
   }
-  instrument.addEventListener("change", function () { if (playing.length) stop(); });
+  instrument.addEventListener("change", function () {
+    if (playing.length || voicesOn.length) stop();
+    drawRoll(); /* the legend names each voice's instrument */
+  });
   /* A cyclic canon is a round: Loop schedules each next pass ahead of time,
      so it repeats without a gap. */
   const loop = document.getElementById("loop");
   loop.checked = String(cfg.cyclic) === "1";
-  play.addEventListener("click", function () {
-    if (playing.length) { stop(); return; }
+  play.addEventListener("click", async function () {
+    if (playing.length || voicesOn.length) { stop(); return; }
     if (!score.length) return;
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) { play.textContent = "No audio"; return; }
-    audio = audio || new Ctx();
-    if (audio.state === "suspended") audio.resume();
-    bus = bus || makeBus();
-    const beat = 60 / (P.tempo || 120);
-    const t0 = audio.currentTime + 0.12;
-    const kind = instrument.value;
-    const wave = kind === "organ" ? organWave() : null;
-    const level = (kind === "pluck" ? 1.3 : 0.45) / Math.sqrt(Math.max(1, voices));
-    lanes = score.map(function (voice, v) {
-      const pan = audio.createStereoPanner();
-      pan.pan.value = voices > 1 ? -0.6 + (1.2 * v) / (voices - 1) : 0;
-      const gain = audio.createGain();
-      gain.gain.value = muted.has(v) ? 0 : level;
-      gain.level = level;
-      gain.connect(pan);
-      pan.connect(bus.dry);
-      pan.connect(bus.verb);
-      return gain;
+    if (!ensureAudio()) { play.textContent = "No audio"; return; }
+    let kind = instrument.value, kit = null;
+    if (!SYNTHS[kind]) {
+      play.disabled = true;
+      try {
+        kit = await loadEnsemble(kind);
+      } catch (err) {
+        kind = "pluck";
+        instrument.value = "pluck";
+        play.title = "The sampled instruments could not load (offline?), so this plays the built-in synth.";
+        drawRoll();
+      }
+      play.disabled = false;
+    }
+    const beat = 60 / (P.tempo || 120) / SPB; /* seconds per step */
+    const t0 = audio.currentTime + 0.15;
+    const wave = kind === "synth" ? organWave() : null;
+    const level = (kit ? 1 : kind === "pluck" ? 1.3 : 0.45) / Math.sqrt(Math.max(1, voices));
+    channels.forEach(function (ch, v) {
+      ch.level = level * (kit ? trim(partOf(kind, v)) : 1);
+      ch.gain.value = muted.has(v) ? 0 : ch.level;
     });
-    function schedule(begin) {
+    bassChannel.level = level * 0.8 * (kit && kit.bass ? trim(ENSEMBLES[kind].bass) : 1);
+    bassChannel.gain.value = bassBox.checked ? bassChannel.level : 0;
+    if (kit) voicesOn = kit.parts.concat(kit.bass ? [kit.bass] : []);
+
+    function synthNote(pitch, on, off, dest, vel, v) {
+      const env = audio.createGain(), g = vel / 90;
+      let src;
+      if (kind === "pluck") {
+        src = audio.createBufferSource();
+        src.buffer = pluckBuffer(pitch, Math.min(8, Math.ceil(off - on + 0.5)), v);
+        env.gain.setValueAtTime(g, on);
+        env.gain.setValueAtTime(g, Math.max(on, off - 0.03));
+        env.gain.linearRampToValueAtTime(0, off);
+      } else {
+        src = audio.createOscillator();
+        if (wave) src.setPeriodicWave(wave); else src.type = "sine";
+        src.frequency.value = hz(pitch);
+        const attack = wave ? 0.015 : 0.01, release = wave ? 0.06 : 0.04;
+        env.gain.setValueAtTime(0, on);
+        env.gain.linearRampToValueAtTime(g, on + attack);
+        env.gain.setValueAtTime(g, Math.max(on + attack, off - release));
+        env.gain.linearRampToValueAtTime(0, off);
+      }
+      src.connect(env);
+      env.connect(dest);
+      src.start(on);
+      src.stop(off + 0.02);
+      playing.push(src);
+    }
+    function schedule(begin, pass) {
       score.forEach(function (voice, v) {
+        let first = true;
         for (const n of voice) {
           if (n.pitch <= 0) continue;
-          const on = begin + n.start * beat, off = on + n.length * beat;
-          const env = audio.createGain();
-          let src;
-          if (kind === "pluck") {
-            src = audio.createBufferSource();
-            src.buffer = pluckBuffer(n.pitch, Math.min(8, Math.ceil(n.length * beat + 0.5)), v);
-            env.gain.setValueAtTime(1, on);
-            env.gain.setValueAtTime(1, off - 0.03);
-            env.gain.linearRampToValueAtTime(0, off);
+          const f = feel(v, n, pass, first && pass === 0);
+          first = false;
+          const on = begin + n.start * beat + f.shift, written = n.length * beat;
+          if (kit) {
+            const part = partOf(kind, v);
+            /* sustained parts slightly detached on short notes; struck ones ring on a little */
+            const dur = STRUCK[part] ? written + 0.25 : written * (n.length <= SPB ? 0.86 : 0.96);
+            kit.parts[v].start({ note: n.pitch, velocity: f.vel, time: on, duration: dur });
           } else {
-            src = audio.createOscillator();
-            if (wave) src.setPeriodicWave(wave); else src.type = "sine";
-            src.frequency.value = hz(n.pitch);
-            const attack = wave ? 0.015 : 0.01, release = wave ? 0.06 : 0.04;
-            env.gain.setValueAtTime(0, on);
-            env.gain.linearRampToValueAtTime(1, on + attack);
-            env.gain.setValueAtTime(1, Math.max(on + attack, off - release));
-            env.gain.linearRampToValueAtTime(0, off);
+            synthNote(n.pitch, on, on + written, channels[v], f.vel, v);
           }
-          src.connect(env);
-          env.connect(lanes[v]);
-          src.start(on);
-          src.stop(off + 0.02);
-          playing.push(src);
         }
       });
+      for (const n of bassNotes) {
+        const on = begin + n.start * beat, written = n.length * beat, vel = n.down ? 74 : 62;
+        if (kit && kit.bass) kit.bass.start({ note: n.pitch, velocity: vel, time: on, duration: written * 0.95 });
+        else synthNote(n.pitch, on, on + written, bassChannel, vel, voices);
+      }
     }
     const total = P.span * beat;
     let passes = 1;
-    schedule(t0);
+    schedule(t0, 0);
     play.textContent = "Stop";
     function tick() {
       const t = audio.currentTime - t0;
-      if (loop.checked && t > passes * total - 1) schedule(t0 + total * passes++);
-      if (t > passes * total + 0.2) { stop(); return; }
+      if (loop.checked && t > passes * total - 1) { schedule(t0 + total * passes, passes); passes++; }
+      if (t > passes * total + 0.4) { stop(); return; }
       const head = document.getElementById("playhead");
       const left = Number(roll.dataset.left), stepW = Number(roll.dataset.stepW);
       const step = t >= 0 ? (t % total) / beat : -1;
       for (const n of noteNodes)
         n.node.classList.toggle("sounding", step >= n.start && step < n.start + n.length);
-      tellBar(step >= 0 ? Math.floor(step / 4) : -1);
+      tellBar(step >= 0 ? Math.floor(step / BAR) : -1);
       if (head && t >= 0) {
         const x = left + step * stepW;
         head.setAttribute("x1", x);
@@ -1391,6 +1598,9 @@ const PIECE = /*PIECE_DATA*/;
       raf = requestAnimationFrame(tick);
     }
     raf = requestAnimationFrame(tick);
+  });
+  bassBox.addEventListener("change", function () {
+    if (bassChannel) bassChannel.gain.setTargetAtTime(bassBox.checked ? bassChannel.level : 0, audio.currentTime, 0.02);
   });
   if (!score.length) play.disabled = true;
 
