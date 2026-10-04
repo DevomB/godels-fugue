@@ -103,6 +103,8 @@ style preset first, so every other key in the file overrides it.
 | `tension` | arch | up to 128 values | The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as points spread evenly from the first melody note to the last; notes between points take the straight line between them, rounded. 0 4 0 peaks in the middle and one value is flat. A ? point is filled in from the given points on either side, or from the nearest one at either end, so 0 4 ? rises over the first half and then holds. arch (or no given point) is the built-in arch. |
 | `w_leap` | 1 | 0..100 | Cost per four semitones of melodic interval. |
 | `w_step` | 0 | 0..100 | Cost of each melodic interval larger than a whole step, growing with its size, favouring stepwise lines: this times (semitones - 1) / 2, rounded down, so 1 for a third, 2 for a fourth, 3 for a fifth and 5 for an octave. |
+| `w_arc` | 0 | 0..100 | Cost of a melody note above the note at the climax, and of a note in the melody's first quarter less than a major third below it: this times 1 + semitones / 3. The melody climbs to one peak and comes down from it. |
+| `climax` | 66 | 5..95 | Where the peak falls for w_arc, in percent of the melody, moved to the nearest strong beat (beat 1 or 3). |
 | `w_repeat` | 4 | 0..100 | Cost of striking the same pitch twice in a row. |
 | `w_recover` | 2 | 0..100 | Cost of not stepping back after a leap larger than a third. |
 | `w_dissonance` | 1 | 0..100 | Cost per grade of vertical dissonance (fourth 1, second or tritone 2, semitone 3). |
@@ -113,6 +115,7 @@ style preset first, so every other key in the file overrides it.
 | `motif_b` | 0 | see meaning | Second interval of the motif pattern. |
 | `motif_c` | off | see meaning | Third interval (off = pattern ends). |
 | `motif_d` | off | see meaning | Fourth interval (off = pattern ends). |
+| `w_sequence` | 0 | 0..100 | Cost of each melodic interval that does not echo the one at the same place a bar before: nothing for the same interval or one a semitone off in the same direction, half (rounded up) for another in the same direction, all of it for the other way, so bars repeat the opening's shape as a sequence. |
 | `w_modulate` | 1 | 0..100 | Cost per fifth between the two keys, and per accidental of a searched key. |
 | `w_harmony` | 1 | 0..100 | Cost of weaker chords (ii, vi, and twice for iii, vii), twice this for a chord repeated from the bar before, and of non-chord tones on weak beats. |
 | `w_rest` | 4 | 0..100 | Cost of each step of rest. |
@@ -148,3 +151,4 @@ style preset first, so every other key in the file overrides it.
 | `instrument` | pluck | see meaning | Sound of voices.wav: pluck (a plucked string, like a harpsichord), organ, or sine. |
 | `ensemble` | none | see meaning | Instruments the score files are written for, one per voice from the highest voice down: none, chamber (flute, violin, clarinet, cello), strings, winds (flute, oboe, clarinet, bassoon), saxes (soprano, alto, tenor, baritone), brass (trumpet, horn, trombone, euphonium), band (flute, alto sax, euphonium, baritone sax), orchestra, piano, harpsichord, organ, harp or mallets. Each part gets its name, clef and MIDI program, and report.txt counts notes outside an instrument's range. |
 | `written` | transposed | see meaning | How an ensemble's transposing instruments are written: transposed, each in its own key (B-flat clarinet, trumpet and soprano sax a step above the sound, E-flat alto sax a sixth, B-flat tenor sax a ninth, E-flat baritone sax an octave and a sixth, horn in F a fifth, double bass an octave), or concert, at sounding pitch. |
+| `mood` | auto | see meaning | How score.html plays the piece: plain, lament, hymn, triumph, longing, dance or nocturne set its dynamics, accents, legato, rubato, closing ritardando and how long the last chord is held; auto guesses from the key and tempo. |

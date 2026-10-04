@@ -30,6 +30,18 @@ enum {
     ENSEMBLE_COUNT
 };
 enum { WRITTEN_TRANSPOSED, WRITTEN_CONCERT, WRITTEN_COUNT };
+/* How the score page plays a piece (mood key); auto guesses from key and tempo. */
+enum {
+    MOOD_AUTO,
+    MOOD_PLAIN,
+    MOOD_LAMENT,
+    MOOD_HYMN,
+    MOOD_TRIUMPH,
+    MOOD_LONGING,
+    MOOD_DANCE,
+    MOOD_NOCTURNE,
+    MOOD_COUNT
+};
 enum { KEY_SEARCH = -1 };
 enum { TRANSPOSE_SAME = -128 };
 
@@ -101,6 +113,8 @@ typedef struct PieceConfig {
     int tension[MELODY_MAX]; /* curve points, TENSION_FREE (?) or TENSION_UNLISTED */
     int w_leap;
     int w_step;
+    int w_arc;
+    int climax;
     int w_repeat;
     int w_recover;
     int w_dissonance;
@@ -111,6 +125,7 @@ typedef struct PieceConfig {
     int motif_b;
     int motif_c;
     int motif_d;
+    int w_sequence;
     int w_modulate;
     int w_harmony;
     int w_rest;
@@ -138,6 +153,7 @@ typedef struct PieceConfig {
     int instrument;
     int ensemble;
     int written;
+    int mood;
 } PieceConfig;
 
 void config_defaults(PieceConfig *config);

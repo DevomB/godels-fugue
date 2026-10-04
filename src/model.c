@@ -24,7 +24,7 @@ const char *term_name(int term) {
         "gravity",   "curve",       "corpus", "rest",  "leap",       "repeat",
         "recovery",  "motif",       "dissonance", "direct perfect", "contrary motion", "hold",
         "syncopation", "rhythm",    "final",  "chord", "chord motion", "non-chord tone", "key",
-        "key distance", "run", "step", "figure"};
+        "key distance", "run", "step", "figure", "arc", "sequence"};
     if (term < 0 || term >= TERM_COUNT) return "unknown";
     return names[term];
 }
@@ -621,6 +621,37 @@ static void build_terms(Builder *b) {
     if (uses_motif(c)) {
         for (int i = 1; i < length; i++) {
             Constraint *t = add_term(b, TERM_MOTIF, c->w_motif);
+            add_slot(t, m->pitch[i - 1], 0);
+            add_slot(t, m->pitch[i], 0);
+            if (t != NULL) t->time = i;
+        }
+    }
+    if (c->w_arc > 0 && length >= 3) {
+        /* one peak, on the strong beat nearest the climax: every other note
+         * is weighed against it, and the opening quarter must start a major
+         * third or more below it, so the line climbs and comes down */
+        int strong = 2 * config_beat_steps(c);
+        int peak = (c->climax * (length - 1) + 50) / 100;
+        peak = (peak + strong / 2) / strong * strong;
+        if (peak > length - 1) peak = (length - 1) / strong * strong;
+        for (int i = 0; i < length; i++) {
+            if (i == peak) continue;
+            Constraint *t = add_term(b, TERM_ARC, c->w_arc);
+            add_slot(t, m->pitch[i], 0);
+            add_slot(t, m->pitch[peak], 0);
+            if (t != NULL) {
+                t->time = i;
+                t->param = 4 * i < length ? 4 : 0;
+            }
+        }
+    }
+    if (c->w_sequence > 0) {
+        /* each interval against the one at the same place a bar before */
+        int bar = 4 * config_beat_steps(c);
+        for (int i = bar + 1; i < length; i++) {
+            Constraint *t = add_term(b, TERM_SEQUENCE, c->w_sequence);
+            add_slot(t, m->pitch[i - bar - 1], 0);
+            add_slot(t, m->pitch[i - bar], 0);
             add_slot(t, m->pitch[i - 1], 0);
             add_slot(t, m->pitch[i], 0);
             if (t != NULL) t->time = i;
@@ -1231,6 +1262,30 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
         if (a == PITCH_REST || b == PITCH_REST) return 0;
         int d = iabs(a - b);
         return d <= 2 ? 0 : w * ((d - 1) / 2);
+    }
+    case TERM_ARC: {
+        /* a note above the peak, or in the opening less than param
+         * semitones below it, by how far: 1 + semitones / 3 */
+        int a = slot_value(t, vals, 0);
+        int peak = slot_value(t, vals, 1);
+        if (a == PITCH_REST || peak == PITCH_REST) return 0;
+        int d = a - peak + t->param;
+        return d > 0 ? w * (1 + d / 3) : 0;
+    }
+    case TERM_SEQUENCE: {
+        /* the interval into this note against the one a bar before: the
+         * same, or a semitone off the same way (a diatonic sequence), is
+         * free; the same direction costs half, the other way all */
+        int a0 = slot_value(t, vals, 0);
+        int b0 = slot_value(t, vals, 1);
+        int a1 = slot_value(t, vals, 2);
+        int b1 = slot_value(t, vals, 3);
+        if (a0 == PITCH_REST || b0 == PITCH_REST || a1 == PITCH_REST || b1 == PITCH_REST)
+            return 0;
+        int was = b0 - a0;
+        int now = b1 - a1;
+        if (((was > 0) - (was < 0)) != ((now > 0) - (now < 0))) return w;
+        return iabs(was - now) <= 1 ? 0 : (w + 1) / 2;
     }
     default:
         return 0;

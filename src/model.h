@@ -64,6 +64,8 @@ enum {
     TERM_RUN,
     TERM_STEP,
     TERM_FIGURE,
+    TERM_ARC,
+    TERM_SEQUENCE,
     TERM_COUNT
 };
 

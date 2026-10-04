@@ -110,6 +110,8 @@ static const char *const ensemble_words[] = {
     "none", "chamber", "strings", "winds", "saxes", "brass", "band",
     "orchestra", "piano", "harpsichord", "organ", "harp", "mallets"};
 static const char *const written_words[] = {"transposed", "concert"};
+static const char *const mood_words[] = {"auto", "plain", "lament", "hymn",
+                                         "triumph", "longing", "dance", "nocturne"};
 
 static bool parse_list_word(const char *w, const char *const *words, int n, int *out) {
     for (int i = 0; i < n; i++) {
@@ -151,6 +153,14 @@ static bool parse_ensemble_word(const char *w, int *out) {
 
 static void print_ensemble_word(int v, char *buf, size_t cap) {
     snprintf(buf, cap, "%s", v >= 0 && v < ENSEMBLE_COUNT ? ensemble_words[v] : "?");
+}
+
+static bool parse_mood_word(const char *w, int *out) {
+    return parse_list_word(w, mood_words, MOOD_COUNT, out);
+}
+
+static void print_mood_word(int v, char *buf, size_t cap) {
+    snprintf(buf, cap, "%s", v >= 0 && v < MOOD_COUNT ? mood_words[v] : "?");
 }
 
 static bool parse_written_word(const char *w, int *out) {
@@ -439,6 +449,13 @@ static const KeyDef keys[] = {
      "Cost of each melodic interval larger than a whole step, growing with its size, "
      "favouring stepwise lines: this times (semitones - 1) / 2, rounded down, so 1 for a "
      "third, 2 for a fourth, 3 for a fifth and 5 for an octave."},
+    {"w_arc", F(w_arc), 1, 0, 100, 0, NULL, NULL, "energy",
+     "Cost of a melody note above the note at the climax, and of a note in the melody's "
+     "first quarter less than a major third below it: this times 1 + semitones / 3. The "
+     "melody climbs to one peak and comes down from it."},
+    {"climax", F(climax), 1, 5, 95, 66, NULL, NULL, "energy",
+     "Where the peak falls for w_arc, in percent of the melody, moved to the nearest strong "
+     "beat (beat 1 or 3)."},
     {"w_repeat", F(w_repeat), 1, 0, 100, 4, NULL, NULL, "energy",
      "Cost of striking the same pitch twice in a row."},
     {"w_recover", F(w_recover), 1, 0, 100, 2, NULL, NULL, "energy",
@@ -461,6 +478,11 @@ static const KeyDef keys[] = {
      "energy", "Third interval (off = pattern ends)."},
     {"motif_d", F(motif_d), 1, -128, 24, -128, parse_motif_word, print_motif_word,
      "energy", "Fourth interval (off = pattern ends)."},
+    {"w_sequence", F(w_sequence), 1, 0, 100, 0, NULL, NULL, "energy",
+     "Cost of each melodic interval that does not echo the one at the same place a bar "
+     "before: nothing for the same interval or one a semitone off in the same direction, "
+     "half (rounded up) for another in the same direction, all of it for the other way, so "
+     "bars repeat the opening's shape as a sequence."},
     {"w_modulate", F(w_modulate), 1, 0, 100, 1, NULL, NULL, "energy",
      "Cost per fifth between the two keys, and per accidental of a searched key."},
     {"w_harmony", F(w_harmony), 1, 0, 100, 1, NULL, NULL, "energy",
@@ -541,6 +563,11 @@ static const KeyDef keys[] = {
      "key (B-flat clarinet, trumpet and soprano sax a step above the sound, E-flat alto sax "
      "a sixth, B-flat tenor sax a ninth, E-flat baritone sax an octave and a sixth, horn in "
      "F a fifth, double bass an octave), or concert, at sounding pitch."},
+    {"mood", F(mood), 1, 0, MOOD_COUNT - 1, MOOD_AUTO, parse_mood_word, print_mood_word,
+     "output",
+     "How score.html plays the piece: plain, lament, hymn, triumph, longing, dance or "
+     "nocturne set its dynamics, accents, legato, rubato, closing ritardando and how long "
+     "the last chord is held; auto guesses from the key and tempo."},
 };
 
 #undef F

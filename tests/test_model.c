@@ -436,6 +436,72 @@ static void test_step(void) {
     test_close(r);
 }
 
+/* w_arc weighs every note against the one at the climax: a note above it
+ * costs 1 + semitones / 3, and so does a note of the opening quarter less
+ * than a major third below it. */
+static void test_arc(void) {
+    PieceConfig c = test_config();
+    TestRun *r = test_open(&c);
+    CHECK(c.w_arc == 0 && c.climax == 66 && count_term(&r->model, TERM_ARC) == 0);
+    test_close(r);
+    test_set(&c, "w_arc=2");
+    r = test_open(&c);
+    const Model *m = &r->model;
+    /* twelve notes: 66% of the way is note 7, moved to the strong beat at 8 */
+    CHECK(count_term(m, TERM_ARC) == c.length - 1);
+    const Constraint *t = find_term(m, TERM_ARC, 0, 2);
+    CHECK(t != NULL && t->vars[t->slot[1]] == m->pitch[8] && t->param == 4);
+    int v[SCOPE_MAX];
+    v[t->slot[1]] = 72;
+    v[t->slot[0]] = 68;
+    CHECK(term_cost(m, t, v) == 0); /* the opening a major third below the peak */
+    v[t->slot[0]] = 69;
+    CHECK(term_cost(m, t, v) == 2); /* a minor third below: too close */
+    v[t->slot[0]] = 75;
+    CHECK(term_cost(m, t, v) == 6); /* above the peak */
+    v[t->slot[0]] = PITCH_REST;
+    CHECK(term_cost(m, t, v) == 0);
+    const Constraint *late = find_term(m, TERM_ARC, 10, 2);
+    CHECK(late != NULL && late->param == 0);
+    v[late->slot[1]] = 72;
+    v[late->slot[0]] = 72;
+    CHECK(term_cost(m, late, v) == 0); /* level with the peak */
+    v[late->slot[0]] = 74;
+    CHECK(term_cost(m, late, v) == 2);
+    test_close(r);
+}
+
+/* w_sequence compares each interval with the one at the same place a bar
+ * before: the same, or a semitone off the same way, is free; the same
+ * direction costs half, the other way all of it. */
+static void test_sequence(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "w_sequence=4");
+    TestRun *r = test_open(&c);
+    const Model *m = &r->model;
+    /* a bar is four quarter notes: the intervals into notes 5 to 11 */
+    CHECK(count_term(m, TERM_SEQUENCE) == c.length - 5);
+    const Constraint *t = find_term(m, TERM_SEQUENCE, 6, 4);
+    CHECK(t != NULL && t->vars[t->slot[0]] == m->pitch[1] && t->vars[t->slot[3]] == m->pitch[6]);
+    int v[SCOPE_MAX];
+    v[t->slot[0]] = 60;
+    v[t->slot[1]] = 64; /* a major third up a bar before */
+    v[t->slot[2]] = 62;
+    v[t->slot[3]] = 66;
+    CHECK(term_cost(m, t, v) == 0); /* the same */
+    v[t->slot[3]] = 65;
+    CHECK(term_cost(m, t, v) == 0); /* a minor third: the diatonic echo */
+    v[t->slot[3]] = 69;
+    CHECK(term_cost(m, t, v) == 2); /* a larger leap up */
+    v[t->slot[3]] = 60;
+    CHECK(term_cost(m, t, v) == 4); /* down instead */
+    v[t->slot[3]] = 62;
+    CHECK(term_cost(m, t, v) == 4); /* a repeat against a leap */
+    v[t->slot[2]] = PITCH_REST;
+    CHECK(term_cost(m, t, v) == 0);
+    test_close(r);
+}
+
 /* The curve term of each note carries its target: the arch until a
  * curve is drawn, then the drawn curve stretched over the melody. */
 static void check_targets(const PieceConfig *c, const int *want) {
@@ -662,6 +728,8 @@ static void test_energy(void) {
         {"grid=sixteenth", "voices=3", "poly_meter=1", "rhythm=1", "max_hold=7", NULL},
         {"grid=sixteenth", "w_step=3", "rhythm=1", "length=36", "max_hold=3", NULL},
         {"grid=sixteenth", "voices=3", "delay=5", "length=20", NULL},
+        {"w_arc=3", "w_sequence=2", "rhythm=1", "voices=3", NULL},
+        {"grid=eighth", "w_arc=2", "climax=40", "w_sequence=3", "rhythm=1", NULL},
     };
     for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
         PieceConfig c = test_config();
@@ -724,6 +792,8 @@ int main(void) {
     test_sixteenth_grid();
     test_figures();
     test_step();
+    test_arc();
+    test_sequence();
     test_energy();
     printf("ok\n");
     return 0;

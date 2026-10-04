@@ -71,6 +71,16 @@ static void test_defaults_and_set(void) {
     CHECK(!config_set(&c, "written", "sideways", err, sizeof(err)));
     CHECK(config_set(&c, "ensemble", "none", err, sizeof(err)));
     CHECK(config_set(&c, "written", "transposed", err, sizeof(err)));
+    CHECK(c.mood == MOOD_AUTO && c.climax == 66 && c.w_arc == 0 && c.w_sequence == 0);
+    CHECK(config_set(&c, "mood", "lament", err, sizeof(err)));
+    CHECK(c.mood == MOOD_LAMENT);
+    CHECK(config_set(&c, "mood", "nocturne", err, sizeof(err)));
+    CHECK(c.mood == MOOD_NOCTURNE);
+    CHECK(!config_set(&c, "mood", "angry", err, sizeof(err)));
+    CHECK(config_set(&c, "climax", "40", err, sizeof(err)) && c.climax == 40);
+    CHECK(!config_set(&c, "climax", "100", err, sizeof(err)));
+    CHECK(config_set(&c, "mood", "auto", err, sizeof(err)));
+    CHECK(config_set(&c, "climax", "66", err, sizeof(err)));
     CHECK(config_set(&c, "modulate_at", "off", err, sizeof(err)));
     CHECK(c.modulate_at == -1);
     CHECK(config_set(&c, "pc_weight", "0,1,2,3,4,5,6,7,8,9,10,11", err, sizeof(err)));
