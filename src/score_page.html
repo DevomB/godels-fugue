@@ -210,6 +210,28 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
 .cgrid td.out { background: transparent; }
 .cx-event { margin-top: 10px; font-size: 13px; min-height: 2.9em; }
 .cx-event b { font-variant-numeric: tabular-nums; }
+.hood > summary { list-style-position: outside; margin-left: 16px; }
+.hood > summary h2 { display: inline; }
+.sound-note { margin: 8px 2px 0; font-size: 13px; color: var(--text-secondary); min-height: 1.2em; }
+.mixer { display: flex; flex-direction: column; gap: 8px; }
+.mix-row { display: grid; grid-template-columns: minmax(150px, 1.1fr) repeat(4, minmax(110px, 1fr)) auto; gap: 6px 14px; align-items: end; padding: 8px 0; border-top: 1px solid var(--grid); }
+.mix-row:first-child { border-top: none; }
+.mix-row .who { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.mix-row .who b { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; }
+.mix-row .who small { color: var(--text-muted); }
+.mix-row label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--text-secondary); min-width: 0; }
+.mix-row input[type=range] { width: 100%; padding: 0; accent-color: var(--accent); }
+.mix-row input[type=number] { width: 4.6em; }
+.mix-row .pair { display: flex; gap: 4px; align-items: center; }
+.mix-row .toggles { display: flex; gap: 4px; }
+.mix-row .toggles button[aria-pressed="true"] { background: var(--accent); color: #fff; border-color: transparent; }
+.mix-row details { grid-column: 1 / -1; font-size: 12px; }
+.mix-row details summary { margin-top: 0; }
+.mix-more { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: end; margin-top: 6px; }
+.mix-row .warn { color: var(--critical); }
+.mixer-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 10px; font-size: 13px; }
+.form-band { font-size: 11px; font-weight: 600; }
+@media (max-width: 860px) { .mix-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mix-row .who { grid-column: 1 / -1; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 </head>
@@ -221,41 +243,30 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
       <div class="subtitle" id="subtitle"></div>
     </div>
     <span class="badge" id="status"></span>
-    <select id="instrument" aria-label="Instruments" title="Each voice gets its own instrument, highest voice first">
-      <optgroup label="Ensembles">
-        <option value="chamber" selected>Chamber: flute, violin, cello</option>
-        <option value="strings">String quartet</option>
-        <option value="winds">Woodwinds: flute, oboe, clarinet, bassoon</option>
-        <option value="saxes">Saxophone quartet: soprano, alto, tenor, bari</option>
-        <option value="brass">Brass: trumpet, horn, trombone, euphonium</option>
-        <option value="band">Concert band: flute, alto sax, euphonium, bari sax</option>
-        <option value="orchestra">Orchestra</option>
-      </optgroup>
-      <optgroup label="One instrument">
-        <option value="piano">Piano</option>
-        <option value="harpsichord">Harpsichord</option>
-        <option value="organ">Organ</option>
-        <option value="harp">Harp</option>
-        <option value="mallets">Vibraphone and marimba</option>
-      </optgroup>
-      <optgroup label="Synth (works offline)">
-        <option value="pluck">Plucked string</option>
-        <option value="synth">Synth organ</option>
-        <option value="sine">Sine</option>
-      </optgroup>
-    </select>
-    <label class="loop" title="A bass line on each bar's chord root"><input id="bass" type="checkbox" checked> Bass</label>
     <label class="loop"><input id="loop" type="checkbox"> Loop</label>
     <button id="play" type="button">Play</button>
     <button id="theme" type="button" aria-label="Switch light or dark theme">Theme</button>
   </div>
-  <div class="tiles" id="tiles"></div>
-  <p class="story" id="story" hidden></p>
+  <p class="sound-note" id="sound-status" role="status" aria-live="polite"></p>
+
+  <section class="card" id="players-card">
+    <h2>Players</h2>
+    <p class="muted" id="players-help">Each voice is one player. Volume, pan, mute and solo change only what you hear; articulation and intensity change how the piece is performed; the instrument, its range, the entry and the transposition change the composition, so the piece is composed again.</p>
+    <div id="mixer" class="mixer"></div>
+    <div class="mixer-foot">
+      <label>Sound <select id="sound" aria-describedby="sound-help">
+        <option value="sampled">Sampled instruments</option>
+        <option value="synth">Synths, as voices.wav</option>
+      </select></label>
+      <label class="loop" title="Not part of the canon, the proof or the files"><input id="bass" type="checkbox"> Bass line on the chord roots (playback only)</label>
+      <span class="muted" id="sound-help">The sampled instruments load from the web; voices.wav and an offline page play synths.</span>
+    </div>
+  </section>
 
   <section class="card" id="score-card">
     <h2>Score</h2>
-    <p class="muted" id="score-help">Each lane is one voice; time runs left to right in quarter-note steps. Pick a note to see why it is there, and every place the canon repeats it. Click a voice below to mute it.</p>
-    <div class="legend" id="voice-legend"></div>
+    <p class="muted" id="score-help">Each lane is one voice; time runs left to right in quarter-note steps. Pick a note to see why it is there, and every place the canon repeats it.</p>
+    <div class="legend" id="form-legend"></div>
     <div class="scroll"><svg id="roll" role="img" aria-label="Piano roll of every voice"></svg></div>
   </section>
 
@@ -264,15 +275,20 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
     <div id="cf"></div>
   </section>
 
+  <section class="card">
+    <h2>Why is this note here?</h2>
+    <h3>Melody notes</h3>
+    <div class="chips" id="melody-chips"></div>
+    <h3 id="other-title">Other variables</h3>
+    <div class="chips" id="other-chips"></div>
+    <div id="inspector" style="margin-top:14px"></div>
+  </section>
+
+  <details class="card hood" id="hood">
+  <summary><h2>Under the hood: how the solver found this piece</h2></summary>
+  <div class="tiles" id="tiles"></div>
+  <p class="story" id="story" hidden></p>
   <div class="cols">
-    <section class="card">
-      <h2>Why is this note here?</h2>
-      <h3>Melody notes</h3>
-      <div class="chips" id="melody-chips"></div>
-      <h3 id="other-title">Other variables</h3>
-      <div class="chips" id="other-chips"></div>
-      <div id="inspector" style="margin-top:14px"></div>
-    </section>
     <div>
       <section class="card">
         <h2>Entropy while solving</h2>
@@ -289,6 +305,8 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
         <p class="muted">Counted in the proof of this piece.</p>
         <div id="impact"></div>
       </section>
+    </div>
+    <div>
       <section class="card" id="delay-card" hidden>
         <h2>Delays tried</h2>
         <div id="delays"></div>
@@ -336,6 +354,7 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
   <section class="card">
     <details><summary>Config used</summary><div id="config"></div></details>
   </section>
+  </details>
 </main>
 <div class="tooltip" id="tooltip" role="tooltip"></div>
 <script>
@@ -351,7 +370,6 @@ const PIECE = /*PIECE_DATA*/;
   const events = P.events || [];
   const score = P.score || [];
   let selected = -1;
-  const muted = new Set(); /* voices left out of playback */
 
   function el(tag, attrs, text) {
     const node = document.createElement(tag);
@@ -392,19 +410,21 @@ const PIECE = /*PIECE_DATA*/;
       : window.matchMedia("(prefers-color-scheme: dark)").matches;
     root.dataset.theme = dark ? "light" : "dark";
     drawAll();
-    if (host) host.postMessage({ type: "godels-fugue:theme", theme: root.dataset.theme }, "*");
+    if (host) host.postMessage({ type: "godels-fugue:theme", run: hostRun, theme: root.dataset.theme }, "*");
   });
 
   /* ---------- header ---------- */
   const cfg = P.config || {};
   const keyNames = (P.keys || []).map(function (k, i) { return i === 0 ? k.name : k.name + " from step " + k.from; });
+  const phraseCount = P.form && P.form.phrases ? P.form.phrases.length : 1;
   document.getElementById("subtitle").textContent = [
     keyNames.join(", "),
     voices + " voices",
     "delay " + cfg.delay,
-    P.length + " notes",
-    P.tempo + " bpm"
-  ].join(" · ");
+    P.length + " notes" + (phraseCount > 1 ? " in " + phraseCount + " phrases" : ""),
+    P.tempo + " bpm",
+    P.perform ? (P.perform.mood === "plain" ? "played exactly as written" : "played in the " + P.perform.mood + " mood") : ""
+  ].filter(Boolean).join(" · ");
   const statusEl = document.getElementById("status");
   const statusText = { solved: "Solved", unsat: "No solution", limit: "Search limit reached" }[P.status] || P.status;
   const dot = el("span", { class: "dot" });
@@ -463,8 +483,6 @@ const PIECE = /*PIECE_DATA*/;
   function drawRoll() {
     clear(roll);
     noteNodes.length = 0;
-    const legend = document.getElementById("voice-legend");
-    clear(legend);
     if (!score.length) {
       document.getElementById("score-help").textContent = "No piece was produced, so there is no score to show.";
       roll.style.display = "none";
@@ -478,7 +496,9 @@ const PIECE = /*PIECE_DATA*/;
     const rowH = Math.max(7, Math.min(14, Math.floor(260 / rows)));
     const laneH = rows * rowH;
     const stepW = Math.max(26, Math.min(56, Math.floor(1040 / Math.max(1, P.span))));
-    const left = 64, top = 40, gap = 18;
+    const phrases = (P.form && P.form.phrases) || [];
+    const formed = phrases.length > 1;
+    const left = 64, top = formed ? 54 : 40, gap = formed ? 24 : 18;
     const width = left + P.span * stepW + 8;
     const height = top + voices * (laneH + gap);
     roll.setAttribute("width", width);
@@ -527,16 +547,30 @@ const PIECE = /*PIECE_DATA*/;
       const label = svgEl("text", { x: 4, y: y0 + 12, class: "lane-label" });
       label.textContent = "Voice " + (v + 1);
       roll.appendChild(label);
-      const sw = el("button", { type: "button", class: "voice-toggle" + (muted.has(v) ? " off" : "") });
-      sw.setAttribute("aria-pressed", String(!muted.has(v)));
-      sw.title = "Mute or unmute this voice";
-      const box = el("span", { class: "swatch" });
-      box.style.background = "var(--series-" + (v + 1) + ")";
-      sw.appendChild(box);
-      const part = partOf(instrument.value, v);
-      sw.appendChild(document.createTextNode((v === 0 ? "Voice 1 (melody)" : "Voice " + (v + 1)) + (part ? " · " + partName(part) : "")));
-      sw.addEventListener("click", function () { toggleVoice(v, sw); });
-      legend.appendChild(sw);
+      const who = svgEl("text", { x: 4, y: y0 + 26 });
+      who.textContent = playerName(v);
+      roll.appendChild(who);
+      /* the form as this voice plays it: each phrase where its notes fall */
+      if (formed) {
+        phrases.forEach(function (ph) {
+          let a = Infinity, b = -Infinity;
+          for (const n of score[v]) if (n.pitch > 0 && n.source >= ph.start && n.source < ph.end) {
+            a = Math.min(a, n.start);
+            b = Math.max(b, n.start + n.length);
+          }
+          if (a >= b) return;
+          roll.appendChild(svgEl("line", { x1: left + a * stepW + 2, x2: left + b * stepW - 2, y1: y0 - 5, y2: y0 - 5, stroke: "var(--axis)", "stroke-width": 2 }));
+          const t = svgEl("text", { x: left + a * stepW + 3, y: y0 - 9, class: "form-band" });
+          t.textContent = ph.role;
+          roll.appendChild(t);
+        });
+        for (const n of score[v]) if (n.pitch > 0 && n.source === P.form.climax) {
+          const t = svgEl("text", { x: left + n.start * stepW + 2, y: y0 + (high - n.pitch) * rowH - 3, class: "form-band" });
+          t.textContent = "climax";
+          roll.appendChild(t);
+          break;
+        }
+      }
 
       for (const n of score[v]) {
         if (n.pitch < 0) continue;
@@ -591,7 +625,7 @@ const PIECE = /*PIECE_DATA*/;
       n.node.classList.toggle("selected", hit);
       n.node.classList.toggle("changed", moved);
       n.node.classList.toggle("dim", any && !hit && !moved);
-      n.node.classList.toggle("muted", muted.has(n.voice));
+      n.node.classList.toggle("muted", silent(n.voice));
     }
     document.querySelectorAll(".chip").forEach(function (c) { c.classList.toggle("selected", Number(c.dataset.id) === selected); });
     cxMark();
@@ -622,7 +656,9 @@ const PIECE = /*PIECE_DATA*/;
   function describeStatus(v) {
     switch (v.status) {
       case "chosen": return v.optimized ? "Chosen to rebuild the lowest-energy piece the optimizer found." : "Chosen by the search: it was the cheapest value that kept every rule.";
-      case "forced": return v.depth === 0 ? "Forced before any decision: the rules alone removed every other value." : "Forced by propagation at search depth " + v.depth + ": every other value broke a rule.";
+      case "forced": return v.bySearch ? "Forced by the search at depth " + v.depth + ": every other value was tried and failed, or a rule removed it."
+        : v.depth === 0 ? "Forced before any decision: the rules alone removed every other value."
+        : "Forced by propagation at search depth " + v.depth + ": every other value broke a rule.";
       case "locked": return "Locked by the user.";
       case "config": return "Set by the config: no other value was ever possible.";
       default: return "Still open: the search did not finish.";
@@ -633,6 +669,7 @@ const PIECE = /*PIECE_DATA*/;
      then offers every other value of a melody note, and the demo composes the
      piece again with the note fixed to the one picked. */
   let host = null;
+  let hostRun = null; /* the demo's id for the run this page shows; sent back with every message */
   let rippled = new Set(); /* melody notes the last what-if changed */
   const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
   function givenMelody() {
@@ -652,8 +689,8 @@ const PIECE = /*PIECE_DATA*/;
     function ask(token, label) {
       const melody = given.slice();
       melody[v.index] = token;
-      host.postMessage({ type: "godels-fugue:what-if", var: v.var, label: label,
-                         melody: melody.join(" ") }, "*");
+      host.postMessage({ type: "godels-fugue:what-if", run: hostRun, var: v.var, index: v.index,
+                         label: label, melody: melody.join(" ") }, "*");
     }
     inspector.appendChild(el("h3", {}, "What if it were…"));
     const box = el("div", { class: "tries" });
@@ -675,20 +712,42 @@ const PIECE = /*PIECE_DATA*/;
   }
   window.addEventListener("message", function (e) {
     const m = e.data || {};
-    if (e.source !== window.parent || window.parent === window) return;
+    if (e.source !== window.parent || window.parent === window || typeof m.type !== "string") return;
     if (m.type === "godels-fugue:host") {
       host = e.source;
+      hostRun = typeof m.run === "number" ? m.run : null;
       if (m.theme === "light" || m.theme === "dark") {
         document.documentElement.dataset.theme = m.theme;
         drawAll();
       }
+      applyListen(m.listen);
+      /* an old piece kept on screen after a failed run: no what-ifs on it */
+      if (m.stale === true) host = null;
       if (selected >= 0) select(selected);
-    } else if (m.type === "godels-fugue:select") {
+    } else if (m.type === "godels-fugue:select" && typeof m.var === "string") {
       const v = vars.find(function (x) { return x.var === m.var; });
       if (v) select(v.id);
-    } else if (m.type === "godels-fugue:changed") {
-      rippled = new Set(m.notes || []);
+    } else if (m.type === "godels-fugue:changed" && Array.isArray(m.notes)) {
+      rippled = new Set(m.notes.filter(Number.isInteger));
       markSelection();
+    } else if (m.type === "godels-fugue:perform" && m.perform && Array.isArray(m.notes)) {
+      /* the same notes, performed again (articulation, intensity, mood):
+         the next Play uses the new timing and loudness */
+      if (m.notes.length !== score.length) return;
+      PERF = m.perform;
+      if (m.config && typeof m.config === "object") Object.assign(cfg, m.config);
+      score.forEach(function (voice, v) {
+        const notes = m.notes[v] || [];
+        voice.forEach(function (n, k) {
+          if (!notes[k]) return;
+          n.vel = notes[k].vel;
+          n.sound = notes[k].sound;
+        });
+      });
+      mix.volume = score.map(function (_, v) { return PERF.volume[v]; });
+      mix.pan = score.map(function (_, v) { return PERF.pan[v]; });
+      buildMixer();
+      if (session) restart();
     } else if (m.type === "godels-fugue:play") {
       play.click();
     } else if (m.type === "godels-fugue:collapse" && events.length) {
@@ -700,6 +759,7 @@ const PIECE = /*PIECE_DATA*/;
       speed.value = best.value;
       cxStop();
       cxGo(0);
+      document.getElementById("hood").open = true;
       document.getElementById("collapse-card").scrollIntoView({ behavior: "smooth", block: "start" });
       cxPlay.click();
     }
@@ -781,6 +841,7 @@ const PIECE = /*PIECE_DATA*/;
         select.appendChild(el("option", { value: v.var }, v.var));
       select.value = v.var;
       renderEvents(true);
+      document.getElementById("hood").open = true;
       document.getElementById("events").scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
     inspector.appendChild(all);
@@ -1198,97 +1259,71 @@ const PIECE = /*PIECE_DATA*/;
   document.getElementById("config").appendChild(ctable);
 
   /* ---------- playback ----------
-     Ensembles give each voice its own sampled instrument, the highest voice the
-     brightest, so the imitation can be heard passing from one timbre to the
-     next; a bass line plays the root of each bar's chord. The samples load from
-     the web (smplr and the MusyngKite General MIDI soundfonts); the synths are
-     the ones voices.wav uses and need nothing, so they are the fallback. */
+     The engine decided how the piece is played (P.perform): when each step
+     falls, how loud each note is, how long it sounds, how long the last chord
+     is held. This page plays exactly that, on sampled instruments (smplr and
+     the MusyngKite General MIDI soundfonts, loaded from the web) or on the
+     synths voices.wav uses, so canon.mid, voices.wav and this page agree. A
+     voice whose samples cannot load plays its synth and says so; the others
+     keep their samples. */
   const play = document.getElementById("play");
-  const instrument = document.getElementById("instrument");
+  const loop = document.getElementById("loop");
+  const soundSel = document.getElementById("sound");
   const bassBox = document.getElementById("bass");
+  const soundStatus = document.getElementById("sound-status");
   const SPB = P.stepsPerBeat || 1, BAR = 4 * SPB;
   if (SPB > 1) {
     const help = document.getElementById("score-help");
     help.textContent = help.textContent.replace("quarter-note steps", SPB === 4 ? "sixteenth-note steps" : "eighth-note steps");
   }
+  const PLAYERS = P.players || [];
+  let PERF = P.perform || null;
   const SMPLR = "https://cdn.jsdelivr.net/npm/smplr@1.1.0/+esm";
-  const ENSEMBLES = {
-    chamber: { parts: ["flute", "violin", "clarinet", "cello"], bass: "harpsichord" },
-    strings: { parts: ["violin", "violin", "viola", "cello"], bass: "contrabass" },
-    winds: { parts: ["flute", "oboe", "clarinet", "bassoon"], bass: "bassoon" },
-    brass: { parts: ["trumpet", "french_horn", "trombone", "euphonium"], bass: "tuba" },
-    saxes: { parts: ["soprano_sax", "alto_sax", "tenor_sax", "baritone_sax"], bass: "baritone_sax" },
-    band: { parts: ["flute", "alto_sax", "euphonium", "baritone_sax"], bass: "tuba" },
-    orchestra: { parts: ["flute", "french_horn", "clarinet", "cello"], bass: "contrabass" },
-    piano: { parts: ["piano", "piano", "piano", "piano"], bass: "piano" },
-    harpsichord: { parts: ["harpsichord", "harpsichord", "harpsichord", "harpsichord"], bass: "harpsichord" },
-    organ: { parts: ["church_organ", "church_organ", "church_organ", "church_organ"], bass: "church_organ" },
-    harp: { parts: ["orchestral_harp", "orchestral_harp", "orchestral_harp", "orchestral_harp"], bass: "orchestral_harp" },
-    mallets: { parts: ["vibraphone", "marimba", "vibraphone", "marimba"], bass: "marimba" },
-  };
-  const SYNTHS = { pluck: 1, synth: 1, sine: 1 };
-  const STRUCK = { piano: 1, harpsichord: 1, orchestral_harp: 1, marimba: 1, vibraphone: 1 };
-  const PART_NAMES = { french_horn: "horn", church_organ: "organ", orchestral_harp: "harp", contrabass: "double bass",
-    baritone_sax: "bari sax" };
-  /* General MIDI has no euphonium (a tenor tuba): it plays the tuba's samples in its own range */
-  const FONTS = { euphonium: "tuba" };
-  const PICK = [[0], [0, 3], [0, 1, 3], [0, 1, 2, 3]];
-  /* the soundfonts are recorded quietly and unevenly: gain per part, measured */
-  const TRIM = { piano: 2.4, church_organ: 2.4, orchestral_harp: 3.6, vibraphone: 6.5, marimba: 6.5 };
-  function trim(part) { return TRIM[part] || 5; }
-  /* voices from highest to lowest average pitch */
-  const byRegister = score.map(function (voice, v) {
-    let sum = 0, n = 0;
-    for (const note of voice) if (note.pitch > 0) { sum += note.pitch * note.length; n += note.length; }
-    return { v: v, mean: n ? sum / n : 0 };
-  }).sort(function (a, b) { return b.mean - a.mean; }).map(function (x) { return x.v; });
-  function partOf(kind, v) {
-    const ens = ENSEMBLES[kind];
-    if (!ens) return null;
-    const pick = PICK[Math.min(4, Math.max(1, voices)) - 1];
-    const rank = Math.min(byRegister.indexOf(v), pick.length - 1);
-    return ens.parts[pick[Math.max(0, rank)]];
+  const STRINGS = { violin: 1, viola: 1, cello: 1 };
+  function playerName(v) { return PLAYERS[v] ? PLAYERS[v].name : "Voice " + (v + 1); }
+  /* the synth a voice plays when it is not sampled, as in voices.wav */
+  function synthOf(v) {
+    if (cfg.instrument === "pluck" || cfg.instrument === "organ" || cfg.instrument === "sine") return cfg.instrument;
+    const p = PLAYERS[v];
+    return !p || p.struck || !p.sample ? "pluck" : "organ";
   }
-  function partName(part) { return (PART_NAMES[part] || part).replace(/_/g, " "); }
-  if (cfg.instrument === "organ") instrument.value = "organ";
-  else if (cfg.instrument === "sine") instrument.value = "sine";
-  /* the ensemble the score files were written for (ensemble key) */
-  if (ENSEMBLES[cfg.ensemble]) instrument.value = cfg.ensemble;
+  loop.checked = String(cfg.cyclic) === "1";
+  if (!PERF) {
+    play.disabled = true;
+    soundStatus.textContent = score.length ? "" : "No piece was produced, so there is nothing to play.";
+  }
 
-  /* the bass line: each bar's chord root, around C2..B2, from the key in force */
-  const SCALES = { major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], dorian: [0, 2, 3, 5, 7, 9, 10],
-    phrygian: [0, 1, 3, 5, 7, 8, 10], lydian: [0, 2, 4, 6, 7, 9, 11], mixolydian: [0, 2, 4, 5, 7, 9, 10],
-    locrian: [0, 1, 3, 5, 6, 8, 10] };
-  const DEGREES = ["i", "ii", "iii", "iv", "v", "vi", "vii"];
-  function chordRoot(label, at) {
-    let key = (P.keys || [])[0];
-    for (const k of P.keys || []) if (k.from <= at) key = k;
-    const m = key && /^([A-G])(#|b)?\s+(\w+)/.exec(key.name);
-    const d = /^(vii|vi|iv|v|iii|ii|i)/i.exec(label || "");
-    if (!m || !d) return -1;
-    const tonic = ({ C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 })[m[1]] + (m[2] === "#" ? 1 : m[2] === "b" ? -1 : 0);
-    const degree = DEGREES.indexOf(d[1].toLowerCase());
-    const scale = SCALES[m[3]] || SCALES.major;
-    const step = m[3] === "minor" && degree === 6 ? 11 : scale[degree]; /* harmonic minor's vii */
-    return 36 + (((tonic + step) % 12) + 12) % 12;
-  }
+  /* ---------- the mix: per voice, what you hear; it never changes the notes ---------- */
+  const mix = {
+    volume: score.map(function (_, v) { return PERF ? PERF.volume[v] : 100; }),
+    pan: score.map(function (_, v) { return PERF ? PERF.pan[v] : 0; }),
+    mute: score.map(function () { return false; }),
+    solo: score.map(function () { return false; }),
+  };
+  function silent(v) { return mix.mute[v] || (mix.solo.some(Boolean) && !mix.solo[v]); }
+
+  /* the bass line: playback only, on each bar's chord root, from the engine's chords */
   const bassNotes = [];
   (P.chords || []).forEach(function (c, i, all) {
-    const start = (c.bar - 1) * BAR, root = chordRoot(c.label, start);
-    if (root < 0 || start >= P.span) return;
-    const next = all[i + 1];
-    const half = Math.min(2 * SPB, P.span - start);
-    bassNotes.push({ start: start, length: half, pitch: root, down: true });
+    const start = (c.bar - 1) * BAR;
+    if (typeof c.root !== "number" || c.root < 0 || start >= P.span) return;
+    const root = 36 + c.root, next = all[i + 1];
+    bassNotes.push({ start: start, length: Math.min(2 * SPB, P.span - start), pitch: root, vel: 76 });
     if (start + 2 * SPB < P.span) {
-      /* beat three: the fifth on the way to a new chord, else the root again */
       const fifth = root + 7 > 50 ? root - 5 : root + 7;
       bassNotes.push({ start: start + 2 * SPB, length: Math.min(2 * SPB, P.span - start - 2 * SPB),
-                      pitch: next && next.label !== c.label ? fifth : root, down: false });
+                       pitch: next && next.root !== c.root ? fifth : root, vel: 64 });
     }
   });
   if (!bassNotes.length) bassBox.parentElement.hidden = true;
+  function bassSample() {
+    const low = PLAYERS[PLAYERS.length - 1];
+    if (!low || !low.sample) return null;
+    return STRINGS[low.part] ? "contrabass" : low.sample;
+  }
 
-  const plucks = {};
+  /* ---------- audio graph: per voice a gain (mix and mute) and a pan ---------- */
+  let audio = null, bus = null, channels = [], bassChannel = null;
   function hz(pitch) { return 440 * Math.pow(2, (pitch - 69) / 12); }
   function noise(seed) {
     let s = seed >>> 0 || 1;
@@ -1299,17 +1334,92 @@ const PIECE = /*PIECE_DATA*/;
       return s / 2147483648 - 1;
     };
   }
-  /* Karplus-Strong as in voices.wav: an allpass tunes the fractional part of
-     the period, and the loop gain gives each pitch its own ring time. */
-  function pluckBuffer(pitch, seconds, voice) {
-    const key = pitch + ":" + seconds + ":" + voice;
+  function reverbBuffer() {
+    const rate = audio.sampleRate, len = Math.floor(rate * 1.6);
+    const buf = audio.createBuffer(2, len, rate);
+    for (let c = 0; c < 2; c++) {
+      const d = buf.getChannelData(c), rand = noise(c ? 101 : 202);
+      for (let i = 0; i < len; i++) d[i] = rand() * Math.pow(1 - i / len, 3);
+    }
+    return buf;
+  }
+  function makeBus() {
+    /* a hard limiter after the mix, so a loud climax cannot clip */
+    const limiter = audio.createDynamicsCompressor();
+    limiter.threshold.value = -3;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.002;
+    limiter.release.value = 0.12;
+    limiter.connect(audio.destination);
+    const dry = audio.createGain();
+    dry.gain.value = 0.85;
+    dry.connect(limiter);
+    const wet = audio.createGain();
+    wet.gain.value = 0.18;
+    const verb = audio.createConvolver();
+    verb.buffer = reverbBuffer();
+    verb.connect(wet);
+    wet.connect(limiter);
+    return { dry: dry, verb: verb };
+  }
+  function ensureAudio() {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return false;
+    audio = audio || new Ctx();
+    if (audio.state === "suspended") audio.resume();
+    bus = bus || makeBus();
+    function channel() {
+      const p = audio.createStereoPanner();
+      const g = audio.createGain();
+      g.gain.value = 0;
+      g.connect(p);
+      p.connect(bus.dry);
+      p.connect(bus.verb);
+      g.panner = p;
+      g.level = 0;
+      return g;
+    }
+    if (!channels.length) {
+      channels = score.map(function () { return channel(); });
+      bassChannel = channel();
+    }
+    return true;
+  }
+  /* a voice's level: its volume as MIDI players take it (the engine's gain),
+     shared among the voices, times the source's own trim (the soundfonts are
+     recorded quietly and unevenly; parts.c holds the measured trims) */
+  function setLevels(kit) {
+    const share = 1 / Math.sqrt(Math.max(1, voices));
+    channels.forEach(function (ch, v) {
+      const sampled = kit && kit.voice[v];
+      const trim = sampled ? (PLAYERS[v].gain || 500) / 100 : (synthOf(v) === "pluck" ? 1.3 : 0.45);
+      ch.level = Math.pow(mix.volume[v] / 100, 2) * share * trim;
+    });
+    const low = PLAYERS.length - 1;
+    bassChannel.level = share * 0.8 * (kit && kit.bass ? (PLAYERS[low].gain || 500) / 100 : 1.3);
+  }
+  function applyMix(fast) {
+    if (!audio) return;
+    const now = audio.currentTime, tc = fast ? 0.005 : 0.03;
+    channels.forEach(function (ch, v) {
+      ch.gain.setTargetAtTime(silent(v) ? 0 : ch.level, now, tc);
+      ch.panner.pan.setTargetAtTime(Math.max(-1, Math.min(1, mix.pan[v] / 100)), now, tc);
+    });
+    if (bassChannel) bassChannel.gain.setTargetAtTime(bassBox.checked ? bassChannel.level : 0, now, tc);
+  }
+
+  /* ---------- the synths, as voices.wav plays them ---------- */
+  const plucks = {};
+  function pluckBuffer(pitch, seconds, seed) {
+    const key = pitch + ":" + seconds + ":" + seed;
     if (plucks[key]) return plucks[key];
     const rate = audio.sampleRate, f = hz(pitch), period = rate / f;
     const n = Math.max(3, Math.floor(period - 0.6));
     const frac = Math.max(0.1, period - 0.5 - n), c = (1 - frac) / (1 + frac);
     const t60 = Math.min(3, Math.max(1, 3 * Math.pow(110 / f, 0.4)));
     const rho = Math.min(1, Math.pow(10, -3 / (t60 * f)) / Math.cos(Math.PI * f / rate));
-    let state = (Math.imul(0x9E3779B9, voice + 1) ^ Math.imul(0x85EBCA6B, pitch)) >>> 0;
+    let state = seed >>> 0;
     const line = new Float32Array(n);
     for (let k = 0; k < n; k++) {
       state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
@@ -1339,45 +1449,43 @@ const PIECE = /*PIECE_DATA*/;
     plucks[key] = buf;
     return buf;
   }
-  function reverbBuffer() {
-    const rate = audio.sampleRate, len = Math.floor(rate * 1.6);
-    const buf = audio.createBuffer(2, len, rate);
-    for (let c = 0; c < 2; c++) {
-      const d = buf.getChannelData(c), rand = noise(c ? 101 : 202);
-      for (let i = 0; i < len; i++) d[i] = rand() * Math.pow(1 - i / len, 3);
+  let organ = null;
+  function synthNote(s, pitch, on, off, dest, vel, kind, seed) {
+    const env = audio.createGain(), g = vel / 90;
+    let src;
+    if (kind === "pluck") {
+      src = audio.createBufferSource();
+      src.buffer = pluckBuffer(pitch, Math.min(8, Math.ceil(off - on + 0.5)), seed);
+      env.gain.setValueAtTime(g, on);
+      env.gain.setValueAtTime(g, Math.max(on, off - 0.03));
+      env.gain.linearRampToValueAtTime(0, off);
+    } else {
+      src = audio.createOscillator();
+      if (kind === "organ") {
+        organ = organ || audio.createPeriodicWave(new Float32Array([0, 0, 0, 0, 0]),
+                                                  new Float32Array([0, 1, 0.5, 0.25, 0.12]), { disableNormalization: false });
+        src.setPeriodicWave(organ);
+      } else {
+        src.type = "sine";
+      }
+      src.frequency.value = hz(pitch);
+      const attack = kind === "organ" ? 0.015 : 0.01, release = kind === "organ" ? 0.06 : 0.04;
+      env.gain.setValueAtTime(0, on);
+      env.gain.linearRampToValueAtTime(g, on + attack);
+      env.gain.setValueAtTime(g, Math.max(on + attack, off - release));
+      env.gain.linearRampToValueAtTime(0, off);
     }
-    return buf;
-  }
-  function makeBus() {
-    const limiter = audio.createDynamicsCompressor();
-    limiter.threshold.value = -6;
-    limiter.ratio.value = 12;
-    limiter.connect(audio.destination);
-    const dry = audio.createGain();
-    dry.gain.value = 0.9;
-    dry.connect(limiter);
-    const wet = audio.createGain();
-    wet.gain.value = 0.18;
-    const verb = audio.createConvolver();
-    verb.buffer = reverbBuffer();
-    verb.connect(wet);
-    wet.connect(limiter);
-    return { dry: dry, verb: verb };
-  }
-  function organWave() {
-    const real = new Float32Array([0, 0, 0, 0, 0]);
-    const imag = new Float32Array([0, 1, 0.5, 0.25, 0.12]);
-    return audio.createPeriodicWave(real, imag);
+    src.connect(env);
+    env.connect(dest);
+    src.start(on);
+    src.stop(off + 0.02);
+    s.sources.add(src);
+    src.onended = function () { s.sources.delete(src); env.disconnect(); };
   }
   function chirp(pitch) {
-    if (!document.getElementById("cx-sound").checked) return;
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    audio = audio || new Ctx();
-    if (audio.state === "suspended") audio.resume();
-    bus = bus || makeBus();
+    if (!document.getElementById("cx-sound").checked || !ensureAudio()) return;
     const src = audio.createBufferSource();
-    src.buffer = pluckBuffer(pitch, 1, 0);
+    src.buffer = pluckBuffer(pitch, 1, 1);
     const g = audio.createGain(), t = audio.currentTime + 0.01;
     g.gain.setValueAtTime(0.4, t);
     g.gain.linearRampToValueAtTime(0, t + 0.6);
@@ -1387,313 +1495,381 @@ const PIECE = /*PIECE_DATA*/;
     src.start(t);
     src.stop(t + 0.65);
   }
-  /* the web demo highlights the bar being played in its sheet music */
-  let toldBar = -1;
-  function tellBar(bar) {
-    if (!host || bar === toldBar) return;
-    toldBar = bar;
-    host.postMessage({ type: "godels-fugue:bar", bar: bar }, "*");
-  }
-  let audio = null, bus = null, channels = [], bassChannel = null, playing = [], voicesOn = [], raf = 0;
-  /* one channel per voice: gain (mute) -> pan -> the dry and reverb buses */
-  function ensureAudio() {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return false;
-    audio = audio || new Ctx();
-    if (audio.state === "suspended") audio.resume();
-    bus = bus || makeBus();
-    function channel(pan) {
-      const p = audio.createStereoPanner();
-      p.pan.value = pan;
-      const g = audio.createGain();
-      g.connect(p);
-      p.connect(bus.dry);
-      p.connect(bus.verb);
-      g.level = 1;
-      return g;
-    }
-    if (!channels.length) {
-      channels = score.map(function (voice, v) { return channel(voices > 1 ? -0.6 + (1.2 * v) / (voices - 1) : 0); });
-      bassChannel = channel(0);
-    }
-    return true;
-  }
-  function toggleVoice(v, button) {
-    if (muted.has(v)) muted.delete(v); else muted.add(v);
-    button.classList.toggle("off", muted.has(v));
-    button.setAttribute("aria-pressed", String(!muted.has(v)));
-    const ch = channels[v];
-    if (ch) ch.gain.setTargetAtTime(muted.has(v) ? 0 : ch.level, audio.currentTime, 0.02);
-    markSelection();
-  }
 
-  /* sampled instruments, one per voice and part, kept once loaded */
+  /* ---------- sampled instruments: one per voice, kept once loaded ---------- */
   let smplr = null;
-  const loaded = {};
-  function usedPitches(extra) {
-    const set = new Set(extra || []);
+  const loaded = {}; /* sample:slot -> a promise of the instrument; failures are not kept */
+  function within(ms, promise) {
+    let timer = 0;
+    return Promise.race([promise, new Promise(function (resolve, reject) {
+      timer = setTimeout(function () { reject(new Error("timed out")); }, ms);
+    })]).finally(function () { clearTimeout(timer); });
+  }
+  function usedPitches() {
+    const set = new Set(bassNotes.map(function (n) { return n.pitch; }));
     for (const voice of score) for (const n of voice) if (n.pitch > 0) set.add(n.pitch);
     return Array.from(set);
   }
-  function sampler(part, dest, slot, notes) {
-    const key = part + ":" + slot;
+  function sampler(sample, dest, slot) {
+    const key = sample + ":" + slot;
     if (!loaded[key]) {
-      loaded[key] = part === "piano"
-        ? smplr.SplendidGrandPiano(audio, { destination: dest, notesToLoad: { notes: notes } })
-        : smplr.Soundfont(audio, { instrument: FONTS[part] || part, destination: dest, notesToLoad: { notes: notes } });
+      const options = { destination: dest, notesToLoad: { notes: usedPitches() } };
+      const inst = sample === "piano" ? smplr.SplendidGrandPiano(audio, options)
+        : smplr.Soundfont(audio, Object.assign({ instrument: sample }, options));
+      const ready = within(30000, inst.ready).then(function () { return inst; });
+      loaded[key] = { inst: inst, ready: ready };
+      ready.catch(function () { delete loaded[key]; });
     }
     return loaded[key];
   }
-  function within(ms, promise) {
-    return Promise.race([promise, new Promise(function (resolve, reject) {
-      setTimeout(function () { reject(new Error("timeout")); }, ms);
-    })]);
-  }
-  async function loadEnsemble(kind) {
+  let loadToken = 0;
+  async function loadVoices(token) {
     smplr = smplr || await within(15000, import(SMPLR));
-    const notes = usedPitches(bassNotes.map(function (n) { return n.pitch; }));
-    const parts = score.map(function (voice, v) { return sampler(partOf(kind, v), channels[v], v, notes); });
-    const bass = bassNotes.length ? sampler(ENSEMBLES[kind].bass, bassChannel, "bass", notes) : null;
-    const all = parts.concat(bass ? [bass] : []);
-    let done = false;
+    const want = score.map(function (_, v) {
+      const p = PLAYERS[v];
+      return p && p.sample ? sampler(p.sample, channels[v], v) : null;
+    });
+    const bs = bassNotes.length && bassBox.checked && bassSample() ? sampler(bassSample(), bassChannel, "bass") : null;
+    const all = want.concat([bs]).filter(Boolean);
     (function progress() {
-      if (done) return;
-      let got = 0, want = 0;
+      /* a frame already queued when loading ends must not cover the Stop label */
+      if (!loading || token !== loadToken) return;
+      let got = 0, total = 0;
       for (const s of all) {
-        const p = s.loadProgress || { loaded: 0, total: 1 };
+        const p = s.inst.loadProgress || { loaded: 0, total: 1 };
         got += p.loaded;
-        want += p.total || 1;
+        total += p.total || 1;
       }
-      play.textContent = "Loading " + Math.round((100 * got) / Math.max(1, want)) + "%";
-      requestAnimationFrame(progress);
+      play.textContent = "Loading " + Math.round((100 * got) / Math.max(1, total)) + "% (stop)";
+      if (loading) requestAnimationFrame(progress);
     })();
-    try {
-      await within(30000, Promise.all(all.map(function (s) { return s.ready; })));
-    } finally {
-      done = true;
+    const settled = await Promise.allSettled(want.concat([bs]).map(function (s) { return s ? s.ready : Promise.resolve(null); }));
+    return {
+      voice: settled.slice(0, score.length).map(function (r) { return r.status === "fulfilled" ? r.value : null; }),
+      bass: settled[score.length].status === "fulfilled" ? settled[score.length].value : null,
+    };
+  }
+  /* which source each voice plays, said plainly */
+  function tellSources(kit, failedImport) {
+    const sources = score.map(function (_, v) { return kit && kit.voice[v] ? "sampled" : synthOf(v); });
+    play.dataset.sources = sources.join(",");
+    if (soundSel.value === "synth") {
+      soundStatus.textContent = "Playing the synths of voices.wav, not sampled instruments.";
+      return;
     }
-    return { parts: parts, bass: bass };
+    if (failedImport) {
+      soundStatus.textContent = "The sampled instruments could not load (offline, or the CDN is blocked), so every voice plays the synth voices.wav uses. Press Play to try again.";
+      return;
+    }
+    const missing = score.map(function (_, v) { return v; }).filter(function (v) { return sources[v] !== "sampled"; });
+    soundStatus.textContent = missing.length
+      ? missing.map(function (v) { return "Voice " + (v + 1) + " (" + playerName(v) + ")"; }).join(", ") +
+        (missing.length === 1 ? " plays" : " play") + " the synth: its samples did not load. Press Play to try again."
+      : "";
   }
 
-  /* ---------- expression ----------
-     How a player shapes the piece. The mood sets the dynamics (soft, at the
-     climax, at the end), how strongly the metre is accented, how legato the
-     lines are, how much the closing bars broaden (rit), how long phrases
-     breathe and push (breathe, rubato) and how long the last chord is held.
-     The climax is the piece's own: where its highest note sounds. */
-  const MOODS = {
-    plain: { dyn: [0.62, 0.82, 0.6], accent: 1, legato: 0.92, rit: 0.82, breathe: 0.96, rubato: 0.02, hold: 1.6 },
-    lament: { dyn: [0.4, 0.86, 0.3], accent: 0.55, legato: 1.02, rit: 0.62, breathe: 0.86, rubato: 0.05, hold: 2.6 },
-    hymn: { dyn: [0.48, 0.8, 0.4], accent: 0.4, legato: 1.02, rit: 0.7, breathe: 0.88, rubato: 0.02, hold: 2.4 },
-    triumph: { dyn: [0.62, 0.92, 1.0], accent: 1.35, legato: 0.84, rit: 0.8, breathe: 0.97, rubato: 0.01, hold: 2.2 },
-    longing: { dyn: [0.38, 0.96, 0.34], accent: 0.7, legato: 1.0, rit: 0.64, breathe: 0.86, rubato: 0.07, hold: 2.6 },
-    dance: { dyn: [0.72, 0.9, 0.82], accent: 1.6, legato: 0.6, rit: 0.92, breathe: 1.0, rubato: 0, hold: 1.3 },
-    nocturne: { dyn: [0.32, 0.66, 0.26], accent: 0.5, legato: 1.02, rit: 0.66, breathe: 0.9, rubato: 0.06, hold: 2.8 },
-  };
-  /* without a mood key: slow minor laments, slow major is a hymn, fast dances */
-  const firstKey = (P.keys && P.keys[0] && P.keys[0].name) || "";
-  const pace = P.tempo || 120;
-  const moodName = MOODS[cfg.mood] ? cfg.mood
-    : pace <= 72 ? (/ minor/.test(firstKey) ? "lament" : "hymn") : pace >= 120 ? "dance" : "plain";
-  const mood = MOODS[moodName];
-  if (moodName !== "plain") document.getElementById("subtitle").textContent += " · played as a " + moodName;
-  const PHRASE = 4 * BAR; /* four-bar phrases */
-  /* the climax: the highest note's onset nearest two thirds of the way through */
-  const climax = (function () {
-    let top = -1, best = Math.round(P.span * 0.66);
-    for (const voice of score) for (const n of voice) {
-      if (n.pitch > top) { top = n.pitch; best = n.start; }
-      else if (n.pitch === top && Math.abs(n.start - P.span * 0.66) < Math.abs(best - P.span * 0.66)) best = n.start;
-    }
-    return Math.max(P.span * 0.35, Math.min(P.span * 0.85, best));
-  })();
-  function level(step) {
-    const ease = function (u) { return 0.5 - 0.5 * Math.cos(Math.PI * Math.max(0, Math.min(1, u))); };
-    if (step <= climax) return mood.dyn[0] + (mood.dyn[1] - mood.dyn[0]) * ease(step / Math.max(1, climax));
-    return mood.dyn[1] + (mood.dyn[2] - mood.dyn[1]) * ease((step - climax) / Math.max(1, P.span - climax));
+  /* ---------- the scheduler ----------
+     Notes are scheduled a little ahead from a timer, not from animation
+     frames, so playback and looping go on in a background tab; a note whose
+     time has already passed (a stalled timer) is skipped, never played late. */
+  let session = null, loading = false, stopping = 0;
+  function noteEvents() {
+    const list = [];
+    score.forEach(function (voice, v) {
+      voice.forEach(function (n, k) {
+        if (n.pitch <= 0) return;
+        list.push({ v: v, start: n.start, length: n.length, pitch: n.pitch, vel: n.vel || 80,
+                    sound: n.sound || 1, last: n.start + n.length >= P.span, seed: (v + 1) * 7919 + n.start });
+      });
+    });
+    if (bassBox.checked) for (const n of bassNotes)
+      list.push({ v: -1, start: n.start, length: n.length, pitch: n.pitch, vel: n.vel, sound: 0.95,
+                  last: n.start + n.length >= P.span, seed: 4099 + n.start });
+    list.sort(function (a, b) { return a.start - b.start || a.v - b.v; });
+    return list;
   }
-  /* Seconds from the start to each step. Phrases push a little in the middle
-     and breathe on their last beat; the closing two bars broaden. A round that
-     loops keeps a steady pulse at its ends. */
-  function timeMap(base, looping) {
-    const times = new Float64Array(P.span + 1);
-    const ritFrom = Math.max(0, P.span - 2 * BAR);
-    for (let s = 0; s < P.span; s++) {
-      let stretch = 1;
-      const inPhrase = (s % PHRASE) / PHRASE, phraseEnd = s % PHRASE >= PHRASE - SPB;
-      stretch *= 1 - mood.rubato * Math.sin(Math.PI * inPhrase);
-      if (phraseEnd && s < ritFrom) stretch /= mood.breathe;
-      if (!looping && s >= ritFrom) {
-        const w = (s - ritFrom + 0.5) / Math.max(1, P.span - ritFrom);
-        stretch *= 1 + (1 / mood.rit - 1) * w * w;
-      }
-      times[s + 1] = times[s] + base * stretch;
+  function sound(s, e, on, off) {
+    const dest = e.v >= 0 ? channels[e.v] : bassChannel;
+    const inst = s.kit ? (e.v >= 0 ? s.kit.voice[e.v] : s.kit.bass) : null;
+    if (inst) {
+      const struck = e.v >= 0 && PLAYERS[e.v] && PLAYERS[e.v].struck;
+      inst.start({ note: e.pitch, velocity: e.vel, time: on, duration: (off - on) + (struck ? 0.3 : 0) });
+    } else {
+      synthNote(s, e.pitch, on, off, dest, e.vel, e.v >= 0 ? synthOf(e.v) : "pluck", e.seed);
     }
-    return times;
+  }
+  function pump(s) {
+    if (session !== s) return;
+    const now = audio.currentTime, horizon = now + 1.5;
+    while (s.evs.length) {
+      if (s.cursor >= s.evs.length) {
+        if (!s.looping) break;
+        s.pass++;
+        s.cursor = 0;
+      }
+      const e = s.evs[s.cursor];
+      const base = s.t0 + s.pass * s.total;
+      const on = base + s.times[e.start];
+      if (on > horizon) break;
+      s.cursor++;
+      if (on < now - 0.05) continue;
+      let off = base + s.times[e.start] + (s.times[e.start + e.length] - s.times[e.start]) * e.sound;
+      if (e.last && !s.looping) off += s.hold;
+      sound(s, e, Math.max(on, now), off);
+    }
+    if (!s.looping && now > s.t0 + s.total + s.hold + 0.6) stop();
   }
   function stepAt(times, t) {
     let lo = 0, hi = times.length - 1;
     while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (times[mid] <= t) lo = mid; else hi = mid; }
     return lo + (t - times[lo]) / Math.max(1e-9, times[lo + 1] - times[lo]);
   }
-  /* Loudness of one note: the arc, the metre's accents scaled by the mood, a
-     swell across each phrase, the subject brought out at each entry, and a
-     little life; plus a few milliseconds of looseness off the beat. */
-  function feel(v, n, pass, entry) {
-    let h = Math.imul(((v + 1) * 2654435761) ^ ((n.start + 1) * 40503) ^ ((pass + 1) * 9973), 2246822519) >>> 0;
-    h ^= h >>> 15;
-    const r = (h % 2001) / 1000 - 1;
-    const inBar = n.start % BAR, onBeat = inBar % SPB === 0, beatNo = Math.floor(inBar / SPB);
-    let vel = 24 + 96 * level(n.start);
-    vel += mood.accent * (inBar === 0 ? 9 : onBeat ? (beatNo % 2 === 0 ? 5 : 2) : -4);
-    vel += 6 * Math.sin((Math.PI * (n.start % PHRASE)) / PHRASE);
-    if (entry) vel += 8;
-    vel += 3 * r;
-    return { vel: Math.max(18, Math.min(124, Math.round(vel))), shift: inBar === 0 ? 0 : r * 0.01 };
+  /* the playhead and the notes sounding; the last step stays lit through the hold */
+  function highlight(s) {
+    const t = audio.currentTime - s.t0;
+    let step = -1;
+    if (t >= 0) step = s.looping ? stepAt(s.times, t % s.total) : t < s.total ? stepAt(s.times, t) : P.span - 0.001;
+    for (const n of noteNodes) n.node.classList.toggle("sounding", step >= n.start && step < n.start + n.length);
+    tellBar(step >= 0 ? Math.floor(step / BAR) : -1);
+    const head = document.getElementById("playhead");
+    if (head) {
+      const x = Number(roll.dataset.left) + Math.max(0, step) * Number(roll.dataset.stepW);
+      head.setAttribute("x1", x);
+      head.setAttribute("x2", x);
+      head.setAttribute("visibility", step >= 0 ? "visible" : "hidden");
+    }
   }
-
+  function begin(kit) {
+    const looping = loop.checked;
+    const times = looping ? PERF.loopTimes : PERF.times;
+    const s = { t0: audio.currentTime + 0.12, looping: looping, times: times, hold: looping ? 0 : PERF.hold,
+                total: times[P.span], evs: noteEvents(), cursor: 0, pass: 0, sources: new Set(), kit: kit,
+                timer: 0, raf: 0 };
+    session = s;
+    setLevels(kit);
+    applyMix(true);
+    s.timer = setInterval(function () { pump(s); }, 100);
+    pump(s);
+    (function draw() {
+      if (session !== s) return;
+      highlight(s);
+      s.raf = requestAnimationFrame(draw);
+    })();
+    play.textContent = "Stop";
+    play.setAttribute("aria-pressed", "true");
+  }
+  /* a short fade, then silence: no click */
   function stop() {
-    for (const o of playing) { try { o.stop(); } catch (err) { /* already stopped */ } }
-    for (const s of voicesOn) { try { s.stop(); } catch (err) { /* nothing sounding */ } }
-    playing = [];
-    voicesOn = [];
-    cancelAnimationFrame(raf);
+    const s = session;
+    session = null;
+    play.textContent = "Play";
+    play.setAttribute("aria-pressed", "false");
+    for (const n of noteNodes) n.node.classList.remove("sounding");
     const head = document.getElementById("playhead");
     if (head) head.setAttribute("visibility", "hidden");
-    for (const n of noteNodes) n.node.classList.remove("sounding");
     tellBar(-1);
-    play.textContent = "Play";
-    play.disabled = !score.length;
+    if (!s) return;
+    clearInterval(s.timer);
+    cancelAnimationFrame(s.raf);
+    const now = audio.currentTime;
+    channels.concat([bassChannel]).forEach(function (ch) { ch.gain.setTargetAtTime(0, now, 0.012); });
+    play.disabled = true;
+    stopping = setTimeout(function () {
+      stopping = 0;
+      for (const src of s.sources) { try { src.stop(); } catch (err) { /* already over */ } }
+      if (s.kit) for (const inst of s.kit.voice.concat([s.kit.bass])) if (inst) { try { inst.stop(); } catch (err) { /* nothing left */ } }
+      play.disabled = !PERF;
+    }, 90);
   }
-  instrument.addEventListener("change", function () {
-    if (playing.length || voicesOn.length) stop();
-    drawRoll(); /* the legend names each voice's instrument */
-    /* in the web demo, write the score files for the new ensemble too, so
-       the sheet music shows each part as its player reads it */
-    if (host && ENSEMBLES[instrument.value] && instrument.value !== cfg.ensemble)
-      host.postMessage({ type: "godels-fugue:ensemble", value: instrument.value }, "*");
-  });
-  /* A cyclic canon is a round: Loop schedules each next pass ahead of time,
-     so it repeats without a gap. */
-  const loop = document.getElementById("loop");
-  loop.checked = String(cfg.cyclic) === "1";
   play.addEventListener("click", async function () {
-    if (playing.length || voicesOn.length) { stop(); return; }
-    if (!score.length) return;
-    if (!ensureAudio()) { play.textContent = "No audio"; return; }
-    let kind = instrument.value, kit = null;
-    if (!SYNTHS[kind]) {
-      play.disabled = true;
+    if (session) { stop(); return; }
+    if (loading) { loading = false; loadToken++; play.textContent = "Play"; return; }
+    if (!PERF || stopping) return;
+    if (!ensureAudio()) { soundStatus.textContent = "This browser cannot play audio (no Web Audio)."; return; }
+    let kit = null, failedImport = false;
+    if (soundSel.value === "sampled") {
+      const token = ++loadToken;
+      loading = true;
       try {
-        kit = await loadEnsemble(kind);
+        kit = await loadVoices(token);
       } catch (err) {
-        kind = "pluck";
-        instrument.value = "pluck";
-        play.title = "The sampled instruments could not load (offline?), so this plays the built-in synth.";
-        drawRoll();
+        failedImport = true;
       }
-      play.disabled = false;
+      loading = false;
+      if (token !== loadToken) return; /* stopped while loading */
     }
-    const beat = 60 / (P.tempo || 120) / SPB; /* seconds per step at the written tempo */
-    const looping = loop.checked;
-    const times = timeMap(beat, looping);
-    /* the last chord is held, longer for the slower moods */
-    const hold = looping ? 0 : (mood.hold - 1) * 2 * SPB * beat;
-    const t0 = audio.currentTime + 0.15;
-    const wave = kind === "synth" ? organWave() : null;
-    const gain0 = (kit ? 1 : kind === "pluck" ? 1.3 : 0.45) / Math.sqrt(Math.max(1, voices));
-    channels.forEach(function (ch, v) {
-      ch.level = gain0 * (kit ? trim(partOf(kind, v)) : 1);
-      ch.gain.value = muted.has(v) ? 0 : ch.level;
-    });
-    bassChannel.level = gain0 * 0.8 * (kit && kit.bass ? trim(ENSEMBLES[kind].bass) : 1);
-    bassChannel.gain.value = bassBox.checked ? bassChannel.level : 0;
-    if (kit) voicesOn = kit.parts.concat(kit.bass ? [kit.bass] : []);
+    tellSources(kit, failedImport);
+    begin(kit);
+  });
+  /* settings that change what is scheduled start the piece again */
+  function restart() { if (session) { stop(); setTimeout(function () { play.click(); }, 120); } }
+  loop.addEventListener("change", function () { restart(); tellListen(); });
+  soundSel.addEventListener("change", function () { restart(); tellListen(); });
+  bassBox.addEventListener("change", function () { restart(); tellListen(); });
 
-    function synthNote(pitch, on, off, dest, vel, v) {
-      const env = audio.createGain(), g = vel / 90;
-      let src;
-      if (kind === "pluck") {
-        src = audio.createBufferSource();
-        src.buffer = pluckBuffer(pitch, Math.min(8, Math.ceil(off - on + 0.5)), v);
-        env.gain.setValueAtTime(g, on);
-        env.gain.setValueAtTime(g, Math.max(on, off - 0.03));
-        env.gain.linearRampToValueAtTime(0, off);
-      } else {
-        src = audio.createOscillator();
-        if (wave) src.setPeriodicWave(wave); else src.type = "sine";
-        src.frequency.value = hz(pitch);
-        const attack = wave ? 0.015 : 0.01, release = wave ? 0.06 : 0.04;
-        env.gain.setValueAtTime(0, on);
-        env.gain.linearRampToValueAtTime(g, on + attack);
-        env.gain.setValueAtTime(g, Math.max(on + attack, off - release));
-        env.gain.linearRampToValueAtTime(0, off);
-      }
-      src.connect(env);
-      env.connect(dest);
-      src.start(on);
-      src.stop(off + 0.02);
-      playing.push(src);
+  /* ---------- the players: one row per voice ---------- */
+  function listOf(key, fallback) {
+    const items = String(cfg[key] || "").split(/[\s,]+/).filter(Boolean);
+    return score.map(function (_, v) { return items[v] !== undefined ? items[v] : fallback; });
+  }
+  /* What the host composes again (or, standalone, how to make the change
+     yourself). kind: "live" keeps notes and performance, "perform" keeps the
+     notes, "compose" may change them. */
+  function change(key, value, kind) {
+    if (host) {
+      host.postMessage({ type: "godels-fugue:set", run: hostRun, key: key, value: String(value), kind: kind }, "*");
+    } else if (kind !== "live") {
+      soundStatus.textContent = "To keep this, run the program again with --set " + key + "=" + String(value).replace(/\s+/g, "") + ".";
     }
-    function schedule(begin, pass) {
-      score.forEach(function (voice, v) {
-        let first = true;
-        for (const n of voice) {
-          if (n.pitch <= 0) continue;
-          const f = feel(v, n, pass, first && pass === 0);
-          first = false;
-          const last = n.start + n.length >= P.span;
-          const on = begin + times[n.start] + f.shift;
-          const written = times[n.start + n.length] - times[n.start] + (last ? hold : 0);
-          if (kit) {
-            const part = partOf(kind, v);
-            /* struck parts ring on; sustained ones are as legato as the mood,
-               a little shorter on notes under a beat */
-            const dur = STRUCK[part] ? written + 0.3
-              : written * (n.length < SPB ? Math.min(mood.legato, 0.9) : mood.legato);
-            kit.parts[v].start({ note: n.pitch, velocity: f.vel, time: on, duration: dur });
-          } else {
-            synthNote(n.pitch, on, on + written * Math.min(1, mood.legato), channels[v], f.vel, v);
-          }
-        }
+  }
+  function tellListen() {
+    if (host) host.postMessage({ type: "godels-fugue:listen", run: hostRun, listen: {
+      mute: mix.mute.slice(), solo: mix.solo.slice(), sound: soundSel.value, bass: bassBox.checked, loop: loop.checked } }, "*");
+  }
+  function applyListen(l) {
+    if (!l || typeof l !== "object") return;
+    score.forEach(function (_, v) {
+      if (Array.isArray(l.mute)) mix.mute[v] = l.mute[v] === true;
+      if (Array.isArray(l.solo)) mix.solo[v] = l.solo[v] === true;
+    });
+    if (l.sound === "sampled" || l.sound === "synth") soundSel.value = l.sound;
+    if (typeof l.bass === "boolean") bassBox.checked = l.bass;
+    if (typeof l.loop === "boolean") loop.checked = l.loop;
+    buildMixer();
+    applyMix();
+    markSelection();
+  }
+  const ARTICULATIONS = [["auto", "as the mood plays"], ["legato", "legato"], ["normal", "normal"], ["detached", "detached"], ["staccato", "staccato"]];
+  function field(labelText, control, hint) {
+    const l = el("label", {}, labelText);
+    l.appendChild(control);
+    if (hint) l.title = hint;
+    return l;
+  }
+  function range(min, max, value, aria) {
+    const r = el("input", { type: "range", min: min, max: max, step: 1, value: value });
+    r.setAttribute("aria-label", aria);
+    return r;
+  }
+  function buildMixer() {
+    const box = document.getElementById("mixer");
+    clear(box);
+    if (!score.length) { document.getElementById("players-card").hidden = true; return; }
+    const instruments = P.instruments || [];
+    const parts = listOf("parts", "auto"), lows = listOf("part_low", "0"), highs = listOf("part_high", "0");
+    const arts = listOf("articulation", "auto"), shapes = listOf("intensity", "100");
+    score.forEach(function (_, v) {
+      const p = PLAYERS[v] || {};
+      const row = el("div", { class: "mix-row", role: "group", "aria-label": "Voice " + (v + 1) + ", " + playerName(v) });
+      const who = el("div", { class: "who" });
+      const title = el("b");
+      const sw = el("span", { class: "swatch" });
+      sw.style.background = "var(--series-" + (v + 1) + ")";
+      title.appendChild(sw);
+      title.appendChild(document.createTextNode("Voice " + (v + 1) + (v === 0 ? " · leads" : "")));
+      who.appendChild(title);
+      const enters = typeof p.delay === "number" ? p.delay : 0;
+      const shift = typeof p.transpose === "number" ? p.transpose : 0;
+      who.appendChild(el("small", {}, (v === 0 ? "states the melody" : "enters at bar " + (Math.floor(enters / BAR) + 1) +
+        (enters % BAR ? ", step " + (enters % BAR + 1) : "") + (shift ? ", " + Math.abs(shift) + (cfg.diatonic === "1" ? " scale steps " : " semitones ") + (shift < 0 ? "lower" : "higher") : ""))));
+      row.appendChild(who);
+
+      const inst = el("select");
+      inst.appendChild(el("option", { value: "auto" }, "Ensemble's choice" + (p.part && p.part !== "auto" && parts[v] === "auto" ? " (" + p.name + ")" : "")));
+      for (const i of instruments) inst.appendChild(el("option", { value: i.id }, i.name));
+      inst.value = parts[v];
+      inst.addEventListener("change", function () {
+        const list = parts.slice();
+        list[v] = inst.value;
+        change("parts", list.join(","), "compose");
       });
-      for (const n of bassNotes) {
-        const last = n.start + n.length >= P.span;
-        const on = begin + times[n.start];
-        const written = times[n.start + n.length] - times[n.start] + (last ? hold : 0);
-        const vel = Math.round((n.down ? 0.92 : 0.8) * (24 + 96 * level(n.start)));
-        if (kit && kit.bass) kit.bass.start({ note: n.pitch, velocity: vel, time: on, duration: written * 0.95 });
-        else synthNote(n.pitch, on, on + written, bassChannel, vel, voices);
+      row.appendChild(field("Instrument", inst, "Changes the composition: the instrument's range is a rule"));
+
+      const vol = range(0, 127, mix.volume[v], "Volume of voice " + (v + 1));
+      vol.addEventListener("input", function () { mix.volume[v] = Number(vol.value); setLevels(session ? session.kit : null); applyMix(); });
+      vol.addEventListener("change", function () { change("volume", mix.volume.join(","), "live"); });
+      row.appendChild(field("Volume " + mix.volume[v], vol, "What you hear, canon.mid and voices.wav; not the notes"));
+
+      const pan = range(-100, 100, mix.pan[v], "Pan of voice " + (v + 1));
+      pan.addEventListener("input", function () { mix.pan[v] = Number(pan.value); applyMix(); });
+      pan.addEventListener("change", function () { change("pan", mix.pan.join(","), "live"); });
+      row.appendChild(field("Pan", pan, "Left -100, right 100"));
+
+      const art = el("select");
+      for (const a of ARTICULATIONS) art.appendChild(el("option", { value: a[0] }, a[1]));
+      art.value = arts[v];
+      art.addEventListener("change", function () {
+        const list = arts.slice();
+        list[v] = art.value;
+        change("articulation", list.join(","), "perform");
+      });
+      row.appendChild(field("Articulation", art, "How the notes join; the notes stay the same"));
+
+      const shape = range(0, 200, Number(shapes[v]) || 0, "Expressive intensity of voice " + (v + 1));
+      shape.addEventListener("change", function () {
+        const list = shapes.slice();
+        list[v] = shape.value;
+        change("intensity", list.join(","), "perform");
+      });
+      row.appendChild(field("Intensity " + (shapes[v] || 100) + "%", shape, "How strongly the mood shapes this voice; the notes stay the same"));
+
+      const toggles = el("div", { class: "toggles" });
+      [["mute", "Mute"], ["solo", "Solo"]].forEach(function (t) {
+        const b = el("button", { type: "button", "aria-pressed": String(mix[t[0]][v]) }, t[1]);
+        b.setAttribute("aria-label", t[1] + " voice " + (v + 1));
+        b.addEventListener("click", function () {
+          mix[t[0]][v] = !mix[t[0]][v];
+          b.setAttribute("aria-pressed", String(mix[t[0]][v]));
+          applyMix();
+          markSelection();
+          tellListen();
+        });
+        toggles.appendChild(b);
+      });
+      row.appendChild(toggles);
+
+      /* the settings that change the composition */
+      const more = el("details");
+      more.appendChild(el("summary", {}, "Range, entry and transposition (" + p.low + "–" + p.high + ")"));
+      const inner = el("div", { class: "mix-more" });
+      function number(labelText, key, list, value, min, max, hint) {
+        const n = el("input", { type: "number", min: min, max: max, value: value });
+        n.addEventListener("change", function () {
+          const x = Math.round(Number(n.value));
+          if (!Number.isFinite(x) || x < min || x > max) { n.value = value; return; }
+          if (list) {
+            const items = list.slice();
+            items[v] = String(x);
+            change(key, items.join(","), "compose");
+          } else {
+            change(key, x, "compose");
+          }
+        });
+        inner.appendChild(field(labelText, n, hint));
       }
-    }
-    const total = times[P.span];
-    let passes = 1;
-    schedule(t0, 0);
-    play.textContent = "Stop";
-    function tick() {
-      const t = audio.currentTime - t0;
-      if (loop.checked && t > passes * total - 1) { schedule(t0 + total * passes, passes); passes++; }
-      if (t > passes * total + hold + 0.4) { stop(); return; }
-      const head = document.getElementById("playhead");
-      const left = Number(roll.dataset.left), stepW = Number(roll.dataset.stepW);
-      const step = t >= 0 && t < passes * total ? stepAt(times, t % total) : -1;
-      for (const n of noteNodes)
-        n.node.classList.toggle("sounding", step >= n.start && step < n.start + n.length);
-      tellBar(step >= 0 ? Math.floor(step / BAR) : -1);
-      if (head && t >= 0) {
-        const x = left + step * stepW;
-        head.setAttribute("x1", x);
-        head.setAttribute("x2", x);
-        head.setAttribute("visibility", "visible");
+      number("Lowest pitch (0 = instrument's)", "part_low", lows, Number(lows[v]) || 0, 0, 127, "Narrows the range this voice may sound");
+      number("Highest pitch (0 = instrument's)", "part_high", highs, Number(highs[v]) || 0, 0, 127, "Narrows the range this voice may sound");
+      if (v > 0) {
+        number("Enters at step (0 = " + v + " × delay)", "delay_" + v, null, Number(cfg["delay_" + v]) || 0, 0, 256, "Grid steps from the start");
+        const t = cfg["transpose_" + v];
+        number("Transposition (semitones" + (cfg.diatonic === "1" ? ", scale steps" : "") + ")", "transpose_" + v, null,
+               t === "same" || t === undefined ? Number(cfg.transpose) || 0 : Number(t), -24, 24, "Relative to the melody");
       }
-      raf = requestAnimationFrame(tick);
-    }
-    raf = requestAnimationFrame(tick);
-  });
-  bassBox.addEventListener("change", function () {
-    if (bassChannel) bassChannel.gain.setTargetAtTime(bassBox.checked ? bassChannel.level : 0, audio.currentTime, 0.02);
-  });
-  if (!score.length) play.disabled = true;
+      more.appendChild(inner);
+      row.appendChild(more);
+      box.appendChild(row);
+    });
+  }
+  buildMixer();
+  if (!host) soundStatus.textContent = soundStatus.textContent || "";
+
+  /* the web demo highlights the bar being played in its sheet music */
+  let toldBar = -1;
+  function tellBar(bar) {
+    if (!host || bar === toldBar) return;
+    toldBar = bar;
+    host.postMessage({ type: "godels-fugue:bar", run: hostRun, bar: bar }, "*");
+  }
 
   /* ---------- what sounds against what ----------
      Pairs of melody notes heard at the same step in different voices, from the
