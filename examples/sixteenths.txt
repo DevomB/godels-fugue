@@ -31,3 +31,4 @@ w_contrary 1
 w_hold 1
 tempo 76
 optimize 4000
+ensemble chamber

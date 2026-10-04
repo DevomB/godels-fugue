@@ -25,3 +25,4 @@ w_repeat 6
 w_contrary 1
 w_hold 0
 tempo 84
+ensemble chamber

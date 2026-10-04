@@ -1,0 +1,30 @@
+# A saxophone quartet (ensemble saxes): soprano, alto, tenor and baritone,
+# each voice given the instrument that fits its register. The score files
+# write every part the way a saxophonist reads it, in its own key: the B-flat
+# soprano a step above the sound, the E-flat alto a major sixth, the B-flat
+# tenor a ninth and the E-flat baritone an octave and a sixth (written
+# concert would print them at sounding pitch). MIDI plays each voice on its
+# own saxophone, and report.txt lists the parts.
+grid eighth
+length 64
+voices 4
+delay 24
+transpose_1 -12
+transpose_2 -12
+transpose_3 -24
+key Bb
+mode major
+harmony 1
+rhythm 1
+max_hold 3
+max_rests 1
+leading_tone 1
+range_low 37
+range_high 84
+w_step 3
+w_gravity 0
+w_repeat 6
+w_contrary 1
+tempo 96
+optimize 4000
+ensemble saxes

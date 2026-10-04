@@ -240,6 +240,29 @@ if(NOT report MATCHES "\ninstrument organ\r?\n")
 endif()
 run(bad_instrument 1 ERROR "config value for instrument is not valid: kazoo"
     ARGS --set instrument=kazoo)
+# An ensemble names each part by register and writes transposing
+# instruments in their own key: the E-flat alto sax reads B-flat major as G.
+run(ensemble 0 MATCH "melody:" ARGS --config "${SRC}/examples/sax_quartet.txt")
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\nparts: voice 1 Soprano Sax in Bb[^,\n]*, voice 2 Alto Sax in Eb[^,\n]*, voice 3 Tenor Sax in Bb[^,\n]*, voice 4 Baritone Sax in Eb")
+  fail("ensemble: report.txt lacks the parts")
+endif()
+file(READ "${last_dir}/score.abc" abc)
+if(NOT abc MATCHES "V:2 clef=treble name=\"Alto Sax in Eb\"" OR NOT abc MATCHES "\nV:2\n\\[K:G\\] ")
+  fail("ensemble: score.abc does not write the alto sax in G")
+endif()
+file(READ "${last_dir}/score.musicxml" xml)
+if(NOT xml MATCHES "<transpose><diatonic>-5</diatonic><chromatic>-9</chromatic></transpose>")
+  fail("ensemble: score.musicxml lacks the alto sax's transposition")
+endif()
+run(ensemble_concert 0 MATCH "melody:" ARGS --config "${SRC}/examples/sax_quartet.txt"
+    --set written=concert)
+file(READ "${last_dir}/score.musicxml" xml)
+if(xml MATCHES "<transpose>")
+  fail("ensemble_concert: score.musicxml transposes a concert-pitch score")
+endif()
+run(bad_ensemble 1 ERROR "config value for ensemble is not valid: kazoo"
+    ARGS --set ensemble=kazoo)
 # The eighth grid: two steps to a beat and eight to a bar.
 run(grid_eighth 0 MATCH "melody:" "rhythm: " "chords:( [^ \r\n]+)( [^ \r\n]+)( [^ \r\n]+)( [^ \r\n]+)\r?\n"
     ARGS --set grid=eighth --set rhythm=1 --set harmony=1 --set length=24 --set delay=8)
