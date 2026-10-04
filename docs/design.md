@@ -288,9 +288,10 @@ Keys counted in steps (`length`, `delay`, `phase`, `modulate_at`, `rest_at`,
 `max_hold`, `max_rests`) count grid steps, and their defaults are not rescaled: on the
 eighth grid `max_hold 1` allows quarter notes at most and `max_rests 2` two eighth
 rests, so `examples/eighths.txt` sets `max_hold 3` for half notes; on the sixteenth
-grid `max_hold 3` allows a quarter note and 7 a half note. A melody is at most 128
-steps (sixteen bars of eighths, eight of sixteenths) and a piece 256. `tempo` counts
-quarter notes on every grid. The score files write the grid's values (MusicXML with
+grid `max_hold 3` allows a quarter note and 7 a half note, which
+`examples/sixteenths.txt` sets. A melody is at most 128 steps (sixteen bars of
+eighths, eight of sixteenths) and a piece 256. `tempo` counts quarter notes on every
+grid. The score files write the grid's values (MusicXML with
 two or four divisions to the quarter and types down to `16th`, LilyPond `8` or `16`
 and dotted values, ABC `L:1/8` or `L:1/16` with the notes of each beat beamed), tie a
 length no single value writes, such as five eighths or five sixteenths, and pad the

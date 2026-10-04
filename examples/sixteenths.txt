@@ -1,0 +1,29 @@
+# The sixteenth-note grid: a step is a sixteenth, so a 4/4 bar is sixteen
+# steps, an eighth two tied steps, a dotted eighth three, a quarter four and
+# a half note eight (max_hold 7). Three voices enter three bars apart, each an
+# octave lower, over a chord per bar. Each beat's rhythm is one of a few
+# figures (w_figure): a quarter or two eighths cost nothing, sixteenths in a
+# group from the beat a little, a lone sixteenth off the beat a lot. A held
+# step costs a little too (w_hold), so the beats do not all settle into
+# quarters, and notes shorter than a beat move by step (w_run, w_step).
+grid sixteenth
+length 128
+voices 3
+delay 48
+transpose_1 -12
+transpose_2 -24
+key D
+mode minor
+harmony 1
+rhythm 1
+max_hold 7
+max_rests 1
+leading_tone 1
+range_low 43
+range_high 88
+w_step 3
+w_gravity 0
+w_repeat 6
+w_contrary 1
+w_hold 1
+tempo 76

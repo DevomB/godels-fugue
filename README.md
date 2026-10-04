@@ -117,7 +117,8 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   dotted quarters and halves; notes shorter than a beat that leap cost extra, and each
   beat's rhythm figure has a cost (`w_figure`), so sixteenths come in the figures real
   music builds a beat from (four sixteenths, an eighth and two sixteenths, a dotted
-  eighth and a sixteenth) rather than scattered off the beat.
+  eighth and a sixteenth) rather than scattered off the beat
+  (`examples/sixteenths.txt`).
 - **Rules you can turn on or off**: consonance, parallel fifths and octaves, maximum
   leap, voice spacing and crossing, cadence, leading tones rising to the tonic
   (`leading_tone`), no two large leaps in a row in one direction (`double_leaps 0`),
