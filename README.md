@@ -242,7 +242,7 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 | `score.abc` | ABC notation: one voice per canon voice, with accidentals written out relative to the key signature |
 | `voices.wav` | Stereo, 16-bit, 44.1 kHz: the voices on a plucked string, or the organ or sine that `instrument` picks, panned from left to right in a small reverb that rings on for 1.5 s after the last note |
 | `contour.svg` | Pitch over time for every voice |
-| `score.html` | Interactive score: piano roll per voice, playback (harpsichord, organ or sine, each voice panned in stereo, notes lighting up as they sound, looping for rounds, any voice muted from the legend), why each note is there, a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart, with each note plucked as the solver decides it), what the given notes changed, entropy and energy charts, and the proof log |
+| `score.html` | Interactive score: piano roll per voice, playback (harpsichord, organ or sine, each voice panned in stereo, notes lighting up as they sound, looping for rounds, any voice muted from the legend), why each note is there, the canon's fingerprint (which notes sound against which), a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart, with each note plucked as the solver decides it), what the given notes changed, entropy and energy charts, and the proof log |
 | `explain.txt` | The explanation for every variable, as `--explain` prints it |
 | `report.txt` | Keys, search statistics, energy by rule, values removed by each rule, the unsat core, the rules given notes break, and every config key used |
 | `proof.txt` | Every proof event in order: removals, decisions, forced collapses, and entropy after each round of propagation |
@@ -311,6 +311,13 @@ each row a pitch it could still take; decisions and forced values turn orange, a
 every removal is marked as it happens:
 
 ![The collapse replay: a grid of candidate pitches per melody note shrinking event by event until each note has one pitch](docs/images/collapse.gif)
+
+Which notes constrain each other depends on the canon's shape: two melody notes are
+tied together wherever the voices sound them at the same time. `score.html` draws that
+as the canon's fingerprint, an arc for every pair of notes heard together, so each
+transform has its own picture:
+
+![Six arc diagrams: a plain canon's even overlapping spans, a retrograde's nested rainbow, augmentation's widening fan, diminution's short hops, a round's wrap-around arcs, and a dense four-voice lattice](docs/images/fingerprints.png)
 
 [docs/design.md](docs/design.md) covers the ideas behind the project and which of
 them are built.

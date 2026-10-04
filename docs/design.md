@@ -317,7 +317,13 @@ fit or the rule the value breaks. A Shape card draws the tension curve as dragga
 points and offers sliders for four soft weights; each change rewrites that config line
 and composes again.
 
-**Built.** **Not built**: a constraint-graph view.
+A fingerprint card draws the canon's coupling as an arc diagram: an arc for every pair
+of melody notes heard at the same step in different voices, weighted by how long they
+overlap and solid where a harmony rule removed values between them in the proof.
+
+**Built.** **Partly built**: the fingerprint shows the coupling through simultaneous
+notes; a full constraint graph (chords, keys, ties and every rule as nodes) is not
+built.
 
 ## 13. Presets and modes
 
