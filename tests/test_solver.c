@@ -453,6 +453,47 @@ static void test_eighth_grid(void) {
     free(run);
 }
 
+/* Semitones moved and stepwise moves (two semitones or fewer, a held
+ * note aside) along the melody between sounding notes. */
+static void melody_motion(const TestRun *r, int *moved, int *steps) {
+    *moved = 0;
+    *steps = 0;
+    for (int i = 0; i + 1 < r->model.config.length; i++) {
+        int a = test_pitch(r, i);
+        int b = test_pitch(r, i + 1);
+        if (a == PITCH_REST || b == PITCH_REST || a == b) continue;
+        *moved += abs(a - b);
+        *steps += abs(a - b) <= 2;
+    }
+}
+
+/* w_step favours stepwise lines, on either grid. */
+static void test_step_cost(void) {
+    for (int grid = GRID_QUARTER; grid <= GRID_EIGHTH; grid++) {
+        PieceConfig c = test_config();
+        test_set(&c, "voices=3");
+        test_set(&c, "rhythm=1");
+        test_set(&c, "harmony=1");
+        test_set(&c, "length=24");
+        test_set(&c, "delay=8");
+        test_set(&c, "range_low=55");
+        test_set(&c, "range_high=79");
+        c.grid = grid;
+        TestRun *free_lines = test_solve(&c);
+        test_set(&c, "w_step=4");
+        TestRun *stepwise = test_solve(&c);
+        CHECK(free_lines->status == SOLVE_SAT && stepwise->status == SOLVE_SAT);
+        int moved[2];
+        int steps[2];
+        melody_motion(free_lines, &moved[0], &steps[0]);
+        melody_motion(stepwise, &moved[1], &steps[1]);
+        CHECK(moved[1] < moved[0]);
+        CHECK(steps[1] > steps[0]);
+        test_close(free_lines);
+        test_close(stepwise);
+    }
+}
+
 static void test_run_pipeline(void) {
     Run *run = malloc(sizeof(Run));
     CHECK(run != NULL);
@@ -517,6 +558,7 @@ int main(void) {
     test_optimize();
     test_longest_melody();
     test_eighth_grid();
+    test_step_cost();
     test_run_pipeline();
     printf("ok\n");
     return 0;

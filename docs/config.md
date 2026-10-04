@@ -102,6 +102,7 @@ style preset first, so every other key in the file overrides it.
 | `w_curve` | 1 | 0..100 | Cost per unit of difference between a melody note's gravity and its target on the tension curve. |
 | `tension` | arch | up to 64 values | The tension curve on the gravity scale (0 tonic or third .. 4 outside the key), as points spread evenly from the first melody note to the last; notes between points take the straight line between them, rounded. 0 4 0 peaks in the middle and one value is flat. A ? point is filled in from the given points on either side, or from the nearest one at either end, so 0 4 ? rises over the first half and then holds. arch (or no given point) is the built-in arch. |
 | `w_leap` | 1 | 0..100 | Cost per four semitones of melodic interval. |
+| `w_step` | 0 | 0..100 | Cost of each melodic interval larger than a whole step, growing with its size, favouring stepwise lines: this times (semitones - 1) / 2, rounded down, so 1 for a third, 2 for a fourth, 3 for a fifth and 5 for an octave. |
 | `w_repeat` | 4 | 0..100 | Cost of striking the same pitch twice in a row. |
 | `w_recover` | 2 | 0..100 | Cost of not stepping back after a leap larger than a third. |
 | `w_dissonance` | 1 | 0..100 | Cost per grade of vertical dissonance (fourth 1, second or tritone 2, semitone 3). |

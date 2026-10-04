@@ -62,6 +62,7 @@ enum {
     TERM_KEY,
     TERM_KEY_DISTANCE,
     TERM_RUN,
+    TERM_STEP,
     TERM_COUNT
 };
 

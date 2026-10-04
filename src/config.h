@@ -81,6 +81,7 @@ typedef struct PieceConfig {
     int w_curve;
     int tension[MELODY_MAX]; /* curve points, TENSION_FREE (?) or TENSION_UNLISTED */
     int w_leap;
+    int w_step;
     int w_repeat;
     int w_recover;
     int w_dissonance;

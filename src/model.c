@@ -24,7 +24,7 @@ const char *term_name(int term) {
         "gravity",   "curve",       "corpus", "rest",  "leap",       "repeat",
         "recovery",  "motif",       "dissonance", "direct perfect", "contrary motion", "hold",
         "syncopation", "rhythm",    "final",  "chord", "chord motion", "non-chord tone", "key",
-        "key distance", "run"};
+        "key distance", "run", "step"};
     if (term < 0 || term >= TERM_COUNT) return "unknown";
     return names[term];
 }
@@ -601,6 +601,10 @@ static void build_terms(Builder *b) {
         add_slot(t, m->pitch[i], 0);
         add_slot(t, m->pitch[i + 1], 0);
         if (t != NULL) t->time = i;
+        t = add_term(b, TERM_STEP, c->w_step);
+        add_slot(t, m->pitch[i], 0);
+        add_slot(t, m->pitch[i + 1], 0);
+        if (t != NULL) t->time = i;
         t = add_term(b, TERM_REPEAT, c->w_repeat);
         add_slot(t, m->pitch[i], 0);
         add_slot(t, m->pitch[i + 1], 0);
@@ -1144,6 +1148,16 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
             if (slot_value(t, vals, k) != TIE_NOTE) return 0;
         }
         return w;
+    }
+    case TERM_STEP: {
+        /* 0 for a unison or a step, 1 for a third, 2 for a fourth or
+         * tritone, 3 for a fifth, 5 for an octave; a held note repeats its
+         * pitch, so it costs nothing */
+        int a = slot_value(t, vals, 0);
+        int b = slot_value(t, vals, 1);
+        if (a == PITCH_REST || b == PITCH_REST) return 0;
+        int d = iabs(a - b);
+        return d <= 2 ? 0 : w * ((d - 1) / 2);
     }
     default:
         return 0;

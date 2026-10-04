@@ -408,6 +408,10 @@ static const KeyDef keys[] = {
      "holds. arch (or no given point) is the built-in arch."},
     {"w_leap", F(w_leap), 1, 0, 100, 1, NULL, NULL, "energy",
      "Cost per four semitones of melodic interval."},
+    {"w_step", F(w_step), 1, 0, 100, 0, NULL, NULL, "energy",
+     "Cost of each melodic interval larger than a whole step, growing with its size, "
+     "favouring stepwise lines: this times (semitones - 1) / 2, rounded down, so 1 for a "
+     "third, 2 for a fourth, 3 for a fifth and 5 for an octave."},
     {"w_repeat", F(w_repeat), 1, 0, 100, 4, NULL, NULL, "energy",
      "Cost of striking the same pitch twice in a row."},
     {"w_recover", F(w_recover), 1, 0, 100, 2, NULL, NULL, "energy",

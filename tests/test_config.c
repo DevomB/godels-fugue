@@ -22,7 +22,12 @@ static void test_defaults_and_set(void) {
     CHECK(c.modulate_at == -1);
     CHECK(c.motif_c == -128);
     CHECK(c.voice_transpose[1] == TRANSPOSE_SAME);
+    CHECK(c.w_step == 0);
     CHECK(config_validate(&c, err, sizeof(err)));
+    CHECK(config_set(&c, "w_step", "3", err, sizeof(err)));
+    CHECK(c.w_step == 3);
+    CHECK(!config_set(&c, "w_step", "-1", err, sizeof(err)));
+    c.w_step = 0;
     CHECK(config_set(&c, "transpose_1", "0", err, sizeof(err)));
     CHECK(c.voice_transpose[1] == 0);
     CHECK(config_set(&c, "transpose_1", "same", err, sizeof(err)));

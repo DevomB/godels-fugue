@@ -230,6 +230,40 @@ static void test_eighth_grid(void) {
     test_close(r);
 }
 
+/* w_step charges each melodic interval by its size beyond a whole step:
+ * (semitones - 1) / 2, so a third 1, a fourth 2, a fifth 3, an octave 5. */
+static void test_step(void) {
+    PieceConfig c = test_config();
+    TestRun *r = test_open(&c);
+    CHECK(c.w_step == 0 && count_term(&r->model, TERM_STEP) == 0);
+    test_close(r);
+    test_set(&c, "w_step=2");
+    test_set(&c, "rhythm=1");
+    r = test_open(&c);
+    const Model *m = &r->model;
+    CHECK(count_term(m, TERM_STEP) == c.length - 1);
+    const Constraint *t = find_term(m, TERM_STEP, 3, 2);
+    CHECK(t != NULL && t->vars[t->slot[0]] == m->pitch[3] && t->vars[t->slot[1]] == m->pitch[4]);
+    static const int units[13] = {0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5};
+    int v[SCOPE_MAX];
+    for (int d = 0; d <= 12; d++) {
+        v[t->slot[0]] = 66;
+        v[t->slot[1]] = 66 + d;
+        CHECK(term_cost(m, t, v) == 2 * units[d]);
+        v[t->slot[1]] = 66 - d;
+        CHECK(term_cost(m, t, v) == 2 * units[d]);
+    }
+    v[t->slot[1]] = PITCH_REST;
+    CHECK(term_cost(m, t, v) == 0);
+    test_close(r);
+
+    /* the same on the eighth grid */
+    test_set(&c, "grid=eighth");
+    r = test_open(&c);
+    CHECK(count_term(&r->model, TERM_STEP) == c.length - 1);
+    test_close(r);
+}
+
 /* The curve term of each note carries its target: the arch until a
  * curve is drawn, then the drawn curve stretched over the melody. */
 static void check_targets(const PieceConfig *c, const int *want) {
@@ -450,6 +484,8 @@ static void test_energy(void) {
         {"tension=0,?,4,1", "w_curve=3", "mirror=1", "rhythm=1", NULL},
         {"grid=eighth", "rhythm=1", "harmony=1", "length=20", "delay=6", NULL},
         {"grid=eighth", "voices=3", "poly_meter=1", "rhythm=1", "max_hold=5", NULL},
+        {"w_step=2", "rhythm=1", "voices=3", NULL},
+        {"grid=eighth", "w_step=3", "rhythm=1", "max_hold=3", NULL},
     };
     for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
         PieceConfig c = test_config();
@@ -509,6 +545,7 @@ int main(void) {
     test_tension();
     test_mirror();
     test_eighth_grid();
+    test_step();
     test_energy();
     printf("ok\n");
     return 0;
