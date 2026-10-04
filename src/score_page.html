@@ -143,6 +143,15 @@ svg text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .loop { display: inline-flex; align-items: center; gap: 4px; font-size: 14px; color: var(--text-secondary); }
 .loop input { padding: 0; }
+#ties .arc { fill: none; stroke: var(--series-2); }
+#ties .arc.quiet { opacity: 0.35; }
+#ties.focus .arc { opacity: 0.3; }
+#ties.focus .arc.quiet { opacity: 0.14; }
+#ties.focus .arc.on { opacity: 1; }
+#ties .dot { fill: var(--series-1); cursor: pointer; }
+#ties .dot.on { fill: var(--series-2); }
+#ties .dot.picked { stroke: var(--select); stroke-width: 2; }
+#ties .dot-label { fill: var(--text-muted); font-size: 10px; }
 .tries { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
 .try { font-size: 13px; padding: 3px 9px; border-color: var(--accent); }
 .try.removed { border-color: var(--border); color: var(--text-muted); }
@@ -264,6 +273,13 @@ details summary { cursor: pointer; color: var(--text-secondary); font-size: 13px
       </section>
     </div>
   </div>
+
+  <section class="card" id="ties-card">
+    <h2>What sounds against what</h2>
+    <p class="muted">The canon's fingerprint. Each dot is a melody note; an arc joins two notes that are heard at the same time in different voices, thicker the longer they overlap. A solid arc means a harmony rule removed values between them while the piece collapsed. Pick a note to see only its arcs.</p>
+    <div class="legend"><span><span class="swatch" style="background:var(--series-2)"></span>heard together</span><span><span class="swatch" style="background:var(--series-2);opacity:0.35"></span>heard together, no removals between them</span></div>
+    <div class="scroll"><svg id="ties" role="img" aria-label="Arc diagram of the melody notes that sound against each other"></svg></div>
+  </section>
 
   <section class="card" id="collapse-card">
     <h2>Collapse</h2>
@@ -555,6 +571,7 @@ const PIECE = /*PIECE_DATA*/;
     }
     document.querySelectorAll(".chip").forEach(function (c) { c.classList.toggle("selected", Number(c.dataset.id) === selected); });
     cxMark();
+    markTies();
   }
 
   /* ---------- chips ---------- */
@@ -1360,8 +1377,113 @@ const PIECE = /*PIECE_DATA*/;
   });
   if (!score.length) play.disabled = true;
 
+  /* ---------- what sounds against what ----------
+     Pairs of melody notes heard at the same step in different voices, from the
+     score itself; a pair is solid when a harmony rule removed values between
+     them in the proof. */
+  const HARMONY_RULES = { "consonance": 1, "parallel fifth": 1, "parallel octave": 1, "spacing": 1, "crossing": 1 };
+  const tieArcs = [], tieDots = [];
+  function drawTies() {
+    const svg = document.getElementById("ties");
+    clear(svg);
+    tieArcs.length = 0;
+    tieDots.length = 0;
+    const n = melody.length;
+    if (!score.length || n < 2) { document.getElementById("ties-card").hidden = true; return; }
+    const pairs = new Map();
+    function pair(a, b) {
+      const k = Math.min(a, b) + "," + Math.max(a, b);
+      if (!pairs.has(k)) pairs.set(k, { a: Math.min(a, b), b: Math.max(a, b), steps: 0, removed: 0, rules: {} });
+      return pairs.get(k);
+    }
+    for (let t = 0; t < P.span; t++) {
+      const sounding = [];
+      score.forEach(function (voice) {
+        for (const note of voice)
+          if (note.pitch > 0 && note.start <= t && t < note.start + note.length) sounding.push(note.source);
+      });
+      for (let i = 0; i < sounding.length; i++)
+        for (let j = i + 1; j < sounding.length; j++)
+          if (sounding[i] !== sounding[j]) pair(sounding[i], sounding[j]).steps++;
+    }
+    for (const e of events) {
+      if (e.type !== "remove" || !HARMONY_RULES[e.rule]) continue;
+      const to = byId[e.varId];
+      if (!to || to.kind !== "pitch") continue;
+      for (const q of e.parents) {
+        const from = byId[q.varId];
+        if (!from || from.kind !== "pitch" || from.index === to.index) continue;
+        const k = Math.min(from.index, to.index) + "," + Math.max(from.index, to.index);
+        const r = pairs.get(k);
+        if (r) { r.removed++; r.rules[e.rule] = (r.rules[e.rule] || 0) + 1; }
+      }
+    }
+    const card = document.getElementById("ties-card");
+    const width = Math.max(card.clientWidth - 34, n * 16 + 40);
+    const left = 20, step = (width - 2 * left) / (n - 1);
+    let span = 1, most = 1;
+    pairs.forEach(function (r) { span = Math.max(span, r.b - r.a); most = Math.max(most, r.steps); });
+    const lift = Math.min(150, (span * step) / 2), base = lift + 14, height = base + 34;
+    svg.setAttribute("width", width);
+    svg.setAttribute("height", height);
+    svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+    const x = function (i) { return left + i * step; };
+    pairs.forEach(function (r) {
+      const rx = (x(r.b) - x(r.a)) / 2, ry = (lift * (r.b - r.a)) / span;
+      const path = svgEl("path", {
+        class: "arc" + (r.removed ? "" : " quiet"),
+        d: "M" + x(r.a) + "," + base + " A" + rx + "," + ry + " 0 0,1 " + x(r.b) + "," + base,
+        "stroke-width": (1 + 4 * Math.sqrt(r.steps / most)).toFixed(2),
+      });
+      path.addEventListener("pointermove", function (evt) {
+        const why = Object.keys(r.rules).map(function (k) { return k + " " + r.rules[k]; }).join(", ");
+        showTip(evt, "x" + r.a + " and x" + r.b, [
+          "heard together for " + r.steps + " step" + (r.steps === 1 ? "" : "s"),
+          r.removed ? "values removed between them: " + why : "no values removed between them",
+        ]);
+      });
+      path.addEventListener("pointerleave", hideTip);
+      svg.appendChild(path);
+      tieArcs.push({ node: path, a: r.a, b: r.b });
+    });
+    melody.forEach(function (v) {
+      const i = v.index;
+      const dot = svgEl("circle", { class: "dot", cx: x(i), cy: base, r: 5, tabindex: 0, role: "button" });
+      dot.setAttribute("aria-label", v.var + " = " + v.label);
+      dot.addEventListener("click", function () { select(v.id); });
+      dot.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(v.id); } });
+      dot.addEventListener("pointermove", function (evt) { showTip(evt, v.var + " = " + v.label, ["melody note " + i]); });
+      dot.addEventListener("pointerleave", hideTip);
+      svg.appendChild(dot);
+      tieDots.push({ node: dot, index: i, id: v.id });
+      if (n <= 40 || i % 2 === 0) {
+        const label = svgEl("text", { class: "dot-label", x: x(i), y: base + 18, "text-anchor": "middle" });
+        label.textContent = v.label;
+        svg.appendChild(label);
+      }
+    });
+    markTies();
+  }
+  function markTies() {
+    const svg = document.getElementById("ties");
+    const v = byId[selected];
+    const at = v && v.kind === "pitch" ? v.index : -1;
+    const near = new Set();
+    for (const arc of tieArcs) {
+      const on = arc.a === at || arc.b === at;
+      arc.node.classList.toggle("on", on);
+      if (on) near.add(arc.a === at ? arc.b : arc.a);
+    }
+    svg.classList.toggle("focus", near.size > 0); /* a note heard alone dims nothing */
+    for (const d of tieDots) {
+      d.node.classList.toggle("on", near.has(d.index));
+      d.node.classList.toggle("picked", d.index === at);
+    }
+  }
+
   function drawAll() {
     drawRoll();
+    drawTies();
     drawEntropy();
     drawBars();
   }
