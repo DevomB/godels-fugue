@@ -1,16 +1,27 @@
-# The demo's opening piece: a three-voice canon in D minor over a chord
-# per bar. Each voice enters three bars after the one before, which lines
-# the entries up with a i-iv-V-i cycle; leading tones rise to the tonic and
-# voices that move the same way cost a little, so the lines stay apart.
-length 48
+# The demo's opening piece: a three-voice canon in D minor on the eighth-note
+# grid. Each voice enters three bars after the one before and an octave lower,
+# so the melody is heard high, middle and low (a soprano, a tenor and a bass
+# register) over a chord per bar that lines up as i-iv-V-i. The lines move
+# mostly by step (w_step), eighth notes run by step (w_run), and leading
+# tones rise to the tonic.
+grid eighth
+length 64
 voices 3
-delay 12
+delay 24
+transpose_1 -12
+transpose_2 -24
 key D
 mode minor
 harmony 1
 rhythm 1
-range_low 50
-range_high 77
+max_hold 3
+max_rests 1
 leading_tone 1
+range_low 43
+range_high 88
+w_step 3
+w_gravity 0
+w_repeat 6
 w_contrary 1
-tempo 96
+w_hold 0
+tempo 84
