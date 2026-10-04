@@ -342,7 +342,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     if (!worker && !startWorker()) return;
     runId += 1;
     syncShape();
-    composed ={ config: config.value, seed: String(Math.max(0, Math.floor(Number(seed.value) || 0))) };
+    composed = { config: config.value, seed: String(Math.max(0, Math.floor(Number(seed.value) || 0))) };
     busy(true);
     setBadge("busy", "Composing");
     summary.textContent = "";
@@ -357,6 +357,9 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   function finish(result) {
     busy(false);
     log.textContent = result.log || "";
+    const tried = trying;
+    trying = null;
+    pendingChanged = [];
     if (result.error) {
       setBadge("bad", "Error");
       summary.textContent = result.error;
@@ -364,9 +367,6 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     }
     const secs = (result.ms / 1000).toFixed(result.ms < 10000 ? 2 : 1) + " s";
     const text = result.log || "";
-    const tried = trying;
-    trying = null;
-    pendingChanged = [];
     if (result.status === 0) {
       const key = line(text, "key:");
       const energy = line(text, "energy:").split(" ")[0];
