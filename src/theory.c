@@ -243,6 +243,11 @@ int is_strong_time(int t, int poly_meter) {
     return 0;
 }
 
+int is_strong_step(int t, int beat_steps, int poly_meter) {
+    if (beat_steps <= 1) return is_strong_time(t, poly_meter);
+    return t % beat_steps == 0 && is_strong_time(t / beat_steps, poly_meter);
+}
+
 int interval_class(int a, int b) {
     int delta = a - b;
     if (delta < 0) delta = -delta;

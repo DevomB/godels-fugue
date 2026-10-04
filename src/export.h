@@ -5,7 +5,8 @@
 
 #include <stdbool.h>
 
-/* 4/4 bars of quarter-note steps; long notes split at barlines with ties. */
+/* 4/4 bars of quarter- or eighth-note steps; long notes split at barlines
+ * with ties, as do lengths no single value writes (five eighths). */
 bool export_musicxml(const char *path, const Score *score);
 /* Pitch over time for every voice. */
 bool export_contour(const char *path, const Score *score);

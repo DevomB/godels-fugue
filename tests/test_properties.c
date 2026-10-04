@@ -218,13 +218,18 @@ static void check_piece(const Model *m, const int *values) {
         if (values[m->pitch[i + 1]] != p + 1) fail(c, "leading tone", i);
     }
 
+    /* a step is a quarter-note beat, or half of one on the eighth grid; the
+     * first beat of a 4/4 bar is strong, and with poly_meter every third */
+    int beat = c->grid == GRID_EIGHTH ? 2 : 1;
+    int bar = 4 * beat;
     for (int t = 0; t < m->span; t++) {
         int sounding[VOICE_MAX];
         int n = 0;
         for (int v = 0; v < voices; v++) {
             if (score.line[v][t] != SOUND_REST) sounding[n++] = score.line[v][t];
         }
-        bool strong = is_strong_time(t, c->poly_meter);
+        int beats = t / beat;
+        bool strong = t % beat == 0 && (beats % 4 == 0 || (c->poly_meter && beats % 3 == 0));
         if (c->consonance == CONSONANCE_ALL || (c->consonance == CONSONANCE_STRONG && strong)) {
             int low = 999;
             for (int k = 0; k < n; k++) low = sounding[k] < low ? sounding[k] : low;
@@ -255,7 +260,7 @@ static void check_piece(const Model *m, const int *values) {
             }
         }
         if (c->harmony && strong) {
-            int chord = values[m->chord[t / 4]];
+            int chord = values[m->chord[t / bar]];
             int key = key_for(m, values, t);
             for (int k = 0; k < n; k++) {
                 if (!key_triad_has(key, chord, sounding[k])) fail(c, "chord tone", t);
@@ -278,10 +283,11 @@ static void check_piece(const Model *m, const int *values) {
     }
 
     if (c->harmony && c->progression) {
+        if (m->nbars != (m->span + bar - 1) / bar) fail(c, "bar count", 0);
         for (int b = 0; b + 1 < m->nbars; b++) {
-            if (model_section_at(m, b * 4) != model_section_at(m, b * 4 + 4)) continue;
+            if (model_section_at(m, b * bar) != model_section_at(m, b * bar + bar)) continue;
             if (!progression_allowed(values[m->chord[b]], values[m->chord[b + 1]]))
-                fail(c, "progression", b * 4);
+                fail(c, "progression", b * bar);
         }
     }
 
@@ -403,6 +409,40 @@ int main(void) {
     }
     printf("diatonic solved %d\n", diatonic_solved);
     CHECK(diatonic_solved >= 10);
+
+    /* the eighth grid: two steps to a beat and eight to a bar, longer ties,
+     * and entries a beat or more apart */
+    int eighth_solved = 0;
+    int eighth_checked = 0;
+    for (int trial = 0; trial < 120; trial++) {
+        PieceConfig c = random_config();
+        c.grid = GRID_EIGHTH;
+        c.length = pick(8, 24);
+        c.delay = 2 * pick(1, 6) - pick(0, 1);
+        c.max_hold = pick(1, 5);
+        if (c.modulate_at > c.length) c.modulate_at = c.length;
+        for (int i = c.length; i < MELODY_MAX; i++) c.melody[i] = -1;
+        char err[200];
+        if (!config_validate(&c, err, sizeof(err))) continue;
+        TestRun *r = test_solve(&c);
+        if (r->status == SOLVE_SAT) {
+            eighth_solved++;
+            check_piece(&r->model, r->values);
+        }
+        if (r->status != SOLVE_LIMIT && c.length <= 10) {
+            int values[VAR_MAX];
+            int rc = sat_solve(&r->model, values, 200000);
+            if (rc == SAT_SAT || rc == SAT_UNSAT) {
+                eighth_checked++;
+                CHECK((rc == SAT_SAT) == (r->status == SOLVE_SAT));
+                if (rc == SAT_SAT) check_piece(&r->model, values);
+            }
+        }
+        test_close(r);
+    }
+    printf("eighth grid solved %d, sat-checked %d\n", eighth_solved, eighth_checked);
+    CHECK(eighth_solved >= 40);
+    CHECK(eighth_checked >= 5);
     printf("ok\n");
     return 0;
 }

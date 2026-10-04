@@ -812,7 +812,8 @@ static bool in_window(const Model *m, int var, int start, int width) {
     int length = m->config.length;
     if (v->kind == VAR_KEY) return false;
     if (v->kind != VAR_CHORD) return note_in_window(length, v->index, start, width);
-    for (int t = v->index * 4; t < v->index * 4 + 4 && t < m->span; t++) {
+    int bar_steps = config_bar_steps(&m->config);
+    for (int t = v->index * bar_steps; t < (v->index + 1) * bar_steps && t < m->span; t++) {
         for (int voice = 0; voice < m->voices; voice++) {
             if (note_in_window(length, m->source[voice][t], start, width)) return true;
         }

@@ -109,6 +109,10 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   and the usual root progressions.
 - **Rhythm**: optional ties (half, dotted half and whole notes) and rests, with rules
   against over-long notes and costs for syncopation and plain runs of quarter notes.
+  With `grid eighth` a step is an eighth note, so a bar is eight steps and the ties
+  give eighths, quarters, dotted quarters, halves and longer; strong beats, chords
+  and the rhythm costs follow the bar, eighth notes that leap cost extra (`w_run`),
+  and every score file writes the real values.
 - **Rules you can turn on or off**: consonance, parallel fifths and octaves, maximum
   leap, voice spacing and crossing, cadence, leading tones rising to the tonic
   (`leading_tone`), no two large leaps in a row in one direction (`double_leaps 0`),
@@ -118,7 +122,8 @@ last removal: x4 C4 by consonance: voices 1,2 must be consonant at step 4 (bar 2
   give the whole melody, typed in or read from a MIDI file, to check it against the
   rules and see what it costs.
 - **Soft preferences** that rank the legal choices: stable scale degrees, a tension
-  curve you draw (an arch unless you give one), small leaps, few repeated notes,
+  curve you draw (an arch unless you give one), small leaps, stepwise lines
+  (`w_step`), few repeated notes,
   recovering after a leap, a repeating motif, contrary rather than similar motion
   between voices (`w_contrary`), pitch-class weights learned from a corpus, and more.
   Their sum is the piece's *energy*.
@@ -176,6 +181,7 @@ The keys you are most likely to change:
 | Key | Default | What it does |
 | --- | --- | --- |
 | `length` | 12 | Melody notes, up to 64 (one step each; four steps make a bar) |
+| `grid` | quarter | Length of a step: `quarter`, or `eighth` for eight steps to a bar |
 | `voices` | 2 | Number of voices |
 | `delay` | 4 | Steps between voice entries |
 | `key`, `mode` | C, major | The key; `search` lets the solver choose |
@@ -186,6 +192,7 @@ The keys you are most likely to change:
 | `consonance` | strong | `off`, `strong` beats, or `all` steps |
 | `max_spacing`, `crossing` | off, allowed | Widest interval between voices; whether a later voice may sound above an earlier one |
 | `melody` | all free | The notes to keep, `?` for the ones to choose |
+| `w_leap`, `w_step` | 1, 0 | Costs of melodic leaps: per four semitones, and by size past a whole step (for stepwise lines) |
 | `optimize` | 10000 | Nodes spent lowering the energy after the first solution |
 | `seed`, `temperature` | 1, 0 | Sampling instead of always taking the cheapest value |
 | `tempo`, `instrument` | 120, pluck | Quarter notes per minute; the sound of `voices.wav`: `pluck`, `organ` or `sine` |
@@ -214,7 +221,8 @@ finished melody: a run that solves reports its energy, and one that fails names 
 rules the melody breaks.
 
 `--melody-midi FILE` gives every note from a Standard MIDI file instead, and sets
-`length` to fit: it reads the first track with notes at one step per quarter note,
+`length` to fit: it reads the first track with notes at one step per quarter note (per
+eighth with `grid eighth`),
 takes the highest note where notes overlap, and rests where none sounds (rests need
 `rhythm 1`).
 

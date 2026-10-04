@@ -130,6 +130,41 @@ static void test_round_trip(void) {
     CHECK(counts[2] == 2 && counts[6] == 3 && counts[9] == 1);
 }
 
+/* An eighth-grid score reads back step for step on the eighth grid, and
+ * at half the steps, rounded, on the quarter grid. */
+static void test_eighth_grid(void) {
+    Score s;
+    memset(&s, 0, sizeof(s));
+    s.voices = 1;
+    s.span = 8;
+    s.tempo = 90;
+    s.beat_steps = 2;
+    s.nsections = 1;
+    s.key[0] = key_id(0, MODE_MAJOR);
+    /* eighth C, eighth D, quarter rest, dotted quarter E, eighth F */
+    ScoreNote lead[] = {{0, 1, 60, 0}, {1, 1, 62, 1}, {2, 2, SOUND_REST, -1}, {4, 3, 64, 4},
+                        {7, 1, 65, 7}};
+    s.voice[0].count = 5;
+    memcpy(s.voice[0].notes, lead, sizeof(lead));
+    CHECK(midi_write_score("output/tests/eighths_read.mid", &s));
+    MidiFile f;
+    char err[200];
+    CHECK(midi_read_file(&f, "output/tests/eighths_read.mid", err, sizeof(err)));
+    int steps[16];
+    static const int want[8] = {60, 62, PITCH_REST, PITCH_REST, 64, 64, 64, 65};
+    CHECK(midi_track_grid(&f, 1, 2, steps, 16) == 8);
+    for (int i = 0; i < 16; i++) CHECK(steps[i] == (i < 8 ? want[i] : PITCH_REST));
+    /* on quarters each onset and end rounds to the nearest quarter, and a
+     * note keeps one step at least: D and F start half a quarter late */
+    static const int quarters[5] = {60, 62, 64, 64, 65};
+    CHECK(midi_track_grid(&f, 1, 1, steps, 16) == 5);
+    for (int i = 0; i < 5; i++) CHECK(steps[i] == quarters[i]);
+    CHECK(midi_track_steps(&f, 1, steps, 16) == 5);
+    for (int i = 0; i < 5; i++) CHECK(steps[i] == quarters[i]);
+    CHECK(midi_track_grid(&f, 1, 0, steps, 16) == 0);
+    midi_file_free(&f);
+}
+
 static void test_quantize(void) {
     Bytes b;
     header(&b, 0, 1, 96);
@@ -411,6 +446,7 @@ static void test_fuzz(void) {
 int main(void) {
     test_output_dir();
     test_round_trip();
+    test_eighth_grid();
     test_quantize();
     test_running_status();
     test_format0();

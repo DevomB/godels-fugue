@@ -34,6 +34,7 @@ static void usage(FILE *f) {
             "  --lock INDEX PITCH   fix melody note INDEX to MIDI PITCH\n"
             "  --melody-midi FILE   take the melody and its length from the first track\n"
             "                       of a MIDI file with notes, a step per quarter note\n"
+            "                       (per eighth with --set grid=eighth)\n"
             "  --explain VAR        print why a variable has its value: a melody index\n"
             "                       such as 5, or x5, tie5, chord2, key, key2\n"
             "  --check              only check the given notes against the rules: print\n"
@@ -185,14 +186,16 @@ static int run_check(const PieceConfig *config) {
     return n > 0 ? EXIT_UNSAT : 0;
 }
 
-/* The melody of a MIDI file's first track with notes, one step per quarter
- * note, gives every note of the melody and its length. */
+/* The melody of a MIDI file's first track with notes, read on the step
+ * grid (quarter or eighth notes), gives every note of the melody and its
+ * length. */
 static bool melody_from_midi(PieceConfig *c, const char *path, char *err, size_t cap) {
     MidiFile file;
     if (!midi_read_file(&file, path, err, cap)) return false;
     int steps[MELODY_MAX];
     int track = midi_first_track(&file);
-    int n = track < 0 ? 0 : midi_track_steps(&file, track, steps, MELODY_MAX);
+    int n = track < 0 ? 0
+                      : midi_track_grid(&file, track, config_beat_steps(c), steps, MELODY_MAX);
     midi_file_free(&file);
     if (n == 0) {
         snprintf(err, cap, "%s: no notes", path);

@@ -121,6 +121,149 @@ static const Constraint *find(const Model *m, int type, int time) {
     return NULL;
 }
 
+/* The first term of a rule at a step with nslots slots, or NULL. */
+static const Constraint *find_term(const Model *m, int rule, int time, int nslots) {
+    for (int i = 0; i < m->nterms; i++) {
+        const Constraint *t = &m->terms[i];
+        if (t->rule == rule && t->time == time && t->nslots == nslots) return t;
+    }
+    return NULL;
+}
+
+/* Cost of a term over ties alone, given in slot order as N (note) and H (hold). */
+static int tie_cost(const Model *m, const Constraint *t, const char *ties) {
+    int v[SCOPE_MAX];
+    CHECK(t != NULL && (int)strlen(ties) == t->nslots);
+    for (int k = 0; k < t->nslots; k++) v[t->slot[k]] = ties[k] == 'H' ? TIE_HOLD : TIE_NOTE;
+    return term_cost(m, t, v);
+}
+
+/* Cost of a run term for two pitches and its ties, N or H in slot order. */
+static int run_cost(const Model *m, const Constraint *t, int a, int b, const char *ties) {
+    int v[SCOPE_MAX];
+    CHECK(t != NULL && (int)strlen(ties) == t->nslots - 2);
+    v[t->slot[0]] = a;
+    v[t->slot[1]] = b;
+    for (int k = 2; k < t->nslots; k++) v[t->slot[k]] = ties[k - 2] == 'H' ? TIE_HOLD : TIE_NOTE;
+    return term_cost(m, t, v);
+}
+
+/* On the eighth grid a bar is eight steps: one chord, one strong step on
+ * its first beat, and rhythm terms that count a beat as two steps. */
+static void test_eighth_grid(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "grid=eighth");
+    test_set(&c, "length=24");
+    test_set(&c, "delay=8");
+    test_set(&c, "rhythm=1");
+    test_set(&c, "harmony=1");
+    TestRun *r = test_open(&c);
+    const Model *m = &r->model;
+    CHECK(m->span == 32 && m->nbars == 4);
+    /* both voices sound on the first beats of bars 2 and 3, steps 8 and 16 */
+    CHECK(count_rule(m, CID_CONSONANCE) == 2);
+    CHECK(count_rule(m, CID_CHORD) == 6); /* each voice on three downbeats */
+    CHECK(count_rule(m, CID_PROGRESSION) == 3);
+    for (int i = 0; i < m->ncons; i++) {
+        const Constraint *k = &m->cons[i];
+        if (k->type == C_CONSONANCE || k->type == C_CHORD_TONE) CHECK(k->time % 8 == 0);
+        if (k->type == C_CHORD_TONE) CHECK(k->vars[k->slot[1]] == m->chord[k->time / 8]);
+    }
+    CHECK(count_term(m, TERM_NONCHORD) == 2 * (24 - 3)); /* every other sounding step */
+    CHECK(count_term(m, TERM_CHORD) == 4);
+    CHECK(count_term(m, TERM_RHYTHM) == 3);
+    CHECK(count_term(m, TERM_SYNCOPATION) == 5 + 11);
+    char where[128];
+    constraint_describe(m, find(m, C_CONSONANCE, 16), where, sizeof(where));
+    CHECK(strstr(where, "at step 16 (bar 3)") != NULL);
+
+    /* a note attacked on beat 2 (step 2) and held over beat 3 (step 4) */
+    const Constraint *over = find_term(m, TERM_SYNCOPATION, 4, 3);
+    CHECK(over != NULL && over->vars[over->slot[0]] == m->tie[2]);
+    CHECK(tie_cost(m, over, "NHH") == c.w_syncopation);
+    CHECK(tie_cost(m, over, "NHN") == 0 && tie_cost(m, over, "HHH") == 0);
+    /* an off-beat eighth (step 1) held across beat 2 (step 2) */
+    const Constraint *off = find_term(m, TERM_SYNCOPATION, 2, 2);
+    CHECK(off != NULL && off->vars[off->slot[0]] == m->tie[1]);
+    CHECK(tie_cost(m, off, "NH") == c.w_syncopation);
+    CHECK(tie_cost(m, off, "NN") == 0 && tie_cost(m, off, "HH") == 0);
+    CHECK(find_term(m, TERM_SYNCOPATION, 3, 2) == NULL); /* step 3 starts no beat */
+    /* a bar of eight eighths or of four quarters is plain; any mix is not */
+    const Constraint *bar = find_term(m, TERM_RHYTHM, 8, 7);
+    CHECK(bar != NULL && bar->vars[bar->slot[0]] == m->tie[9]);
+    CHECK(tie_cost(m, bar, "NNNNNNN") == c.w_rhythm);
+    CHECK(tie_cost(m, bar, "HNHNHNH") == c.w_rhythm);
+    CHECK(tie_cost(m, bar, "HNHNHNN") == 0);
+    CHECK(tie_cost(m, bar, "NNHNHNH") == 0);
+    CHECK(tie_cost(m, bar, "HHHNHHH") == 0); /* two half notes */
+
+    /* two eighths in a row move by step: notes 5 and 6 are eighths when
+     * the ties at 5, 6 and 7 are all attacks */
+    CHECK(count_term(m, TERM_RUN) == 23);
+    const Constraint *run = find_term(m, TERM_RUN, 5, 5);
+    CHECK(run != NULL && run->vars[run->slot[2]] == m->tie[5]);
+    CHECK(run_cost(m, run, 60, 64, "NNN") == c.w_run);
+    CHECK(run_cost(m, run, 72, 60, "NNN") == c.w_run);
+    CHECK(run_cost(m, run, 60, 62, "NNN") == 0);         /* a step */
+    CHECK(run_cost(m, run, 60, 64, "HNN") == 0);         /* the first note is longer */
+    CHECK(run_cost(m, run, 60, 64, "NNH") == 0);         /* so is the second */
+    CHECK(run_cost(m, run, PITCH_REST, 64, "NNN") == 0); /* a rest is no note */
+    /* the first note has no tie, and the last has no next step */
+    CHECK(run_cost(m, find_term(m, TERM_RUN, 0, 4), 60, 67, "NN") == c.w_run);
+    CHECK(run_cost(m, find_term(m, TERM_RUN, 22, 4), 67, 60, "NN") == c.w_run);
+    CHECK(run_cost(m, find_term(m, TERM_RUN, 22, 4), 67, 60, "HN") == 0);
+    test_close(r);
+
+    /* the same piece on the quarter grid keeps its terms */
+    c.grid = GRID_QUARTER;
+    r = test_open(&c);
+    m = &r->model;
+    CHECK(m->span == 32 && m->nbars == 8);
+    CHECK(count_rule(m, CID_CONSONANCE) == 4); /* steps 8, 12, 16, 20 */
+    CHECK(count_term(m, TERM_SYNCOPATION) == 11);
+    CHECK(count_term(m, TERM_RHYTHM) == 6);
+    CHECK(count_term(m, TERM_RUN) == 0);
+    over = find_term(m, TERM_SYNCOPATION, 4, 2);
+    CHECK(tie_cost(m, over, "NH") == c.w_syncopation && tie_cost(m, over, "HH") == 0);
+    bar = find_term(m, TERM_RHYTHM, 4, 3);
+    CHECK(tie_cost(m, bar, "NNN") == c.w_rhythm && tie_cost(m, bar, "HNH") == 0);
+    test_close(r);
+}
+
+/* w_step charges each melodic interval by its size beyond a whole step:
+ * (semitones - 1) / 2, so a third 1, a fourth 2, a fifth 3, an octave 5. */
+static void test_step(void) {
+    PieceConfig c = test_config();
+    TestRun *r = test_open(&c);
+    CHECK(c.w_step == 0 && count_term(&r->model, TERM_STEP) == 0);
+    test_close(r);
+    test_set(&c, "w_step=2");
+    test_set(&c, "rhythm=1");
+    r = test_open(&c);
+    const Model *m = &r->model;
+    CHECK(count_term(m, TERM_STEP) == c.length - 1);
+    const Constraint *t = find_term(m, TERM_STEP, 3, 2);
+    CHECK(t != NULL && t->vars[t->slot[0]] == m->pitch[3] && t->vars[t->slot[1]] == m->pitch[4]);
+    static const int units[13] = {0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5};
+    int v[SCOPE_MAX];
+    for (int d = 0; d <= 12; d++) {
+        v[t->slot[0]] = 66;
+        v[t->slot[1]] = 66 + d;
+        CHECK(term_cost(m, t, v) == 2 * units[d]);
+        v[t->slot[1]] = 66 - d;
+        CHECK(term_cost(m, t, v) == 2 * units[d]);
+    }
+    v[t->slot[1]] = PITCH_REST;
+    CHECK(term_cost(m, t, v) == 0);
+    test_close(r);
+
+    /* the same on the eighth grid */
+    test_set(&c, "grid=eighth");
+    r = test_open(&c);
+    CHECK(count_term(&r->model, TERM_STEP) == c.length - 1);
+    test_close(r);
+}
+
 /* The curve term of each note carries its target: the arch until a
  * curve is drawn, then the drawn curve stretched over the melody. */
 static void check_targets(const PieceConfig *c, const int *want) {
@@ -339,6 +482,10 @@ static void test_energy(void) {
         {"key=search", "mode=search", "modulate_at=6", "pc_weight=0,1,2,3,4,5,6,7,8,9,10,11", NULL},
         {"poly_meter=1", "rhythm=1", "voices=3", NULL},
         {"tension=0,?,4,1", "w_curve=3", "mirror=1", "rhythm=1", NULL},
+        {"grid=eighth", "rhythm=1", "harmony=1", "length=20", "delay=6", NULL},
+        {"grid=eighth", "voices=3", "poly_meter=1", "rhythm=1", "max_hold=5", NULL},
+        {"w_step=2", "rhythm=1", "voices=3", NULL},
+        {"grid=eighth", "w_step=3", "rhythm=1", "max_hold=3", NULL},
     };
     for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
         PieceConfig c = test_config();
@@ -397,6 +544,8 @@ int main(void) {
     test_predicates();
     test_tension();
     test_mirror();
+    test_eighth_grid();
+    test_step();
     test_energy();
     printf("ok\n");
     return 0;

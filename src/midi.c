@@ -61,6 +61,11 @@ static int end_track(FILE *f, long len_pos, unsigned delta) {
     return fseek(f, end, SEEK_SET) == 0 ? 0 : -1;
 }
 
+/* Ticks in one step: a quarter note, or an eighth on the eighth grid. */
+static unsigned step_ticks(const Score *score) {
+    return (unsigned)(MIDI_PPQ / score_beat_steps(score));
+}
+
 static int key_signature(FILE *f, unsigned delta, int key) {
     unsigned char data[2];
     data[0] = (unsigned char)(signed char)key_fifths(key);
@@ -80,11 +85,11 @@ static int write_conductor(FILE *f, const Score *score) {
         return -1;
     unsigned last = 0;
     if (score->nsections > 1) {
-        unsigned at = (unsigned)score->modulate_at * MIDI_PPQ;
+        unsigned at = (unsigned)score->modulate_at * step_ticks(score);
         if (key_signature(f, at, score->key[1]) != 0) return -1;
         last = at;
     }
-    unsigned end = (unsigned)score->span * MIDI_PPQ;
+    unsigned end = (unsigned)score->span * step_ticks(score);
     return end_track(f, len_pos, end > last ? end - last : 0);
 }
 
@@ -102,8 +107,8 @@ static int write_voice(FILE *f, const Score *score, int v) {
     for (int k = 0; k < voice->count; k++) {
         const ScoreNote *note = &voice->notes[k];
         if (note->pitch == SOUND_REST) continue;
-        unsigned on = (unsigned)note->start * MIDI_PPQ;
-        unsigned off = on + (unsigned)note->length * MIDI_PPQ;
+        unsigned on = (unsigned)note->start * step_ticks(score);
+        unsigned off = on + (unsigned)note->length * step_ticks(score);
         unsigned char on_msg[3] = {(unsigned char)(0x90 | v), (unsigned char)note->pitch, 80};
         unsigned char off_msg[3] = {(unsigned char)(0x80 | v), (unsigned char)note->pitch, 0};
         if (write_vlq(f, on - last) != 0 || write_bytes(f, on_msg, 3) != 0 ||
@@ -111,7 +116,7 @@ static int write_voice(FILE *f, const Score *score, int v) {
             return -1;
         last = off;
     }
-    unsigned end = (unsigned)score->span * MIDI_PPQ;
+    unsigned end = (unsigned)score->span * step_ticks(score);
     return end_track(f, len_pos, end > last ? end - last : 0);
 }
 

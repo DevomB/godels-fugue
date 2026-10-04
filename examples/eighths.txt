@@ -1,0 +1,21 @@
+# The eighth-note grid: a step is an eighth, so a 4/4 bar is eight steps,
+# a quarter note two tied steps and a half note four (max_hold 3). Three
+# voices enter a bar and a half apart, on beat 3, over a chord per bar.
+# Two eighths in a row that leap cost extra (w_run), and every interval
+# past a step costs by its size (w_step), so the fast notes run by step.
+grid eighth
+length 32
+voices 3
+delay 12
+key A
+mode minor
+harmony 1
+rhythm 1
+max_hold 3
+max_rests 1
+leading_tone 1
+range_low 55
+range_high 79
+w_step 3
+w_repeat 6
+tempo 84

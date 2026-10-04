@@ -227,9 +227,58 @@ static void test_keys(void) {
     CHECK(!export_abc("output/tests/none.abc", NULL));
 }
 
+/* On the eighth grid a step is an eighth and a bar eight steps: LilyPond
+ * writes 8, 4., 2. and ties what no single value writes; ABC counts in
+ * eighths (L:1/8). */
+static void test_eighth_grid(void) {
+    static const int notes[2][8][3] = {
+        /* eighth, dotted quarter off the beat, five eighths over the barline, half */
+        {{0, 1, 60}, {1, 3, 62}, {4, 5, 64}, {9, 4, 65}},
+        /* seven eighths, an eighth, five eighths */
+        {{0, 7, 55}, {7, 1, 57}, {8, 5, 59}},
+    };
+    static const int counts[2] = {4, 3};
+    Score s;
+    build(&s, 2, 13, notes, counts);
+    s.beat_steps = 2;
+    s.key[0] = key_id(0, MODE_MAJOR);
+    test_output_dir();
+
+    CHECK(export_lilypond("output/tests/eighths.ly", &s));
+    char *ly = test_slurp("output/tests/eighths.ly", NULL);
+    CHECK(strstr(ly, "\\time 4/4 \\tempo 4 = 90") != NULL);
+    CHECK(strstr(ly, "\n      c'8 d'4. e'2~ |\n      e'8 f'2 r4. \\bar \"|.\"\n") != NULL);
+    CHECK(strstr(ly, "\\clef bass") != NULL);
+    CHECK(strstr(ly, "\n      g2.~ g8 a8 |\n      b2~ b8 r4. \\bar \"|.\"\n") != NULL);
+    free(ly);
+
+    CHECK(export_abc("output/tests/eighths.abc", &s));
+    char *abc = test_slurp("output/tests/eighths.abc", NULL);
+    CHECK(strstr(abc, "M:4/4\nL:1/8\nQ:1/4=90\n") != NULL);
+    CHECK(strstr(abc, "\nV:1\nC D3 E4- |\nE F4 z3 |]\n") != NULL);
+    CHECK(strstr(abc, "\nV:2\nG,6- G, A, |\nB,4- B, z3 |]\n") != NULL);
+    free(abc);
+
+    /* a whole bar's rest and a whole note */
+    static const int whole[1][8][3] = {{{0, 8, SOUND_REST}, {8, 8, 72}}};
+    static const int one[1] = {2};
+    build(&s, 1, 16, whole, one);
+    s.beat_steps = 2;
+    s.key[0] = key_id(0, MODE_MAJOR);
+    CHECK(export_lilypond("output/tests/whole.ly", &s));
+    ly = test_slurp("output/tests/whole.ly", NULL);
+    CHECK(strstr(ly, " r1 |\n      c''1 \\bar") != NULL);
+    free(ly);
+    CHECK(export_abc("output/tests/whole.abc", &s));
+    abc = test_slurp("output/tests/whole.abc", NULL);
+    CHECK(strstr(abc, "\nV:1\nz8 |\nc8 |]\n") != NULL);
+    free(abc);
+}
+
 int main(void) {
     test_modulating();
     test_keys();
+    test_eighth_grid();
     printf("ok\n");
     return 0;
 }

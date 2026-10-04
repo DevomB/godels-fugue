@@ -104,12 +104,18 @@ can be broken down by rule (`report.txt`, `score.html`):
   joined by straight lines;
 - **leap**, **repeat**, **recovery** – interval size, striking a pitch twice, and
   failing to step back after a leap larger than a third;
+- **step** – each interval past a whole step, by its size (`w_step`): a third costs
+  1, a fourth 2, a fifth 3, an octave 5. **leap** charges whole multiples of four
+  semitones, so it leaves thirds free and a line can hop between chord tones; this
+  favours stepwise lines;
 - **motif** – breaking a repeating interval pattern;
 - **dissonance** and **direct perfect** – graded vertical dissonance, and similar
   motion into a fifth or octave;
 - **contrary motion** – each pair of voices both moving up or both moving down from
   one step to the next (`w_contrary`), the motion balance between voices;
-- **rest**, **hold**, **syncopation**, **rhythm**, **final** – rhythm preferences;
+- **rest**, **hold**, **syncopation**, **rhythm**, **final** – rhythm preferences, and
+  **run** – two eighth notes in a row that leap more than a whole step, on the eighth
+  grid (`w_run`);
 - **chord**, **chord motion**, **non-chord tone** – harmony preferences;
 - **key**, **key distance** – accidentals of a searched key, and the distance between
   the two keys of a modulation;
@@ -215,9 +221,37 @@ With `rhythm`, each note has a tie variable and the pitch domain gains a rest, s
 durations from a quarter to a whole note appear on the one-step grid. MIDI, MusicXML,
 LilyPond, ABC and WAV carry the real durations.
 
-**Built.** **Not built**: cadence type as a variable (authentic, half, deceptive),
-phrase boundaries as variables, meter as a variable, per-voice meters (`poly_meter`
-changes which steps are strong for every voice), and form as a state machine.
+**The step grid.** A step is a quarter note, or with `grid eighth` an eighth: a beat
+is two steps and a 4/4 bar eight, so ties give eighths, quarters, dotted quarters,
+halves and longer (`max_hold` reaches 7, a whole note). Everything that thinks in bars
+or beats follows the grid:
+
+- a step is strong only where a strong beat starts (the bar's first beat, and every
+  third beat with `poly_meter`), so `consonance strong` and the chord tones still
+  fall on the downbeat and an off-beat eighth is always weak;
+- each bar of eight steps has one chord;
+- **syncopation** costs a note attacked on beat 2 or 4 and held over the next beat,
+  as on the quarter grid, and also a note attacked on an off-beat eighth and held
+  across the next beat;
+- **rhythm** costs a bar with no rhythmic variety, eight plain eighths or four plain
+  quarters;
+- **run** costs two eighth notes in a row that leap more than a whole step, since
+  fast notes move by step.
+
+Keys counted in steps (`length`, `delay`, `phase`, `modulate_at`, `rest_at`,
+`max_hold`, `max_rests`) count grid steps, and their defaults are not rescaled: on the
+eighth grid `max_hold 1` allows quarter notes at most and `max_rests 2` two eighth
+rests, so `examples/eighths.txt` sets `max_hold 3` for half notes. A melody is still
+at most 64 steps (eight bars of eighths) and a piece 128. `tempo` counts quarter notes
+on either grid. The score files write eighths (MusicXML with two divisions to the
+quarter, LilyPond `8`, ABC `L:1/8`), tie a length no single value writes, such as five
+eighths, and pad the last bar to its eight steps; `proof.json` and the page data carry
+`stepsPerBeat` and `stepsPerBar`.
+
+**Built.** The quarter and eighth grids. **Not built**: cadence type as a variable
+(authentic, half, deceptive), phrase boundaries as variables, meter as a variable
+(4/4 and the grid are fixed for the piece), per-voice meters (`poly_meter` changes
+which steps are strong for every voice), and form as a state machine.
 
 ## 10. Search
 
@@ -357,13 +391,15 @@ already expose the research data: entropy, statistics, and removals by rule.
   can be reproduced from it.
 - Inputs: text and JSON configs, and Standard MIDI files of format 0, 1 or 2
   (`midi_read.c`). `--melody-midi` reads a melody from the first track with notes,
-  rounding onsets and ends to the nearest quarter note: a held note gives its pitch
+  rounding onsets and ends to the nearest step (a quarter note, or an eighth on the
+  eighth grid): a held note gives its pitch
   on every step it covers, the highest of overlapping notes wins, and a gap is a rest.
   `--corpus` counts the pitch classes of their notes as it does for lists of pitches;
   notes on channel 10, the General MIDI drums, are skipped.
 - Outputs: MIDI, MusicXML, LilyPond, ABC, WAV, SVG, text and JSON traces, and the
   HTML page. The notation exports share one spelling (`key_spell`), cut notes at
-  barlines and at the key change with ties, and pad the last bar with a rest.
+  barlines and at the key change with ties, tie a length no single note value writes,
+  and pad the last bar with a rest.
   The WAV plays each note on a Karplus-Strong plucked string (or an organ of four
   harmonics, or a sine), pans the voices with equal power from left to right, and
   runs the mix through a small Schroeder reverb; the noise that excites each string

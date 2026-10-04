@@ -10,6 +10,7 @@
 enum { CONSONANCE_OFF, CONSONANCE_STRONG, CONSONANCE_ALL };
 enum { ORDER_MRV, ORDER_ENTROPY, ORDER_COLLAPSE, ORDER_INDEX };
 enum { INSTRUMENT_PLUCK, INSTRUMENT_ORGAN, INSTRUMENT_SINE, INSTRUMENT_COUNT };
+enum { GRID_QUARTER, GRID_EIGHTH, GRID_COUNT };
 enum { KEY_SEARCH = -1 };
 enum { TRANSPOSE_SAME = -128 };
 
@@ -18,6 +19,7 @@ enum { TRANSPOSE_SAME = -128 };
 typedef struct PieceConfig {
     /* shape */
     int length;
+    int grid;
     int voices;
     int delay;
     int voice_delay[VOICE_MAX]; /* 0 = voice * delay */
@@ -79,6 +81,7 @@ typedef struct PieceConfig {
     int w_curve;
     int tension[MELODY_MAX]; /* curve points, TENSION_FREE (?) or TENSION_UNLISTED */
     int w_leap;
+    int w_step;
     int w_repeat;
     int w_recover;
     int w_dissonance;
@@ -95,6 +98,7 @@ typedef struct PieceConfig {
     int w_hold;
     int w_syncopation;
     int w_rhythm;
+    int w_run;
     int w_final;
     int w_corpus;
     int pc_weight[12];
@@ -144,5 +148,9 @@ int config_preset_count(void);
 const char *config_preset_name(int index);
 
 int config_voice_count(const PieceConfig *config);
+/* Steps in one quarter-note beat (1, or 2 on the eighth grid) and in one
+ * 4/4 bar. */
+int config_beat_steps(const PieceConfig *config);
+int config_bar_steps(const PieceConfig *config);
 
 #endif

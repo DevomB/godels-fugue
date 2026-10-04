@@ -6,7 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 
-/* A note or rest cut at barlines and at the key change. */
+/* A note or rest cut at barlines, at the key change, and into values
+ * written as one note. */
 typedef struct Segment {
     int start;
     int steps;
@@ -15,7 +16,7 @@ typedef struct Segment {
     bool tie;         /* tied to the next segment */
 } Segment;
 
-enum { SEGMENT_MAX = SPAN_MAX + 4 }; /* each lasts a step or more */
+enum { SEGMENT_MAX = SPAN_MAX + 8 }; /* each lasts a step or more, to the end of a bar */
 
 static bool modulates(const Score *score) {
     return score->nsections > 1 && score->modulate_at > 0 && score->modulate_at < score->span;
@@ -29,7 +30,8 @@ static int key_at(const Score *score, int step) {
 /* The voice's notes plus a rest padding the last bar. */
 static int voice_segments(const Score *score, int v, Segment *out) {
     const ScoreVoice *voice = &score->voice[v];
-    int pad = (score->span + 3) / 4 * 4 - score->span;
+    int bar = score_bar_steps(score);
+    int pad = (score->span + bar - 1) / bar * bar - score->span;
     int n = 0;
     for (int k = 0; k <= voice->count; k++) {
         ScoreNote note = {score->span, pad, SOUND_REST, -1};
@@ -43,10 +45,11 @@ static int voice_segments(const Score *score, int v, Segment *out) {
         int t = note.start;
         int end = note.start + note.length;
         while (t < end && n < SEGMENT_MAX) {
-            int stop = (t / 4 + 1) * 4;
+            int stop = (t / bar + 1) * bar;
             if (modulates(score) && t < score->modulate_at && score->modulate_at < stop)
                 stop = score->modulate_at;
             if (stop > end) stop = end;
+            stop = t + score_written_steps(score, stop - t);
             Segment s = {t, stop - t, note.pitch, key_at(score, note.start),
                          note.pitch != SOUND_REST && stop < end};
             out[n++] = s;
@@ -95,11 +98,29 @@ static void ly_key(FILE *f, int key) {
     fprintf(f, "\\key %c%s \\%s", "cdefgab"[letter], ly_alter(alter), mode_name(key_mode(key)));
 }
 
-/* c' is middle C; each segment fits in a bar, so it lasts 1 to 4 steps. */
-static void ly_segment(FILE *f, const Segment *s) {
-    static const char *const durations[5] = {"", "4", "2", "2.", "1"};
+/* A segment's value: 1, 2, 3, 4, 6 or 8 eighths. */
+static const char *ly_duration(const Score *score, const Segment *s) {
+    switch (score_eighths(score, s->steps)) {
+    case 1:
+        return "8";
+    case 2:
+        return "4";
+    case 3:
+        return "4.";
+    case 4:
+        return "2";
+    case 6:
+        return "2.";
+    default:
+        return "1";
+    }
+}
+
+/* c' is middle C. */
+static void ly_segment(FILE *f, const Score *score, const Segment *s) {
+    const char *duration = ly_duration(score, s);
     if (s->pitch == SOUND_REST) {
-        fprintf(f, "r%s", durations[s->steps]);
+        fprintf(f, "r%s", duration);
         return;
     }
     int letter;
@@ -109,7 +130,7 @@ static void ly_segment(FILE *f, const Segment *s) {
     fprintf(f, "%c%s", "cdefgab"[letter], ly_alter(alter));
     for (int o = octave; o > 3; o--) fputc('\'', f);
     for (int o = octave; o < 3; o++) fputc(',', f);
-    fprintf(f, "%s%s", durations[s->steps], s->tie ? "~" : "");
+    fprintf(f, "%s%s", duration, s->tie ? "~" : "");
 }
 
 bool export_lilypond(const char *path, const Score *score) {
@@ -134,8 +155,8 @@ bool export_lilypond(const char *path, const Score *score) {
                 ly_key(f, score->key[1]);
             }
             fprintf(f, " ");
-            ly_segment(f, &segs[k]);
-            if ((segs[k].start + segs[k].steps) % 4 == 0)
+            ly_segment(f, score, &segs[k]);
+            if ((segs[k].start + segs[k].steps) % score_bar_steps(score) == 0)
                 fputs(k + 1 < n ? " |\n     " : " \\bar \"|.\"\n", f);
         }
         fprintf(f, "    }\n");
@@ -191,7 +212,8 @@ bool export_abc(const char *path, const Score *score) {
     if (path == NULL || score == NULL || score->voices < 1) return false;
     FILE *f = fopen(path, "wb"); /* the same line endings everywhere */
     if (f == NULL) return false;
-    fprintf(f, "X:1\nT:Canon Collapse\nM:4/4\nL:1/4\nQ:1/4=%d\n",
+    /* the unit note length is one step */
+    fprintf(f, "X:1\nT:Canon Collapse\nM:4/4\nL:1/%d\nQ:1/4=%d\n", 4 * score_beat_steps(score),
             score->tempo > 0 ? score->tempo : 120);
     for (int v = 0; v < score->voices; v++) {
         fprintf(f, "V:%d clef=%s name=\"Voice %d\"\n", v + 1,
@@ -214,7 +236,7 @@ bool export_abc(const char *path, const Score *score) {
                 signature(score->key[1], sig);
             }
             abc_segment(f, &segs[k], sig, marked);
-            if ((segs[k].start + segs[k].steps) % 4 != 0) {
+            if ((segs[k].start + segs[k].steps) % score_bar_steps(score) != 0) {
                 fputc(' ', f);
                 continue;
             }

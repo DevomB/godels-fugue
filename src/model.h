@@ -61,6 +61,8 @@ enum {
     TERM_NONCHORD,
     TERM_KEY,
     TERM_KEY_DISTANCE,
+    TERM_RUN,
+    TERM_STEP,
     TERM_COUNT
 };
 
@@ -90,7 +92,9 @@ enum {
     C_MIRROR            /* (pitch, pitch) mirrored around param; one slot: the middle note */
 };
 
-enum { SCOPE_MAX = 8, SLOT_MAX = 8 };
+/* The widest rule is the cadence approach to a final note held max_hold
+ * (up to 7) extra steps: its pitch, the key and eight ties. */
+enum { SCOPE_MAX = 10, SLOT_MAX = 10 };
 
 typedef struct ModelVar {
     int kind;

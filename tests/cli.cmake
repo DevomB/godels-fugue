@@ -77,6 +77,15 @@ foreach(pair IN ITEMS "canon.mid|MThd" "score.musicxml|<?xml" "score.ly|\\versio
   endif()
   expect_file("${last_dir}/${name}" "${magic}")
 endforeach()
+# The report and the proof name the step grid.
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\ngrid quarter\r?\n")
+  fail("default: report.txt lacks the grid")
+endif()
+file(READ "${last_dir}/proof.json" json)
+if(NOT json MATCHES "\"stepsPerBeat\":1,\"stepsPerBar\":4,")
+  fail("default: proof.json lacks the steps per beat and bar")
+endif()
 
 # Every example: the unsatisfiable ones exit 1 and name a core.
 set(unsat_examples lock unsat)
@@ -229,6 +238,56 @@ if(NOT report MATCHES "\ninstrument organ\r?\n")
 endif()
 run(bad_instrument 1 ERROR "config value for instrument is not valid: kazoo"
     ARGS --set instrument=kazoo)
+# The eighth grid: two steps to a beat and eight to a bar.
+run(grid_eighth 0 MATCH "melody:" "rhythm: " "chords:( [^ \r\n]+)( [^ \r\n]+)( [^ \r\n]+)( [^ \r\n]+)\r?\n"
+    ARGS --set grid=eighth --set rhythm=1 --set harmony=1 --set length=24 --set delay=8)
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\ngrid eighth\r?\n")
+  fail("grid_eighth: report.txt lacks the grid")
+endif()
+file(READ "${last_dir}/proof.json" json)
+if(NOT json MATCHES "\"stepsPerBeat\":2,\"stepsPerBar\":8,\"strong\":\\[0,8,16,24\\]")
+  fail("grid_eighth: proof.json lacks the grid's steps and strong steps")
+endif()
+run(bad_grid 1 ERROR "config value for grid is not valid: sixteenth" ARGS --set grid=sixteenth)
+# An eighth-grid piece writes its score files in eighths, and its MIDI file
+# gives back its melody on the same grid.
+run(midi_eighths 0 MATCH "melody:" ARGS --set grid=eighth --set rhythm=1 --set length=20
+    --set delay=6)
+foreach(name IN ITEMS canon.mid score.musicxml score.ly score.abc voices.wav)
+  expect_file("${last_dir}/${name}" "")
+endforeach()
+file(READ "${last_dir}/score.abc" abc)
+if(NOT abc MATCHES "\nL:1/8\nQ:1/4=120\n")
+  fail("midi_eighths: score.abc does not count in eighths")
+endif()
+file(READ "${last_dir}/score.musicxml" xml)
+if(NOT xml MATCHES "<divisions>2</divisions>" OR NOT xml MATCHES "<measure number=\"4\">"
+   OR xml MATCHES "<measure number=\"5\">")
+  fail("midi_eighths: score.musicxml lacks four bars of eighths")
+endif()
+string(REGEX MATCH "melody:( [0-9]+| rest)+" melody_line "${last_out}")
+run(melody_midi_eighths 0 MATCH "${melody_line}[^ 0-9a-z]"
+    ARGS --set grid=eighth --set rhythm=1 --set delay=6
+         --melody-midi "${OUT}/midi_eighths/canon.mid")
+# The eighth-grid example writes eighth notes in every score file.
+run(eighths_example 0 MATCH "key: A minor" "rhythm: [^\r\n]* e " "chords: "
+    ARGS --config "${SRC}/examples/eighths.txt")
+foreach(name IN ITEMS canon.mid score.musicxml score.ly score.abc voices.wav score.html)
+  expect_file("${last_dir}/${name}" "")
+endforeach()
+file(READ "${last_dir}/score.ly" ly)
+if(NOT ly MATCHES "[a-g](is|es)?[',]*8[ ~]")
+  fail("eighths_example: score.ly has no eighth notes")
+endif()
+file(READ "${last_dir}/score.musicxml" xml)
+if(NOT xml MATCHES "<type>eighth</type>")
+  fail("eighths_example: score.musicxml has no eighth notes")
+endif()
+file(READ "${last_dir}/report.txt" report)
+if(NOT report MATCHES "\ngrid eighth\r?\n")
+  fail("eighths_example: report.txt lacks the grid")
+endif()
 run(help 0 MATCH "usage: canon-collapse" ARGS --help)
 run(version 0 MATCH "canon-collapse [0-9]" ARGS --version)
 run(presets 0 MATCH "baroque" ARGS --list-presets)
