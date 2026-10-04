@@ -403,7 +403,8 @@ does. On top of `score.html` it adds:
   `tempo`) and composes again.
 - **Surprise me** rolls a new kind of piece: two or three voices, a random key and mode,
   an entry delay, a tension curve and a tempo, written out as a commented config.
-- **Sheet music**, engraved from `score.abc` by [abcjs](https://www.abcjs.net).
+- **Sheet music**, engraved from `score.abc` by [abcjs](https://www.abcjs.net), with the
+  bar being played lit up in every voice.
 - **Share links**: the address carries the config and the variation, so a link
   composes the same piece again.
 - **How many?** counts the pieces the config allows (`--count`, for up to four
