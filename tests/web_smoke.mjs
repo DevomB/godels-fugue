@@ -22,8 +22,11 @@ async function run(name, args) {
   const mod = await GodelsFugue({ print: (s) => log.push(s), printErr: (s) => log.push(s) });
   mod.FS.mkdir("/in");
   mod.FS.mkdir("/out");
-  mod.FS.writeFile("/in/piece.txt", readFileSync(join(examplesDir, name), "utf8"));
-  const status = mod.callMain(["--config", "/in/piece.txt"].concat(args));
+  /* as the worker does: a config that is an object is written as piece.json */
+  const text = readFileSync(join(examplesDir, name), "utf8");
+  const path = text.trim().startsWith("{") ? "/in/piece.json" : "/in/piece.txt";
+  mod.FS.writeFile(path, text);
+  const status = mod.callMain(["--config", path].concat(args));
   const file = (f) => {
     try { return Buffer.from(mod.FS.readFile("/out/" + f)); } catch { return null; }
   };
@@ -67,6 +70,29 @@ for (const name of ["showcase.txt", "cyclic.txt", "instrument.txt"]) {
   const r = await run("mirror.txt", ["--count", "1000000", "--time-limit", "4000"]);
   check(r.status === 0 && /^count: 1730 \(exact\)$/m.test(r.log), "mirror.txt --count: " + r.log);
   console.log("ok mirror.txt --count");
+}
+
+{
+  /* a JSON config, as the demo's editor may hold one */
+  const r = await run("lament.json", OUT);
+  check(r.status === 0, "lament.json: exit " + r.status + "\n" + r.log);
+  const proof = JSON.parse(r.file("proof.json").toString());
+  check(proof.config.key === "E" && proof.config.mood === "lament", "lament.json: the settings were not applied");
+  check(proof.perform && proof.perform.times.length === proof.span + 1, "lament.json: no performance in proof.json");
+  check(proof.form.phrases.length > 1 && proof.players.length === proof.voices, "lament.json: no form or players");
+  console.log("ok lament.json");
+}
+
+{
+  /* --resolve: the settings the demo's controls show, without composing */
+  const r = await run("players.txt", ["--resolve"]);
+  check(r.status === 0, "players.txt --resolve: exit " + r.status + "\n" + r.log);
+  const resolved = JSON.parse(r.log);
+  check(resolved.config.parts === "oboe,viola,bassoon", "players.txt --resolve: parts " + resolved.config.parts);
+  check(resolved.players[1].name === "Viola" && resolved.players[1].low >= 48, "players.txt --resolve: viola range");
+  check(resolved.keepsNotes.includes("volume") && !resolved.keepsNotes.includes("parts"), "players.txt --resolve: keepsNotes");
+  check(r.file("canon.mid") === null, "players.txt --resolve: wrote a score");
+  console.log("ok players.txt --resolve");
 }
 
 if (failures) {

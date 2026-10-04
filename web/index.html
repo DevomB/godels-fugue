@@ -157,6 +157,14 @@ pre {
 iframe { display: block; width: 100%; height: 1400px; border: 0; margin-top: 4px; background: var(--page); }
 .empty { padding: 48px 16px; text-align: center; color: var(--text-muted); }
 footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 13px; color: var(--text-muted); }
+.step { font-size: 16px; font-weight: 650; margin: 0 0 10px; }
+.shape-card .step { display: inline; margin: 0; }
+.tag { font-weight: 600; color: var(--accent); }
+.stale { border-color: var(--critical); color: var(--text-secondary); margin-bottom: 0; }
+.error { color: var(--critical); min-height: 1em; }
+.curve .pt.free { fill: var(--surface-1); stroke: var(--accent); stroke-dasharray: 3 2; }
+.slider select { grid-column: 1 / -1; width: 100%; }
+#advanced > summary h2, .how > summary h2 { display: inline; font-size: 15px; font-weight: 650; }
 </style>
 </head>
 <body>
@@ -164,10 +172,9 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   <header>
     <div>
       <h1>Gödel's Fugue</h1>
-      <p class="lede">Composes canons as a constraint problem and proves why every note is there.
-        Pick a piece and press Compose. Click any note to see the rules that put it there, or give it
-        another pitch and hear the piece re-compose around your choice. This is the C program compiled
-        to WebAssembly, running in your browser.</p>
+      <p class="lede">Composes canons as a constraint problem and shows why every note is there.
+        Pick a starting point, shape it, give each voice its player, listen, and save it.
+        This is the C program compiled to WebAssembly, running in your browser.</p>
     </div>
     <nav>
       <a href="https://github.com/DevomB/godels-fugue">Source</a>
@@ -179,74 +186,90 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   <details class="card how">
     <summary><h2>How does it work?</h2></summary>
     <ol>
-      <li>Every melody note starts with every pitch in range. A canon plays that melody against
-        delayed copies of itself, so each note is heard again in the other voices.</li>
-      <li>Rules (stay in the key, consonant strong beats, no parallel fifths, a cadence at the end)
-        remove the pitches that cannot work. Because notes are shared between voices, one removal
-        ripples through the whole piece.</li>
-      <li>When nothing more can be removed, the solver picks the cheapest note by a set of soft
-        preferences (the tension curve, smooth lines, consonance) and propagation continues until
-        every note has one pitch. Dead ends jump straight back to the decision that caused them.</li>
-      <li>Every removal is logged with the rule and the facts behind it. That proof answers
-        <em>why is this note here?</em>, replays as <em>Watch it collapse</em>, and tells you which
-        rule a what-if breaks.</li>
+      <li>A canon is one melody played against delayed copies of itself, so every note is heard again in the other voices.</li>
+      <li>The melody has a form: a subject stated first, its opening bar brought back as a sequence, a contrasting climax, and a return before the cadence. Each phrase breathes at its end.</li>
+      <li>Rules (stay in the key and in each instrument's range, consonant strong beats, no parallel fifths, a cadence) remove the pitches that cannot work; preferences rank what is left, and the solver collapses the piece note by note.</li>
+      <li>Every removal is logged with the rule behind it, so any note can answer <em>why is this here?</em>, and you can try another value and hear the piece compose itself around it.</li>
     </ol>
   </details>
 
-  <section class="card" aria-label="Compose">
+  <section class="card" aria-labelledby="start-title">
+    <h2 id="start-title" class="step">1 · Start</h2>
     <div class="row">
-      <label class="field grow">Start from
+      <label class="field grow">Starting point
         <select id="example"></select>
       </label>
       <label class="field">Variation
-        <input id="seed" type="number" min="0" max="99999" value="0" title="0 is the cheapest piece; any other number samples a different one">
+        <input id="seed" type="number" min="0" max="99999" value="0" inputmode="numeric"
+               title="0 composes the piece the settings give (the cheapest, unless they sample themselves); any other number samples a different one">
       </label>
       <button id="shuffle" type="button" title="Sample a different piece under the same rules">Shuffle</button>
-      <button id="surprise" type="button" title="Roll a new key, mode, number of voices, entries and tension curve">Surprise me</button>
+      <button id="surprise" type="button" title="A mood in a random key, a random variation">Surprise me</button>
       <button id="compose" type="button" class="primary">Compose</button>
     </div>
-    <label for="config" class="hint">Config: one <code>key value</code> per line, <code>#</code> starts a comment. Edit it and compose again.</label>
-    <textarea id="config" spellcheck="false" aria-label="Config"></textarea>
     <div class="status">
       <span role="status" aria-live="polite" class="status-text">
         <span id="badge" class="badge"><span class="dot"></span><span id="badge-text">Loading the solver</span></span>
         <span id="summary" class="summary"></span>
       </span>
       <span class="actions">
-        <button id="undo" type="button" hidden>Undo</button>
+        <button id="undo" type="button" disabled title="Back to the piece before">Undo</button>
+        <button id="redo" type="button" disabled title="Forward again">Redo</button>
         <button id="listen" type="button" disabled>Play</button>
-        <button id="watch" type="button" disabled>Watch it collapse</button>
-        <button id="count" type="button" disabled title="Count the pieces these rules allow (for up to four seconds)">How many?</button>
         <button id="share" type="button" disabled title="Copy a link to this piece">Share</button>
       </span>
     </div>
-    <div id="files" class="files"></div>
-    <details>
-      <summary>Program output</summary>
-      <pre id="log"></pre>
-    </details>
   </section>
-</div>
 
-<div class="wrap" style="padding-top:0">
   <details id="shape-card" class="card shape-card" open>
-    <summary><h2>Shape the piece</h2></summary>
+    <summary><h2 class="step">2 · Shape the piece</h2></summary>
+    <p class="hint">Each control shows the value the piece uses, including what its starting point sets.
+      <span class="tag">♪</span> changes only how it is played, so the notes stay; the others compose it again.</p>
     <div class="shape">
       <div>
-        <div class="shape-label">Tension over the piece <span class="hint">drag a point, then let go</span></div>
-        <svg id="curve" class="curve" viewBox="0 0 400 150" role="group" aria-label="Tension curve: one point per section of the melody"></svg>
-        <p class="hint" id="curve-note">Calm means tonic and third; tense means the leading tone and other unstable degrees. The cadence still ends on the tonic.</p>
+        <div class="shape-label">Tension over the melody <span class="hint">drag a point, or use the arrow keys</span></div>
+        <svg id="curve" class="curve" viewBox="0 0 400 150" role="group" aria-label="Tension curve: points spread over the melody"></svg>
+        <p class="hint" id="curve-note">Calm is the tonic and third; tense is the leading tone and other unstable degrees. The cadence still ends on the tonic.</p>
       </div>
       <div class="sliders" id="sliders"></div>
     </div>
   </details>
+</div>
+
+<div class="wrap" style="padding-top:0">
   <div id="empty" class="card empty">The score appears here.</div>
+  <p id="stale" class="card stale" hidden role="note"></p>
+</div>
+<iframe id="score" title="Score, players, playback and proof" allow="autoplay" hidden></iframe>
+
+<div class="wrap" style="padding-top:0">
   <details id="sheet-card" class="card sheet-card" open hidden>
     <summary><h2>Sheet music</h2></summary>
     <div id="sheet" class="sheet" aria-label="The canon in staff notation"></div>
   </details>
+
+  <section class="card" aria-labelledby="save-title">
+    <h2 id="save-title" class="step">3 · Save</h2>
+    <p class="hint" id="files-note">Compose a piece to save it.</p>
+    <div id="files" class="files"></div>
+  </section>
+
+  <details class="card" id="advanced">
+    <summary><h2>Advanced: the settings as text, counting, program output</h2></summary>
+    <label for="config" class="hint">Every setting as <code>key value</code> lines (<code>#</code> starts a comment) or one JSON object.
+      Edit and press Compose (Ctrl+Enter). The controls above write here too.</label>
+    <textarea id="config" spellcheck="false" aria-describedby="config-error"></textarea>
+    <p id="config-error" class="hint error" role="alert"></p>
+    <div class="row" style="margin-top:10px">
+      <button id="count" type="button" disabled title="Count the pieces these rules allow (for up to four seconds)">How many pieces do these rules allow?</button>
+      <button id="watch" type="button" disabled>Watch it collapse</button>
+    </div>
+    <details>
+      <summary>Program output</summary>
+      <pre id="log"></pre>
+    </details>
+  </details>
 </div>
-<iframe id="score" title="Score, playback and proof" allow="autoplay" hidden></iframe>
 
 <footer>
   MIT licensed. The same program runs on the command line with <code>godels-fugue --config piece.txt</code>
@@ -257,305 +280,505 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
 (function () {
   "use strict";
 
-  const PIECES = [
-    { group: "Moods", label: "Longing: a flute and cello in A minor, turning to C major", text: "# Longing: a flute and a cello in A minor that turn to C major, reaching up to the peak late and letting go.\npreset longing\n" },
-    { group: "Moods", label: "Lament: grief, for strings in D minor", text: "# Grief: strings in D minor, slow, crying out early and falling a long way by step, its sighs echoing from bar to bar.\npreset lament\n" },
-    { group: "Moods", label: "Hymn: calm, for organ in G major", text: "# Calm: an organ in G major, long notes moving by step, consonant on every strong beat, rising to a peak and coming to rest.\npreset hymn\n" },
-    { group: "Moods", label: "Triumph: victory, for brass in C major", text: "# Victory: brass in C major, leaping like fanfares, its motifs in sequence, climbing to the peak near the end and finishing loud.\npreset triumph\n" },
-    { group: "Moods", label: "Dance: joy, a round for woodwinds in F major", text: "# Joy: a round for woodwinds in F major, quick and light, a bouncing motif that keeps coming back.\npreset dance\n" },
-    { group: "Moods", label: "Nocturne: night, a piano duet in E-flat major", text: "# Night: a quiet piano duet in E-flat major, slow and songlike, rising once and falling away.\npreset nocturne\n" },
-    { group: "Examples", label: "A canon in D minor with sixteenth-note figures", file: "sixteenths.txt" },
-    { group: "Examples", label: "A three-voice canon in D minor, in eighth notes", file: "showcase.txt" },
-    { group: "Examples", label: "Running eighth notes in A minor", file: "eighths.txt" },
-    { group: "Examples", label: "A saxophone quartet, each part in its own key", file: "sax_quartet.txt" },
-    { group: "Examples", label: "A rhythmic canon, ready to replay", file: "replay.txt" },
-    { group: "Examples", label: "The plain two-voice canon", file: "two_voice.txt" },
-    { group: "Examples", label: "A round that loops forever", file: "cyclic.txt" },
-    { group: "Examples", label: "A mirror melody (same backwards and upside down)", file: "mirror.txt" },
-    { group: "Examples", label: "Three voices, leading tones resolve", file: "counterpoint.txt" },
-    { group: "Examples", label: "Three voices on an organ", file: "instrument.txt" },
-    { group: "Examples", label: "Four voices entering off the beat", file: "four_voice.txt" },
-    { group: "Examples", label: "A canon at the third and fifth, in key", file: "diatonic.txt" },
-    { group: "Examples", label: "A chord under every bar", file: "harmony.txt" },
-    { group: "Examples", label: "Modulation mid-piece", file: "modulate.txt" },
-    { group: "Examples", label: "The follower upside down", file: "inversion.txt" },
-    { group: "Examples", label: "The follower backwards", file: "retrograde.txt" },
-    { group: "Examples", label: "A tension curve drawn by hand", file: "tension.txt" },
-    { group: "Examples", label: "Complete a melody given in part", file: "given.txt" },
-    { group: "Examples", label: "An impossible rule set, and why", file: "unsat.txt" },
+  const MOODS = [
+    ["longing", "Longing: flute and cello, A minor turning to C major"],
+    ["lament", "Lament: grief, strings in D minor"],
+    ["hymn", "Hymn: calm, organ in G major"],
+    ["triumph", "Triumph: brass fanfares in C major"],
+    ["dance", "Dance: a quick round for woodwinds in F major"],
+    ["nocturne", "Nocturne: a quiet piano duet in E-flat major"],
+  ];
+  const DEMOS = [
+    ["form.txt", "A form: a subject, its returns, a climax and a return"],
+    ["players.txt", "Three players chosen one by one, each with its own mix"],
+    ["sixteenths.txt", "Sixteenth-note figures in D minor"],
+    ["showcase.txt", "Three voices in D minor, in eighth notes"],
+    ["sax_quartet.txt", "A saxophone quartet, each part in its own key"],
+    ["eighths.txt", "Running eighth notes in A minor"],
+    ["replay.txt", "A rhythmic canon"],
+    ["two_voice.txt", "The plain two-voice canon"],
+    ["cyclic.txt", "A round that loops"],
+    ["mirror.txt", "A mirror melody (the same backwards and upside down)"],
+    ["counterpoint.txt", "Leading tones that resolve"],
+    ["four_voice.txt", "Four voices entering off the beat"],
+    ["diatonic.txt", "A canon at the third and fifth, in key"],
+    ["harmony.txt", "A chord under every bar"],
+    ["modulate.txt", "Modulation mid-piece"],
+    ["inversion.txt", "The follower upside down"],
+    ["retrograde.txt", "The follower backwards"],
+    ["tension.txt", "A tension curve drawn by hand"],
+    ["given.txt", "Complete a melody given in part"],
+    ["unsat.txt", "An impossible rule set, and why"],
   ];
   const DOWNLOADS = [
-    ["canon.mid", "MIDI", "audio/midi"],
+    ["canon.mid", "MIDI (performed)", "audio/midi"],
+    ["voices.wav", "WAV (synths)", "audio/wav"],
     ["score.musicxml", "MusicXML", "application/vnd.recordare.musicxml+xml"],
     ["score.ly", "LilyPond", "text/plain"],
     ["score.abc", "ABC", "text/plain"],
-    ["voices.wav", "WAV", "audio/wav"],
     ["proof.json", "proof.json", "application/json"],
     ["report.txt", "report.txt", "text/plain"],
     ["explain.txt", "explain.txt", "text/plain"],
   ];
+  /* the engine's built-in arch (theory.c), drawn when no curve is set */
+  const ARCH = [0, 0, 1, 2, 3, 3, 2, 1, 1, 0, 0, 0];
   const SAMPLE_TEMPERATURE = 3;
+  const HISTORY_MAX = 20;
+  /* players keys the score page may set, and their values */
+  const PLAYER_KEYS = /^(parts|part_low|part_high|volume|pan|articulation|intensity|delay_[123]|transpose_[123])$/;
+  const LIVE_KEYS = { volume: 1, pan: 1 };
 
   const $ = function (id) { return document.getElementById(id); };
-  const select = $("example"), config = $("config"), seed = $("seed");
-  const compose = $("compose"), shuffle = $("shuffle");
+  const select = $("example"), editor = $("config"), seed = $("seed");
   const badge = $("badge"), badgeText = $("badge-text"), summary = $("summary");
-  const files = $("files"), log = $("log"), frame = $("score"), empty = $("empty");
-  const undo = $("undo"), listen = $("listen"), watch = $("watch"), share = $("share");
+  const files = $("files"), filesNote = $("files-note"), log = $("log"), frame = $("score"), empty = $("empty");
+  const undoBtn = $("undo"), redoBtn = $("redo"), listen = $("listen"), share = $("share"), staleNote = $("stale");
 
-  let worker = null, runId = 0, urls = [], observer = null;
-  // What-if state: earlier configs to undo to, the note being tried, the
-  // variable to show once the new score loads, and the last solved melody.
-  let undoStack = [], trying = null, pendingSelect = null, lastMelody = null, composed = null;
-  let pendingChanged = [];
+  /* ---------- state ----------
+     The editor holds the draft. A piece is what one run made from a draft:
+     its text, variation, files and proof. `current` is the piece the score
+     shows when it is up to date; history holds the pieces to undo to. */
+  let current = null, pieces = [], at = -1;
+  let resolved = null;          /* the engine's view of the draft: config, players, form */
+  let frameRun = null, frameStale = false, trying = null, lastMelody = null;
+  let urls = [];
+  let listenState = loadListen();
 
   function setBadge(kind, text) {
     badge.className = "badge " + kind;
     badgeText.textContent = text;
   }
+  function loadListen() {
+    try { return JSON.parse(localStorage.getItem("godels-fugue:listen")) || {}; } catch (_) { return {}; }
+  }
+  function saveListen() {
+    try { localStorage.setItem("godels-fugue:listen", JSON.stringify(listenState)); } catch (_) { /* private mode */ }
+  }
 
-  function startWorker() {
-    try {
-      worker = new Worker("worker.js");
-    } catch (err) {
+  /* ---------- the settings text: the one place edits go through ---------- */
+  function isJson(text) { return text.trim().startsWith("{"); }
+  /* a # starts a comment at the start of a line or after a space, as in the engine */
+  function commentAt(line) {
+    for (let i = 0; i < line.length; i++) if (line[i] === "#" && (i === 0 || /\s/.test(line[i - 1]))) return i;
+    return -1;
+  }
+  function lineKey(line) {
+    const c = commentAt(line);
+    const body = (c >= 0 ? line.slice(0, c) : line).trim();
+    return body ? body.split(/\s+/)[0] : null;
+  }
+  /* Sets keys (null removes them). The engine applies a key's last line, so
+     that line takes the value, keeping its place and comment, and earlier
+     ones are removed; a JSON config gets the member. */
+  function setKeys(text, changes) {
+    if (isJson(text)) {
+      const obj = JSON.parse(text);
+      for (const k of Object.keys(changes)) {
+        if (changes[k] === null) delete obj[k]; else obj[k] = String(changes[k]);
+      }
+      return JSON.stringify(obj, null, 2) + "\n";
+    }
+    let lines = text.replace(/\s+$/, "").split("\n");
+    for (const k of Object.keys(changes)) {
+      const last = lines.reduce(function (found, l, i) { return lineKey(l) === k ? i : found; }, -1);
+      if (changes[k] !== null && last >= 0) {
+        const old = lines[last], c = commentAt(old);
+        lines[last] = k + " " + changes[k] + (c >= 0 ? " " + old.slice(c) : "");
+      }
+      lines = lines.filter(function (l, i) { return lineKey(l) !== k || (i === last && changes[k] !== null); });
+      if (changes[k] !== null && last < 0) lines.push(k + " " + changes[k]);
+    }
+    return lines.join("\n").replace(/^\n+/, "") + "\n";
+  }
+  function variation() { return Math.max(0, Math.min(99999, Math.floor(Number(seed.value) || 0))); }
+  function extraArgs(n) { return n === 0 ? [] : ["--set", "seed=" + n, "--set", "temperature=" + SAMPLE_TEMPERATURE]; }
+  /* the settings that remake a piece exactly, variation included */
+  function pieceText(p) {
+    return p.seed === 0 ? p.text : setKeys(p.text, { seed: p.seed, temperature: SAMPLE_TEMPERATURE });
+  }
+
+  /* ---------- the solver, in two workers ----------
+     One composes (a new request cancels the one running); the other only
+     resolves the draft, so the controls show what the engine would use. */
+  let composer = null, job = null, nextId = 0;
+  function startComposer() {
+    try { composer = new Worker("worker.js"); } catch (_) {
       setBadge("bad", "Cannot start the solver");
       summary.textContent = "Serve this folder over HTTP (for example: python -m http.server) and reload.";
       return false;
     }
-    worker.onmessage = function (e) { if (e.data.id === runId || e.data.id === undefined) finish(e.data); };
-    worker.onerror = function () {
-      setBadge("bad", "The solver failed to load");
-      summary.textContent = "Serve this folder over HTTP and reload.";
+    composer.onmessage = function (e) {
+      const r = e.data || {};
+      if (!job || r.id !== job.id) return; /* a request given up on */
+      const j = job;
+      job = null;
       busy(false);
+      j.done(r);
+    };
+    composer.onerror = function () {
+      const j = job;
+      job = null;
+      composer.terminate();
+      composer = null; /* the next request starts a new one */
+      busy(false);
+      if (j) j.done({ id: j.id, error: "The solver failed to load. Serve this folder over HTTP and reload." });
     };
     return true;
   }
-
-  function busy(on) {
-    compose.disabled = on;
-    shuffle.disabled = on;
-    $("surprise").disabled = on;
-    $("count").disabled = on;
-  }
-
-  // The settings the run adds after the config: a variation samples instead of
-  // always taking the cheapest value.
-  function extraArgs() {
-    const n = Math.max(0, Math.floor(Number(seed.value) || 0));
-    return n === 0 ? [] : ["--set", "seed=" + n, "--set", "temperature=" + SAMPLE_TEMPERATURE];
-  }
-
-  function run() {
-    if (!worker && !startWorker()) return;
-    runId += 1;
-    syncShape();
-    composed = { config: config.value, seed: String(Math.max(0, Math.floor(Number(seed.value) || 0))) };
+  function runJob(mode, text, args, done) {
+    if (job) { composer.terminate(); composer = null; job = null; }
+    if (!composer && !startComposer()) return -1;
+    const id = ++nextId;
+    job = { id: id, done: done };
     busy(true);
+    composer.postMessage({ id: id, mode: mode, config: text, args: args });
+    return id;
+  }
+  function busy(on) {
+    $("count").disabled = on || !current;
+  }
+
+  let resolver = null, resolveId = 0, resolveTimer = 0;
+  function resolveDraft(now) {
+    clearTimeout(resolveTimer);
+    resolveTimer = setTimeout(function () {
+      if (!resolver) {
+        try { resolver = new Worker("worker.js"); } catch (_) { return; }
+        resolver.onmessage = function (e) {
+          const r = e.data || {};
+          if (r.id !== resolveId) return;
+          const error = $("config-error");
+          if (r.status === 0) {
+            try { resolved = JSON.parse(r.out); } catch (_) { resolved = null; }
+            error.textContent = "";
+            syncControls();
+          } else {
+            error.textContent = engineError(r) || "These settings are not valid.";
+          }
+        };
+        resolver.onerror = function () { resolver.terminate(); resolver = null; };
+      }
+      resolver.postMessage({ id: ++resolveId, mode: "resolve", config: editor.value });
+    }, now ? 0 : 250);
+  }
+  /* the engine's error line: the first message that is not a note */
+  function engineError(r) {
+    if (r.error) return r.error;
+    const lines = String(r.err || "").split("\n").map(function (l) { return l.trim(); });
+    return lines.find(function (l) { return l && !l.startsWith("note:"); }) || "";
+  }
+  function parseProof(out) {
+    if (!out || !out["proof.json"]) return null;
+    try { return JSON.parse(new TextDecoder().decode(out["proof.json"])); } catch (_) { return null; }
+  }
+  function melodyOf(proof) {
+    return (proof.variables || []).filter(function (v) { return v.kind === "pitch"; })
+      .sort(function (a, b) { return a.index - b.index; }).map(function (v) { return v.value; });
+  }
+  function sameNotes(a, b) {
+    if (!a || !b || a.score.length !== b.score.length) return false;
+    return a.score.every(function (voice, v) {
+      const other = b.score[v];
+      return voice.length === other.length && voice.every(function (n, k) {
+        return n.start === other[k].start && n.length === other[k].length && n.pitch === other[k].pitch;
+      });
+    });
+  }
+
+  /* ---------- composing ---------- */
+  function compose(why) {
+    const text = editor.value, n = variation();
     setBadge("busy", "Composing");
     summary.textContent = "";
-    worker.postMessage({ id: runId, config: config.value, args: extraArgs() });
+    const tried = why && why.trying ? why.trying : null;
+    const id = runJob("compose", text, extraArgs(n), function (r) { composed(r, { id: id, text: text, seed: n, trying: tried }); });
   }
-
-  function line(text, prefix) {
-    const hit = text.split("\n").find(function (l) { return l.startsWith(prefix); });
-    return hit ? hit.slice(prefix.length).trim() : "";
-  }
-
-  function finish(result) {
-    busy(false);
-    if (result.mode === "count") return counted(result);
-    log.textContent = result.log || "";
-    const tried = trying;
-    trying = null;
-    pendingChanged = [];
-    if (result.error) {
-      setBadge("bad", "Error");
-      summary.textContent = result.error;
+  function composed(r, req) {
+    log.textContent = [r.out, r.err, r.error].filter(Boolean).join("\n");
+    const proof = r.status === 0 ? parseProof(r.files) : null;
+    if (proof) {
+      const piece = { run: req.id, text: req.text, seed: req.seed, files: r.files, proof: proof, ms: r.ms };
+      const before = current;
+      remember(piece);
+      show(piece, req.trying && before ? before : null, req.trying);
       return;
     }
-    const secs = (result.ms / 1000).toFixed(result.ms < 10000 ? 2 : 1) + " s";
-    const text = result.log || "";
-    if (result.status === 0) {
-      const key = line(text, "key:");
-      const energy = line(text, "energy:").split(" ")[0];
-      const melody = line(text, "melody:").split(/\s+/);
-      setBadge("good", "Solved in " + secs);
-      pendingChanged = tried && lastMelody ? changedNotes(lastMelody, melody, tried.index) : [];
-      summary.textContent = tried && lastMelody
-        ? tried.var + " = " + tried.label + ": " + ripple(pendingChanged)
-        : [key, energy && "energy " + energy].filter(Boolean).join(" · ");
-      lastMelody = melody;
-    } else if (result.status === 3) {
+    /* no piece: say why, and never let the last piece pass for this one */
+    const failed = parseProof(r.files);
+    const why = engineError(r);
+    if (r.status === 3) {
       setBadge("bad", "Search limit reached");
-      summary.textContent = "Raise max_nodes or time_limit, or loosen the rules.";
+      summary.textContent = "No piece was found within the search limit. That is not proof that none exists: raise max_nodes or time_limit, or loosen the rules.";
+    } else if (failed && failed.status === "unsat") {
+      setBadge("bad", "No piece fits these rules");
+      const core = (failed.core || []).join(", ");
+      summary.textContent = req.trying
+        ? req.trying.var + " = " + req.trying.label + " cannot work: " + (why || "the rules that clash are " + core) + ". Undo to go back."
+        : "Rules that clash: " + (core || "see the score below") + (failed.coreApproximate ? " (approximate: a trial hit the search limit)" : "") + ".";
     } else {
-      const core = line(text, "core:");
-      const broken = line(text, "violation:");
-      const first = text.split("\n").find(function (l) { return l.trim() !== ""; }) || "";
-      setBadge("bad", core ? "No piece fits these rules" : "Rejected");
-      if (tried && (broken || core)) {
-        summary.textContent = tried.var + " = " + tried.label + " cannot work: " + (broken || "the rules that clash are " + core) + ". Undo to go back.";
-      } else {
-        summary.textContent = core ? "Rules that clash: " + core + ". Open the score below to see where." : first;
+      setBadge("bad", "Not composed");
+      summary.textContent = why || "The program stopped without a piece.";
+    }
+    if (r.files && r.files["score.html"]) {
+      showFrame(r.files["score.html"], req.id, false); /* the failure page explains the clash */
+    } else if (current) {
+      markStale("These settings made no piece. The score below is the last piece that worked, from before your change.");
+    }
+    showFiles(null);
+    updateUndo();
+  }
+  /* the piece and its files on screen; what-if results say what moved */
+  function show(piece, before, tried) {
+    current = piece;
+    const p = piece.proof;
+    const secs = (piece.ms / 1000).toFixed(piece.ms < 10000 ? 2 : 1) + " s";
+    setBadge("good", "Composed in " + secs);
+    const melody = melodyOf(p);
+    let changed = [];
+    if (tried && before) {
+      const old = melodyOf(before.proof);
+      changed = melody.map(function (x, i) { return i !== tried.index && x !== old[i] ? i : -1; }).filter(function (i) { return i >= 0; });
+      summary.textContent = tried.var + " = " + tried.label + ": " + (changed.length
+        ? changed.length + " other note" + (changed.length === 1 ? "" : "s") + " changed to fit, outlined in the score"
+        : "the rest of the piece stays the same");
+    } else {
+      const key = (p.keys || []).map(function (k) { return k.name; }).join(" → ");
+      const phrases = p.form && p.form.phrases ? p.form.phrases.length : 1;
+      summary.textContent = [key, phrases > 1 ? phrases + " phrases" : "", p.perform ? p.perform.mood + " mood" : "",
+                             "energy " + p.energy.total].filter(Boolean).join(" · ");
+    }
+    lastMelody = melody;
+    staleNote.hidden = true;
+    showFrame(piece.files["score.html"], piece.run, false, changed, tried ? tried.var : null);
+    showFiles(piece);
+    showSheet(piece);
+    resolved = { config: p.config, players: p.players, form: p.form, keepsNotes: p.keepsNotes, instruments: p.instruments };
+    syncControls();
+    listen.disabled = !p.perform;
+    share.disabled = false;
+    share.textContent = "Share";
+    $("watch").disabled = false;
+    busy(false);
+    try {
+      history.replaceState(null, "", "#piece=" + encode(piece.text) + (piece.seed ? "&v=" + piece.seed : ""));
+      lastHash = location.hash;
+    } catch (_) { /* a page opened from a file cannot rewrite its address */ }
+  }
+  function markStale(text) {
+    frameStale = true;
+    staleNote.textContent = text;
+    staleNote.hidden = false;
+    if (frame.contentWindow && !frame.hidden)
+      frame.contentWindow.postMessage({ type: "godels-fugue:host", run: frameRun, stale: true, listen: listenState,
+                                        theme: document.documentElement.dataset.theme || null }, "*");
+  }
+
+  /* A change that keeps the notes: the engine performs the piece again (or
+     only writes its files again, for the mix), and the score page takes the
+     new performance without reloading. Should the notes come out different
+     after all, it is shown as a new piece and said so. */
+  function perform(kind) {
+    if (!current) return compose();
+    const text = editor.value, n = variation();
+    setBadge("busy", kind === "live" ? "Updating the files" : "Performing it again");
+    const id = runJob("compose", text, extraArgs(n), function (r) {
+      const proof = r.status === 0 ? parseProof(r.files) : null;
+      if (!proof || !sameNotes(proof, current.proof)) {
+        composed(r, { id: id, text: text, seed: n });
+        if (proof) summary.textContent += " The notes changed as well, though only the performance was edited (a search limit may have cut the optimizer).";
+        return;
       }
-    }
-    showFiles(result.files || {});
+      const piece = { run: id, text: text, seed: n, files: r.files, proof: proof, ms: r.ms };
+      remember(piece);
+      current = piece;
+      frameRun = id;
+      setBadge("good", kind === "live" ? "Files updated" : "Performed again");
+      summary.textContent = "Same notes, " + (kind === "live" ? "new mix in canon.mid and voices.wav" : "new performance in the player and the files") + ".";
+      const w = frame.contentWindow;
+      if (w) {
+        w.postMessage(hostMessage(id), "*");
+        w.postMessage({ type: "godels-fugue:perform", perform: proof.perform, config: proof.config,
+                        notes: proof.score.map(function (voice) { return voice.map(function (x) { return { vel: x.vel, sound: x.sound }; }); }) }, "*");
+      }
+      showFiles(piece);
+      resolved = { config: proof.config, players: proof.players, form: proof.form, keepsNotes: proof.keepsNotes, instruments: proof.instruments };
+      syncControls();
+      try {
+        history.replaceState(null, "", "#piece=" + encode(text) + (n ? "&v=" + n : ""));
+        lastHash = location.hash;
+      } catch (_) { /* opened from a file */ }
+    });
   }
-
-  // How many pieces the rules allow: exact when the count finishes, a lower
-  // bound when it stops at the limit.
-  $("count").addEventListener("click", function () {
-    if (!worker && !startWorker()) return;
-    runId += 1;
-    busy(true);
-    setBadge("busy", "Counting");
-    summary.textContent = "Counting every piece these rules allow, for up to four seconds";
-    worker.postMessage({ id: runId, mode: "count", config: config.value, args: [] });
-  });
-  function counted(result) {
-    const m = /^count: (at least )?(\d+)/m.exec(result.log || "");
-    if (result.error || !m) {
-      setBadge("bad", "Could not count");
-      summary.textContent = result.error || (result.log || "").split("\n")[0];
+  /* every edit, from a control, the score page or a what-if */
+  /* does the draft still say what the piece on screen was made from? */
+  function clean() {
+    return current !== null && at >= 0 && pieces[at] === current && editor.value === current.text &&
+           variation() === current.seed;
+  }
+  function edit(changes, kind, why) {
+    /* a performance edit to a draft that differs from the piece composes */
+    if (!clean()) kind = "compose";
+    let next;
+    try { next = setKeys(editor.value, changes); } catch (err) {
+      setBadge("bad", "Not applied");
+      summary.textContent = "The settings are not valid JSON, so the change was not made: " + err.message;
       return;
     }
-    const n = Number(m[2]), exact = !m[1];
-    setBadge("good", "Counted in " + (result.ms / 1000).toFixed(1) + " s");
-    summary.textContent = n === 0 ? "These rules allow no piece at all."
-      : (exact ? "These rules allow exactly " : "These rules allow at least ") + n.toLocaleString() +
-        " different piece" + (n === 1 ? "" : "s") + (exact ? "" : " (the count stopped there)") +
-        "; the solver composes the cheapest, and Shuffle samples others.";
+    editor.value = next;
+    resolveDraft();
+    if (kind === "compose") compose(why); else perform(kind);
+  }
+  function kindOf(key) {
+    const keeps = resolved && resolved.keepsNotes ? resolved.keepsNotes.indexOf(key) >= 0 : false;
+    return !keeps ? "compose" : LIVE_KEYS[key] ? "live" : "perform";
   }
 
-  // The other melody notes a what-if changed, and how to say so.
-  function changedNotes(before, after, index) {
-    const changed = [];
-    for (let i = 0; i < after.length; i++) if (i !== index && before[i] !== after[i]) changed.push(i);
-    return changed;
+  /* ---------- history: composed pieces, undo and redo without composing again ---------- */
+  function remember(piece) {
+    pieces = pieces.slice(0, at + 1);
+    pieces.push(piece);
+    if (pieces.length > HISTORY_MAX) pieces.shift();
+    at = pieces.length - 1;
+    updateUndo();
   }
-  function ripple(changed) {
-    if (!changed.length) return "the rest of the piece stays the same";
-    return changed.length + " other note" + (changed.length === 1 ? "" : "s") + " changed to fit, outlined in the score ("
-      + changed.map(function (i) { return "x" + i; }).join(", ") + ")";
+  function travel(step) {
+    /* the first undo throws away an edit that made no piece, or one not composed */
+    if (step < 0 && at >= 0 && !clean()) step = 0;
+    const to = at + step;
+    if (to < 0 || to >= pieces.length) return;
+    at = to;
+    const p = pieces[at];
+    editor.value = p.text;
+    seed.value = String(p.seed);
+    trying = null;
+    show(p, null, null);
+    updateUndo();
   }
+  function updateUndo() {
+    undoBtn.disabled = !(at > 0 || (at >= 0 && !clean()));
+    redoBtn.disabled = at < 0 || at >= pieces.length - 1;
+  }
+  undoBtn.addEventListener("click", function () { travel(-1); });
+  redoBtn.addEventListener("click", function () { travel(1); });
 
-  // Replaces the config's melody line, or adds one; an all-free melody drops it.
-  function withMelody(text, melody) {
-    const lines = text.replace(/\s+$/, "").split("\n");
-    const at = lines.findIndex(function (l) { return /^\s*melody(\s|$)/.test(l); });
-    const free = melody.split(" ").every(function (t) { return t === "?"; });
-    if (at >= 0) {
-      if (free) lines.splice(at, 1); else lines[at] = "melody " + melody;
-    } else if (!free) {
-      lines.push("melody " + melody);
+  /* ---------- the score page ---------- */
+  let observer = null, frameUrl = null, framePending = null;
+  function hostMessage(run) {
+    return { type: "godels-fugue:host", run: run, theme: document.documentElement.dataset.theme || null, listen: listenState };
+  }
+  function showFrame(bytes, run, stale, changed, selectVar) {
+    if (frameUrl) URL.revokeObjectURL(frameUrl);
+    frameUrl = URL.createObjectURL(new Blob([bytes], { type: "text/html" }));
+    frameRun = run;
+    frameStale = stale;
+    framePending = { changed: changed || [], select: selectVar || null };
+    frame.hidden = false;
+    empty.hidden = true;
+    frame.src = frameUrl;
+  }
+  /* The score page is same-origin (a blob URL from this page), so its height
+     can follow its content. */
+  frame.addEventListener("load", function () {
+    let doc;
+    try { doc = frame.contentDocument; } catch (_) { return; }
+    if (!doc || !doc.body) return;
+    const fit = function () { frame.style.height = doc.documentElement.scrollHeight + "px"; };
+    if (observer) observer.disconnect();
+    observer = new ResizeObserver(fit);
+    observer.observe(doc.body);
+    fit();
+    const w = frame.contentWindow;
+    w.postMessage(Object.assign(hostMessage(frameRun), { stale: frameStale }), "*");
+    if (framePending && framePending.changed.length) w.postMessage({ type: "godels-fugue:changed", notes: framePending.changed }, "*");
+    if (framePending && framePending.select) w.postMessage({ type: "godels-fugue:select", var: framePending.select }, "*");
+    framePending = null;
+  });
+  /* messages from the score page: checked for their source, the piece they
+     belong to and their shape before anything is changed */
+  window.addEventListener("message", function (e) {
+    if (e.source !== frame.contentWindow) return;
+    const m = e.data;
+    if (!m || typeof m.type !== "string" || m.run !== frameRun) return;
+    if (m.type === "godels-fugue:theme" && (m.theme === "light" || m.theme === "dark")) {
+      document.documentElement.dataset.theme = m.theme;
+      if (current) showSheet(current);
+    } else if (m.type === "godels-fugue:bar" && Number.isInteger(m.bar)) {
+      document.querySelectorAll("#sheet .playing").forEach(function (g) { g.classList.remove("playing"); });
+      if (m.bar >= 0)
+        document.querySelectorAll("#sheet .abcjs-mm" + m.bar + ".abcjs-note, #sheet .abcjs-mm" + m.bar + ".abcjs-rest")
+          .forEach(function (g) { g.classList.add("playing"); });
+    } else if (m.type === "godels-fugue:listen" && m.listen && typeof m.listen === "object") {
+      const l = m.listen;
+      listenState = {
+        mute: Array.isArray(l.mute) ? l.mute.map(Boolean).slice(0, 4) : [],
+        solo: Array.isArray(l.solo) ? l.solo.map(Boolean).slice(0, 4) : [],
+        sound: l.sound === "synth" ? "synth" : "sampled",
+        bass: l.bass === true,
+        loop: l.loop === true,
+      };
+      saveListen();
+    } else if (frameStale) {
+      return; /* no edits from a page showing an old piece */
+    } else if (m.type === "godels-fugue:what-if" && Number.isInteger(m.index) && typeof m.melody === "string" &&
+               /^[0-9?a-z ]{1,1024}$/.test(m.melody) && typeof m.var === "string" && typeof m.label === "string") {
+      const changes = { melody: m.melody };
+      /* a lock on the same note would contradict the new value */
+      const cfg = resolved ? resolved.config : {};
+      if (cfg.lock === "1" && Number(cfg.lock_index) === m.index) changes.lock = "0";
+      trying = { var: m.var, label: m.label.slice(0, 16), index: m.index };
+      edit(changes, "compose", { trying: trying });
+    } else if (m.type === "godels-fugue:set" && typeof m.key === "string" && PLAYER_KEYS.test(m.key) &&
+               typeof m.value === "string" && /^[a-z0-9_,\- ]{1,80}$/.test(m.value)) {
+      edit(Object.fromEntries([[m.key, m.value]]), kindOf(m.key));
     }
-    return lines.join("\n") + "\n";
-  }
-
-  // The score page's Theme button switches this page too, and the sheet music
-  // is engraved again in the new text colour.
-  // Picking an ensemble in the score page composes again with it, so the
-  // sheet music and downloads name each part and write transposing ones
-  // (an E-flat alto sax, a B-flat tenor) in their own keys.
-  window.addEventListener("message", function (e) {
-    const m = e.data || {};
-    if (e.source !== frame.contentWindow || m.type !== "godels-fugue:ensemble") return;
-    if (keyValue(config.value, "ensemble") === m.value) return;
-    steer("ensemble", m.value);
-  });
-  window.addEventListener("message", function (e) {
-    const m = e.data || {};
-    if (e.source !== frame.contentWindow || m.type !== "godels-fugue:theme") return;
-    document.documentElement.dataset.theme = m.theme;
-    if (lastAbc) showSheet(lastAbc);
-  });
-  // Follow along: the score page reports the bar it is playing.
-  window.addEventListener("message", function (e) {
-    const m = e.data || {};
-    if (e.source !== frame.contentWindow || m.type !== "godels-fugue:bar") return;
-    document.querySelectorAll("#sheet .playing").forEach(function (g) { g.classList.remove("playing"); });
-    if (m.bar >= 0)
-      document.querySelectorAll("#sheet .abcjs-mm" + m.bar + ".abcjs-note, #sheet .abcjs-mm" + m.bar + ".abcjs-rest")
-        .forEach(function (g) { g.classList.add("playing"); });
-  });
-  window.addEventListener("message", function (e) {
-    const m = e.data || {};
-    if (e.source !== frame.contentWindow || m.type !== "godels-fugue:what-if") return;
-    if (config.value.trim().startsWith("{")) {
-      summary.textContent = "Trying other values works with text configs, not JSON.";
-      return;
-    }
-    undoStack.push({ config: config.value, seed: seed.value, melody: lastMelody });
-    undo.hidden = false;
-    config.value = withMelody(config.value, m.melody);
-    trying = { var: m.var, label: m.label, index: Number(m.var.slice(1)) };
-    pendingSelect = m.var;
-    run();
-  });
-  undo.addEventListener("click", function () {
-    const h = undoStack.pop();
-    if (!h) return;
-    config.value = h.config;
-    seed.value = h.seed;
-    lastMelody = h.melody;
-    undo.hidden = undoStack.length === 0;
-    run();
   });
   listen.addEventListener("click", function () {
-    frame.contentWindow.postMessage({ type: "godels-fugue:play" }, "*");
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type: "godels-fugue:play" }, "*");
   });
-  watch.addEventListener("click", function () {
-    frame.contentWindow.postMessage({ type: "godels-fugue:collapse" }, "*");
+  $("watch").addEventListener("click", function () {
+    if (frame.contentWindow) frame.contentWindow.postMessage({ type: "godels-fugue:collapse" }, "*");
   });
 
-  function showFiles(out) {
+  /* ---------- saving ---------- */
+  function showFiles(piece) {
     urls.forEach(URL.revokeObjectURL);
     urls = [];
     files.textContent = "";
+    if (!piece) {
+      filesNote.textContent = current
+        ? "These settings made no piece, so there is nothing new to save. Undo goes back to the last piece that worked."
+        : "Compose a piece to save it.";
+      return;
+    }
+    filesNote.textContent = "The files of the piece above. MIDI and WAV are performed as the player plays them; WAV uses synths, not the sampled instruments.";
     DOWNLOADS.forEach(function (d) {
-      if (!out[d[0]]) return;
-      const url = URL.createObjectURL(new Blob([out[d[0]]], { type: d[2] }));
-      urls.push(url);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = d[0];
-      a.textContent = d[1];
-      files.appendChild(a);
+      if (!piece.files[d[0]]) return;
+      link(new Blob([piece.files[d[0]]], { type: d[2] }), d[0], d[1]);
     });
-    // The config that made this piece, to run again with godels-fugue --config piece.txt.
-    const piece = document.createElement("a");
-    piece.href = URL.createObjectURL(new Blob([composed.config +
-      (composed.seed !== "0" ? "seed " + composed.seed + "\ntemperature " + SAMPLE_TEMPERATURE + "\n" : "")], { type: "text/plain" }));
-    urls.push(piece.href);
-    piece.download = "piece.txt";
-    piece.textContent = "piece.txt";
-    piece.title = "The config behind this piece: godels-fugue --config piece.txt";
-    files.appendChild(piece);
-    if (out["score.html"]) {
-      const url = URL.createObjectURL(new Blob([out["score.html"]], { type: "text/html" }));
-      urls.push(url);
-      frame.hidden = false;
-      empty.hidden = true;
-      frame.src = url;
-    }
-    showSheet(out["score.abc"]);
-    listen.disabled = !out["canon.mid"];
-    watch.disabled = !out["score.html"];
-    share.disabled = false;
-    share.textContent = "Share";
-    $("count").disabled = false;
-    try {
-      history.replaceState(null, "", "#piece=" + encode(composed.config) + (composed.seed !== "0" ? "&v=" + composed.seed : ""));
-    } catch (_) {
-      // A page opened from a file cannot rewrite its address.
-    }
+    /* the settings that make this piece again, variation included */
+    const json = isJson(piece.text);
+    const a = link(new Blob([pieceText(piece)], { type: json ? "application/json" : "text/plain" }),
+                   json ? "piece.json" : "piece.txt", json ? "piece.json" : "piece.txt");
+    a.title = "The settings behind this piece: godels-fugue --config " + (json ? "piece.json" : "piece.txt");
+  }
+  function link(blob, name, label) {
+    const url = URL.createObjectURL(blob);
+    urls.push(url);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.textContent = label;
+    files.appendChild(a);
+    return a;
   }
 
-  // Staff notation, engraved from score.abc by abcjs, which loads on first use.
-  let abcjs = null, lastAbc = null;
-  function showSheet(bytes) {
-    lastAbc = bytes || null;
+  /* Staff notation, engraved from score.abc by abcjs, which loads on first
+     use; a newer piece wins over one still being engraved. */
+  let abcjs = null, sheetFor = 0;
+  function showSheet(piece) {
     const card = $("sheet-card");
+    const bytes = piece && piece.files["score.abc"];
+    const ticket = ++sheetFor;
     if (!bytes) { card.hidden = true; return; }
     const text = new TextDecoder().decode(bytes);
     abcjs = abcjs || new Promise(function (resolve, reject) {
@@ -566,10 +789,9 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
       document.head.appendChild(s);
     });
     abcjs.then(function (ABCJS) {
-      if (card.hidden && window.innerWidth < 700) card.open = false; /* long on a phone */
+      if (ticket !== sheetFor) return;
+      if (card.hidden && window.innerWidth < 700) card.open = false;
       card.hidden = false;
-      // The card's width, not the sheet's: abcjs scales with a transform, so the
-      // sheet can be wider than it shows. "resize" fits the music to the card.
       const width = Math.max(300, (card.clientWidth || 1132) - 32);
       const narrow = width < 700;
       ABCJS.renderAbc("sheet", text, {
@@ -581,11 +803,11 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
       });
     }).catch(function () {
       abcjs = null;
-      card.hidden = true;
+      if (ticket === sheetFor) card.hidden = true;
     });
   }
 
-  // The config travels in the address as URL-safe base64 of its UTF-8 bytes.
+  /* ---------- sharing: the settings and the variation travel in the address ---------- */
   function encode(text) {
     let bin = "";
     new TextEncoder().encode(text).forEach(function (b) { bin += String.fromCharCode(b); });
@@ -603,200 +825,226 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
       prompt("Copy this link:", location.href);
     }
   });
+  let lastHash = "";
+  function fromLink() {
+    const m = /^#piece=([A-Za-z0-9_-]+)(?:&v=(\d+))?$/.exec(location.hash);
+    if (!m) return false;
+    let text;
+    try { text = decode(m[1]); } catch (_) { return false; }
+    lastHash = location.hash;
+    sharedText = text;
+    addShared();
+    choose("shared", text, Number(m[2] || 0));
+    return true;
+  }
+  window.addEventListener("hashchange", function () { if (location.hash !== lastHash) fromLink(); });
 
-  // The score page is same-origin (a blob URL from this page), so its height
-  // can follow its content.
-  frame.addEventListener("load", function () {
-    let doc;
-    try { doc = frame.contentDocument; } catch (_) { return; }
-    if (!doc || !doc.body) return;
-    const fit = function () { frame.style.height = doc.documentElement.scrollHeight + "px"; };
-    if (observer) observer.disconnect();
-    observer = new ResizeObserver(fit);
-    observer.observe(doc.body);
-    fit();
-    // Tell the score page it can offer other values, then show the note just tried.
-    frame.contentWindow.postMessage({ type: "godels-fugue:host", theme: document.documentElement.dataset.theme || null }, "*");
-    if (pendingChanged.length) frame.contentWindow.postMessage({ type: "godels-fugue:changed", notes: pendingChanged }, "*");
-    if (pendingSelect) frame.contentWindow.postMessage({ type: "godels-fugue:select", var: pendingSelect }, "*");
-    pendingSelect = null;
-    pendingChanged = [];
-  });
-
-  function load(index, thenRun) {
-    const p = PIECES[index];
-    const done = function (text) {
-      config.value = text;
-      if (thenRun) run();
+  /* ---------- starting points ---------- */
+  let sharedText = null, loadTicket = 0;
+  function option(group, value, label) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = label;
+    group.appendChild(o);
+  }
+  (function fill() {
+    const moods = document.createElement("optgroup");
+    moods.label = "Moods";
+    MOODS.forEach(function (m) { option(moods, "preset:" + m[0], m[1]); });
+    const demos = document.createElement("optgroup");
+    demos.label = "Feature demonstrations";
+    DEMOS.forEach(function (d) { option(demos, "file:" + d[0], d[1]); });
+    select.appendChild(moods);
+    select.appendChild(demos);
+  })();
+  function addShared() {
+    if (select.querySelector('option[value="shared"]')) return;
+    const o = document.createElement("option");
+    o.value = "shared";
+    o.textContent = "A shared piece";
+    select.insertBefore(o, select.firstChild);
+  }
+  /* a starting point's text; a later choice wins over a slow fetch */
+  function choose(value, text, variationValue) {
+    const ticket = ++loadTicket;
+    select.value = value;
+    const done = function (t) {
+      if (ticket !== loadTicket) return;
+      editor.value = t;
+      seed.value = String(variationValue || 0);
+      pieces = [];
+      at = -1;
+      undoBtn.disabled = redoBtn.disabled = true;
+      resolveDraft(true);
+      compose();
     };
-    if (p.text) return done(p.text);
-    fetch("examples/" + p.file)
+    if (text !== undefined) return done(text);
+    if (value.startsWith("preset:")) {
+      const name = value.slice(7);
+      const m = MOODS.find(function (x) { return x[0] === name; });
+      return done("# " + (m ? m[1] : name) + "\npreset " + name + "\n");
+    }
+    if (value === "shared") return done(sharedText || "");
+    const file = value.slice(5);
+    fetch("examples/" + file)
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(done)
-      .catch(function () {
-        setBadge("bad", "Could not load " + p.file);
-      });
+      .catch(function () { if (ticket === loadTicket) setBadge("bad", "Could not load " + file); });
   }
-
-  let group = null;
-  PIECES.forEach(function (p, i) {
-    if (!group || group.label !== p.group) {
-      group = document.createElement("optgroup");
-      group.label = p.group;
-      select.appendChild(group);
-    }
-    const o = document.createElement("option");
-    o.value = String(i);
-    o.textContent = p.label;
-    group.appendChild(o);
+  select.addEventListener("change", function () { choose(select.value); });
+  $("compose").addEventListener("click", function () { compose(); });
+  $("shuffle").addEventListener("click", function () {
+    seed.value = String(1 + Math.floor(Math.random() * 99999));
+    compose();
   });
-
-  select.addEventListener("change", function () {
-    if (select.value === "surprise") { $("surprise").click(); return; }
-    seed.value = "0";
-    undoStack = [];
-    undo.hidden = true;
-    load(Number(select.value), true);
-  });
-  compose.addEventListener("click", run);
-  // A random but always solvable kind of piece: 2 or 3 voices, any of eight keys
-  // and six modes, chords in major and minor, rhythm, and a drawn tension curve.
+  seed.addEventListener("keydown", function (e) { if (e.key === "Enter") compose(); });
+  seed.addEventListener("change", function () { seed.value = String(variation()); });
+  /* A surprise: a mood in another key, at a random variation */
   $("surprise").addEventListener("click", function () {
     const pick = function (list) { return list[Math.floor(Math.random() * list.length)]; };
-    const voices = pick([2, 3]);
-    const delay = voices === 3 ? pick([4, 8, 12]) : pick([4, 6, 8]);
+    const mood = pick(MOODS);
     const key = pick(["C", "D", "E", "F", "G", "A", "Bb", "Eb"]);
-    const mode = pick(["major", "minor", "dorian", "mixolydian", "lydian", "phrygian"]);
-    const tonal = mode === "major" || mode === "minor";
-    const harmony = tonal && Math.random() < 0.7 ? 1 : 0;
-    const tempo = pick([72, 84, 96, 108, 120, 132]);
-    const curvePts = [];
-    for (let i = 0; i < 6; i++) curvePts.push(Math.floor(Math.random() * 4));
-    const apart = { 4: "a bar", 6: "a bar and a half", 8: "two bars", 12: "three bars" }[delay];
-    config.value = [
-      "# A surprise: a " + (voices === 3 ? "three" : "two") + "-voice canon in " + key + " " + mode +
-        (harmony ? " over a chord per bar" : "") + ",",
-      "# each voice entering " + apart + " after the one before, at " + tempo + " beats a minute.",
-      "length " + pick([24, 32, 32, 40]),
-      "voices " + voices,
-      "delay " + delay,
-      "key " + key,
-      "mode " + mode,
-      "harmony " + harmony,
-      "rhythm 1",
-      "range_low 50",
-      "range_high 79",
-      "leading_tone " + (tonal ? 1 : 0),
-      "w_contrary " + Math.floor(Math.random() * 4),
-      "w_leap " + (1 + Math.floor(Math.random() * 4)),
-      "tension " + curvePts.join(" ") + " 0",
-      "tempo " + tempo,
-    ].join("\n") + "\n";
-    seed.value = String(1 + Math.floor(Math.random() * 99999));
-    undoStack = [];
-    undo.hidden = true;
-    if (!select.querySelector('option[value="surprise"]')) {
-      const o = document.createElement("option");
-      o.value = "surprise";
-      o.textContent = "A surprise";
-      select.insertBefore(o, select.firstChild);
-    }
-    select.value = "surprise";
-    run();
+    const text = "# A surprise: " + mood[1].split(":")[0].toLowerCase() + " in " + key + "\npreset " + mood[0] + "\nkey " + key + "\n";
+    sharedText = null;
+    choose("preset:" + mood[0], text, 1 + Math.floor(Math.random() * 99999));
   });
-  shuffle.addEventListener("click", function () {
-    seed.value = String(1 + Math.floor(Math.random() * 99999));
-    run();
+  editor.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); compose(); }
   });
-  seed.addEventListener("keydown", function (e) { if (e.key === "Enter") run(); });
-  // Space plays or stops the piece, unless a control has the keyboard.
+  editor.addEventListener("input", function () { resolveDraft(); updateUndo(); });
+  seed.addEventListener("input", updateUndo);
+  /* Space plays or stops the piece, unless a control has the keyboard. */
   document.addEventListener("keydown", function (e) {
     if (e.key !== " " || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (e.target.closest && e.target.closest("input, textarea, select, button, summary, a")) return;
+    if (e.target.closest && e.target.closest("input, textarea, select, button, summary, a, [tabindex]")) return;
     if (listen.disabled) return;
     e.preventDefault();
     listen.click();
   });
-  config.addEventListener("keydown", function (e) {
-    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
+
+  /* ---------- counting ---------- */
+  $("count").addEventListener("click", function () {
+    if (job) return;
+    setBadge("busy", "Counting");
+    summary.textContent = "Counting every piece these rules allow, for up to four seconds";
+    runJob("count", editor.value, [], function (r) {
+      log.textContent = [r.out, r.err, r.error].filter(Boolean).join("\n");
+      const m = /^count: (at least )?(\d+)/m.exec(r.out || "");
+      if (r.error || !m) {
+        setBadge("bad", "Could not count");
+        summary.textContent = engineError(r) || "The count did not finish.";
+        return;
+      }
+      const n = Number(m[2]), exact = !m[1];
+      setBadge("good", "Counted in " + (r.ms / 1000).toFixed(1) + " s");
+      summary.textContent = n === 0 ? "These rules allow no piece at all."
+        : (exact ? "These rules allow exactly " : "These rules allow at least ") + n.toLocaleString() +
+          " assignment" + (n === 1 ? "" : "s") + " of notes, ties and chords" + (exact ? "" : " (the count stopped there)") +
+          "; the solver composes the cheapest, and Shuffle samples others.";
+    });
   });
 
-  // ---- Shape the piece: soft weights and the tension curve, kept as config lines ----
-  const WEIGHTS = [
-    { key: "w_curve", label: "Follow the tension curve", low: "loosely", high: "closely", def: 1 },
-    { key: "w_leap", label: "Smooth lines", low: "leaps welcome", high: "stepwise", def: 1 },
-    { key: "w_dissonance", label: "Consonance", low: "spicy", high: "sweet", def: 1 },
-    { key: "w_contrary", label: "Contrary motion", low: "voices move freely", high: "voices move apart", def: 0 },
-    { key: "tempo", label: "Tempo (beats per minute)", low: "slow", high: "fast", def: 120, min: 48, max: 180, step: 4 },
+  /* ---------- shaping: every control shows the value the engine uses ---------- */
+  const CONTROLS = [
+    { key: "mood", label: "Mood", kind: "select", options: [["auto", "from the key and tempo"], ["plain", "plain: exactly as written"],
+      ["lament", "lament"], ["hymn", "hymn"], ["triumph", "triumph"], ["longing", "longing"], ["dance", "dance"], ["nocturne", "nocturne"]] },
+    { key: "tempo", label: "Tempo (quarter notes a minute)", min: 40, max: 200, step: 2, low: "slow", high: "fast" },
+    { key: "phrase", label: "Phrases (bars each; 0: no form)", min: 0, max: 4, low: "no form", high: "long phrases" },
+    { key: "w_sequence", label: "Subject returns", min: 0, max: 8, low: "free", high: "insistent" },
+    { key: "w_arc", label: "Climb to one climax", min: 0, max: 10, low: "wander", high: "one peak" },
+    { key: "climax", label: "Climax at (% of the melody)", min: 10, max: 90, step: 5, low: "early", high: "late" },
+    { key: "w_step", label: "Stepwise lines", min: 0, max: 8, low: "leaps welcome", high: "by step" },
+    { key: "w_dissonance", label: "Consonance", min: 0, max: 8, low: "spicy", high: "sweet" },
+    { key: "w_contrary", label: "Contrary motion", min: 0, max: 8, low: "voices move together", high: "voices move apart" },
+    { key: "w_curve", label: "Follow the tension curve", min: 0, max: 8, low: "loosely", high: "closely" },
   ];
-  const SLIDER_MAX = 8, CURVE_POINTS = 8, ARCH = [0, 1, 2, 3, 3, 2, 1, 0];
-  const curveSvg = $("curve"), sliderBox = $("sliders");
-  let curve = ARCH.slice(), curveSet = false;
-
-  function keyValue(text, key) {
-    const m = new RegExp("^\\s*" + key + "\\s+(.*?)\\s*$", "m").exec(text);
-    return m ? m[1] : null;
-  }
-  // Replaces the key's line, or adds one; a null value removes it.
-  function withKey(text, key, value) {
-    const lines = text.replace(/\s+$/, "").split("\n");
-    const re = new RegExp("^\\s*" + key + "(\\s|$)");
-    const at = lines.findIndex(function (l) { return re.test(l); });
-    if (value === null) { if (at >= 0) lines.splice(at, 1); }
-    else if (at >= 0) lines[at] = key + " " + value;
-    else lines.push(key + " " + value);
-    return lines.join("\n") + "\n";
-  }
-  function steer(key, value) {
-    if (config.value.trim().startsWith("{")) {
-      summary.textContent = "Shaping works with text configs, not JSON.";
-      return;
-    }
-    undoStack.push({ config: config.value, seed: seed.value, melody: lastMelody });
-    undo.hidden = false;
-    config.value = withKey(config.value, key, value);
-    run();
-  }
-
-  WEIGHTS.forEach(function (w) {
+  const sliderBox = $("sliders");
+  CONTROLS.forEach(function (c) {
     const box = document.createElement("label");
     box.className = "slider";
-    box.innerHTML = '<span></span><output></output><input type="range" min="0" step="1"><span class="ends"><span></span><span></span></span>';
-    box.children[0].textContent = w.label;
-    const input = box.querySelector("input");
-    input.min = String(w.min || 0);
-    input.max = String(w.max || SLIDER_MAX);
-    input.step = String(w.step || 1);
-    input.setAttribute("aria-label", w.label);
-    box.querySelectorAll(".ends span")[0].textContent = w.low;
-    box.querySelectorAll(".ends span")[1].textContent = w.high;
-    input.addEventListener("input", function () { box.querySelector("output").textContent = input.value; });
-    input.addEventListener("change", function () { steer(w.key, input.value); });
-    w.input = input;
-    w.output = box.querySelector("output");
+    const name = document.createElement("span");
+    const out = document.createElement("output");
+    box.appendChild(name);
+    box.appendChild(out);
+    let input;
+    if (c.kind === "select") {
+      input = document.createElement("select");
+      c.options.forEach(function (o) { option(input, o[0], o[1]); });
+      input.addEventListener("change", function () { edit(Object.fromEntries([[c.key, input.value]]), kindOf(c.key)); });
+    } else {
+      input = document.createElement("input");
+      input.type = "range";
+      input.min = String(c.min);
+      input.max = String(c.max);
+      input.step = String(c.step || 1);
+      input.addEventListener("input", function () { out.textContent = input.value; });
+      input.addEventListener("change", function () { edit(Object.fromEntries([[c.key, input.value]]), kindOf(c.key)); });
+    }
+    input.setAttribute("aria-label", c.label);
+    box.appendChild(input);
+    if (c.low) {
+      const ends = document.createElement("span");
+      ends.className = "ends";
+      ends.innerHTML = "<span></span><span></span>";
+      ends.children[0].textContent = c.low;
+      ends.children[1].textContent = c.high;
+      box.appendChild(ends);
+    }
+    c.input = input;
+    c.out = out;
+    c.name = name;
     sliderBox.appendChild(box);
   });
+  function syncControls() {
+    const cfg = resolved && resolved.config ? resolved.config : null;
+    CONTROLS.forEach(function (c) {
+      const value = cfg && cfg[c.key] !== undefined ? cfg[c.key] : null;
+      c.input.disabled = !cfg;
+      c.name.textContent = c.label + (kindOf(c.key) !== "compose" ? " ♪" : "");
+      if (value === null) return;
+      if (c.kind === "select") {
+        c.input.value = value;
+      } else {
+        c.input.value = value;
+        c.out.textContent = value + (Number(value) > c.max || Number(value) < c.min ? " (beyond this control)" : "");
+      }
+    });
+    drawCurve();
+  }
 
+  /* the tension curve: the engine's points, ? for free ones, the arch when none */
+  const curveSvg = $("curve");
+  let curve = ARCH.slice(), curveSet = false, dragging = -1;
+  function curvePoints() {
+    const t = resolved && resolved.config ? resolved.config.tension : "arch";
+    const items = String(t || "arch").split(",").map(function (x) { return x.trim(); });
+    if (items.length === 1 && items[0] === "arch") return { points: ARCH.slice(), set: false };
+    return { points: items.map(function (x) { return x === "?" ? null : Math.max(0, Math.min(4, Number(x) || 0)); }), set: true };
+  }
   function drawCurve() {
+    if (dragging < 0) {
+      const c = curvePoints();
+      curve = c.points;
+      curveSet = c.set;
+    }
     const W = 400, H = 150, pad = 18, left = 44;
-    const x = function (i) { return left + (i * (W - left - pad)) / (curve.length - 1); };
+    const x = function (i) { return left + (i * (W - left - pad)) / Math.max(1, curve.length - 1); };
     const y = function (v) { return pad + ((4 - v) * (H - 2 * pad)) / 4; };
     let svg = "";
     for (let v = 0; v <= 4; v++) svg += '<line class="grid" x1="' + left + '" x2="' + (W - pad) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>';
     svg += '<text class="axis" x="4" y="' + (y(0) + 4) + '">calm</text><text class="axis" x="4" y="' + (y(4) + 4) + '">tense</text>';
-    svg += '<polyline class="line' + (curveSet ? "" : " default") + '" points="' + curve.map(function (v, i) { return x(i) + "," + y(v); }).join(" ") + '"/>';
+    const shown = curve.map(function (v, i) { return v === null ? null : x(i) + "," + y(v); }).filter(Boolean);
+    svg += '<polyline class="line' + (curveSet ? "" : " default") + '" points="' + shown.join(" ") + '"/>';
     curve.forEach(function (v, i) {
-      svg += '<circle class="pt" tabindex="0" r="8" cx="' + x(i) + '" cy="' + y(v) + '" data-i="' + i + '" aria-label="Point ' + (i + 1) + ': ' + v + ' of 4"/>';
+      const free = v === null;
+      svg += '<circle class="pt' + (free ? " free" : "") + '" tabindex="0" r="8" cx="' + x(i) + '" cy="' + y(free ? 2 : v) +
+             '" data-i="' + i + '" aria-label="Point ' + (i + 1) + ': ' + (free ? "free" : v + " of 4") + '"/>';
     });
     curveSvg.innerHTML = svg;
-    curveSvg.dataset.left = left;
   }
   function commitCurve() {
-    curveSet = true;
-    drawCurve();
-    steer("tension", curve.join(" "));
+    edit({ tension: curve.map(function (v) { return v === null ? "?" : String(v); }).join(",") }, "compose");
   }
-  let dragging = -1;
   function valueAt(evt) {
     const r = curveSvg.getBoundingClientRect();
     const yy = ((evt.clientY - r.top) / r.height) * 150;
@@ -804,7 +1052,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   }
   curveSvg.addEventListener("pointerdown", function (e) {
     const t = e.target.closest(".pt");
-    if (!t) return;
+    if (!t || !resolved) return;
     dragging = Number(t.dataset.i);
     curveSvg.setPointerCapture(e.pointerId);
   });
@@ -818,55 +1066,23 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     dragging = -1;
     commitCurve();
   });
+  /* the keys move a point; the change composes once the keys rest */
+  let curveTimer = 0;
   curveSvg.addEventListener("keydown", function (e) {
     const t = e.target.closest(".pt");
-    if (!t || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    if (!t || (e.key !== "ArrowUp" && e.key !== "ArrowDown") || !resolved) return;
     e.preventDefault();
     const i = Number(t.dataset.i);
-    curve[i] = Math.max(0, Math.min(4, curve[i] + (e.key === "ArrowUp" ? 1 : -1)));
-    commitCurve();
-  });
-
-  // The controls show what the config says, whoever wrote it.
-  function syncShape() {
-    WEIGHTS.forEach(function (w) {
-      const v = Number(keyValue(config.value, w.key));
-      const n = Number.isFinite(v) && keyValue(config.value, w.key) !== null ? v : w.def;
-      w.input.value = String(Math.min(w.max || SLIDER_MAX, n));
-      w.output.textContent = String(n);
-    });
-    const t = keyValue(config.value, "tension");
-    const points = t ? t.split(/[\s,]+/).map(Number) : [];
-    if (points.length >= 2 && points.every(function (p) { return Number.isFinite(p); })) {
-      curve = points.map(function (p) { return Math.max(0, Math.min(4, Math.round(p))); });
-      curveSet = true;
-    } else {
-      curve = ARCH.slice();
-      curveSet = false;
-    }
+    curve[i] = Math.max(0, Math.min(4, (curve[i] === null ? 2 : curve[i]) + (e.key === "ArrowUp" ? 1 : -1)));
+    curveSet = true;
+    dragging = i;
     drawCurve();
-  }
-  let syncTimer = 0;
-  config.addEventListener("input", function () {
-    clearTimeout(syncTimer);
-    syncTimer = setTimeout(syncShape, 300);
+    curveSvg.querySelector('.pt[data-i="' + i + '"]').focus();
+    clearTimeout(curveTimer);
+    curveTimer = setTimeout(function () { dragging = -1; commitCurve(); }, 600);
   });
 
-  // A shared link carries the config and the variation; otherwise start with the first example.
-  function fromLink() {
-    const m = /^#piece=([A-Za-z0-9_-]+)(?:&v=(\d+))?$/.exec(location.hash);
-    if (!m) return false;
-    try { config.value = decode(m[1]); } catch (_) { return false; }
-    seed.value = m[2] || "0";
-    const o = document.createElement("option");
-    o.value = "";
-    o.textContent = "A shared piece";
-    select.insertBefore(o, select.firstChild);
-    select.value = "";
-    run();
-    return true;
-  }
-  if (!fromLink()) load(0, true);
+  if (!fromLink()) choose("preset:" + MOODS[0][0]);
 })();
 </script>
 </body>

@@ -1,6 +1,8 @@
 // Runs godels-fugue (compiled to WebAssembly) off the main thread. Each run
 // gets a fresh module instance, so no state carries over between pieces; the
 // compiled module is cached, so only the first run pays for compilation.
+// Every reply carries the id of the request it answers, so the page can drop
+// replies to requests it has given up on.
 importScripts("godels-fugue.js");
 
 const OUTPUTS = [
@@ -17,30 +19,44 @@ function instantiate(imports, done) {
         compiled = m;
         return m;
       });
-  ready
-    .then(function (m) { return WebAssembly.instantiate(m, imports).then(function (i) { done(i, m); }); })
-    .catch(function (err) { postMessage({ error: "Could not load the solver: " + err }); });
-  return {};
+  return ready.then(function (m) {
+    return WebAssembly.instantiate(m, imports).then(function (i) { done(i, m); });
+  });
 }
 
 onmessage = async function (e) {
-  const { id, config, args, mode } = e.data;
-  const log = [];
+  const { id, config, args, mode } = e.data || {};
+  const out = [], err = [];
   const started = performance.now();
   try {
     const mod = await GodelsFugue({
-      print: function (s) { log.push(s); },
-      printErr: function (s) { log.push(s); },
-      instantiateWasm: instantiate,
+      print: function (s) { out.push(s); },
+      printErr: function (s) { err.push(s); },
+      instantiateWasm: function (imports, done) {
+        instantiate(imports, done).catch(function (why) {
+          postMessage({ id, error: "Could not load the solver: " + why });
+        });
+        return {};
+      },
     });
     mod.FS.mkdir("/in");
     mod.FS.mkdir("/out");
-    const path = config.trim().startsWith("{") ? "/in/piece.json" : "/in/piece.txt";
+    // The program reads JSON by the file name, so a config that is an object
+    // is written as piece.json.
+    const path = String(config).trim().startsWith("{") ? "/in/piece.json" : "/in/piece.txt";
     mod.FS.writeFile(path, config);
+    const reply = function (status, extra) {
+      return Object.assign({ id, mode, status, out: out.join("\n"), err: err.join("\n"),
+                             ms: performance.now() - started }, extra || {});
+    };
+    if (mode === "resolve") {
+      // The settings the run would use, without composing.
+      postMessage(reply(mod.callMain(["--config", path, "--resolve"])));
+      return;
+    }
     if (mode === "count") {
-      // Counting writes no files: report the count line and the exit status.
-      const status = mod.callMain(["--config", path, "--count", "1000000", "--time-limit", "4000"]);
-      postMessage({ id, mode, status, log: log.join("\n"), ms: performance.now() - started });
+      // Counting writes no files: the count line and the exit status.
+      postMessage(reply(mod.callMain(["--config", path, "--count", "1000000", "--time-limit", "4000"].concat(args || []))));
       return;
     }
     const status = mod.callMain([
@@ -60,8 +76,8 @@ onmessage = async function (e) {
         // A run that finds no piece writes only some of the files.
       }
     }
-    postMessage({ id, status, log: log.join("\n"), files, ms: performance.now() - started }, transfer);
-  } catch (err) {
-    postMessage({ id, error: String(err), log: log.join("\n") });
+    postMessage(reply(status, { files }), transfer);
+  } catch (why) {
+    postMessage({ id, mode, error: String(why), out: out.join("\n"), err: err.join("\n") });
   }
 };
