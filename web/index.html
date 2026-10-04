@@ -215,6 +215,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
         <button id="undo" type="button" hidden>Undo</button>
         <button id="listen" type="button" disabled>Play</button>
         <button id="watch" type="button" disabled>Watch it collapse</button>
+        <button id="count" type="button" disabled title="Count the pieces these rules allow (for up to four seconds)">How many?</button>
         <button id="share" type="button" disabled title="Copy a link to this piece">Share</button>
       </span>
     </div>
@@ -329,6 +330,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     compose.disabled = on;
     shuffle.disabled = on;
     $("surprise").disabled = on;
+    $("count").disabled = on;
   }
 
   // The settings the run adds after the config: a variation samples instead of
@@ -356,6 +358,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
 
   function finish(result) {
     busy(false);
+    if (result.mode === "count") return counted(result);
     log.textContent = result.log || "";
     const tried = trying;
     trying = null;
@@ -392,6 +395,31 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
       }
     }
     showFiles(result.files || {});
+  }
+
+  // How many pieces the rules allow: exact when the count finishes, a lower
+  // bound when it stops at the limit.
+  $("count").addEventListener("click", function () {
+    if (!worker && !startWorker()) return;
+    runId += 1;
+    busy(true);
+    setBadge("busy", "Counting");
+    summary.textContent = "Counting every piece these rules allow, for up to four seconds";
+    worker.postMessage({ id: runId, mode: "count", config: config.value, args: [] });
+  });
+  function counted(result) {
+    const m = /^count: (at least )?(\d+)/m.exec(result.log || "");
+    if (result.error || !m) {
+      setBadge("bad", "Could not count");
+      summary.textContent = result.error || (result.log || "").split("\n")[0];
+      return;
+    }
+    const n = Number(m[2]), exact = !m[1];
+    setBadge("good", "Counted in " + (result.ms / 1000).toFixed(1) + " s");
+    summary.textContent = n === 0 ? "These rules allow no piece at all."
+      : (exact ? "These rules allow exactly " : "These rules allow at least ") + n.toLocaleString() +
+        " different piece" + (n === 1 ? "" : "s") + (exact ? "" : " (the count stopped there)") +
+        "; the solver composes the cheapest, and Shuffle samples others.";
   }
 
   // The other melody notes a what-if changed, and how to say so.
@@ -484,6 +512,7 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     watch.disabled = !out["score.html"];
     share.disabled = false;
     share.textContent = "Share";
+    $("count").disabled = false;
     try {
       history.replaceState(null, "", "#piece=" + encode(composed.config) + (composed.seed !== "0" ? "&v=" + composed.seed : ""));
     } catch (_) {

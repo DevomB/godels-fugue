@@ -24,7 +24,7 @@ function instantiate(imports, done) {
 }
 
 onmessage = async function (e) {
-  const { id, config, args } = e.data;
+  const { id, config, args, mode } = e.data;
   const log = [];
   const started = performance.now();
   try {
@@ -37,6 +37,12 @@ onmessage = async function (e) {
     mod.FS.mkdir("/out");
     const path = config.trim().startsWith("{") ? "/in/piece.json" : "/in/piece.txt";
     mod.FS.writeFile(path, config);
+    if (mode === "count") {
+      // Counting writes no files: report the count line and the exit status.
+      const status = mod.callMain(["--config", path, "--count", "1000000", "--time-limit", "4000"]);
+      postMessage({ id, mode, status, log: log.join("\n"), ms: performance.now() - started });
+      return;
+    }
     const status = mod.callMain([
       "--config", path,
       "--out", "/out/canon.mid",
