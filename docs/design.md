@@ -328,6 +328,13 @@ before the first piece, and what the optimizer gained. In the demo, How many? ru
 `--count` for up to four seconds, and the sheet music lights the bar being played.
 `tests/web_smoke.mjs` checks the WebAssembly build the way the demo uses it.
 
+Playback gives each voice its own sampled instrument (General MIDI soundfonts loaded
+through smplr), chosen by register from an ensemble, so the imitation is heard moving
+between timbres; a bass line plays each bar's chord root on beat one and the root or
+fifth on beat three. Notes are phrased by metre (downbeats louder, off-beats softer),
+by an arch over the piece and by each voice's entry, with a little timing looseness.
+Without the network the synths of `voices.wav` play instead.
+
 **Built.** **Partly built**: the fingerprint shows the coupling through simultaneous
 notes; a full constraint graph (chords, keys, ties and every rule as nodes) is not
 built.
