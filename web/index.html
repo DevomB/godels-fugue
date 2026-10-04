@@ -639,6 +639,14 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
     run();
   });
   seed.addEventListener("keydown", function (e) { if (e.key === "Enter") run(); });
+  // Space plays or stops the piece, unless a control has the keyboard.
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== " " || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest && e.target.closest("input, textarea, select, button, summary, a")) return;
+    if (listen.disabled) return;
+    e.preventDefault();
+    listen.click();
+  });
   config.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
   });
