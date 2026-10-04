@@ -313,9 +313,11 @@ every output file to download, staff notation engraved from the ABC export, and 
 that composes the same piece again. Hosted there, the inspector becomes a
 counterfactual tool: it offers every other value of a melody note, and picking one
 fixes the note in the config and composes again, reporting the notes that changed to
-fit or the rule the value breaks.
+fit or the rule the value breaks. A Shape card draws the tension curve as draggable
+points and offers sliders for four soft weights; each change rewrites that config line
+and composes again.
 
-**Built.** **Not built**: a constraint-graph view, and weight sliders.
+**Built.** **Not built**: a constraint-graph view.
 
 ## 13. Presets and modes
 

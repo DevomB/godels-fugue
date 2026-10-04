@@ -390,6 +390,10 @@ does. On top of `score.html` it adds:
   writes it into the config's `melody` line and composes again; the page outlines the
   notes that changed to fit in every voice, or names the rule the value breaks, and can
   undo.
+- **Shape the piece**: drag the tension curve's points and move sliders for following
+  it, smooth lines, consonance and contrary motion; each change writes the matching
+  config line (`tension`, `w_curve`, `w_leap`, `w_dissonance`, `w_contrary`) and
+  composes again.
 - **Sheet music**, engraved from `score.abc` by [abcjs](https://www.abcjs.net).
 - **Share links**: the address carries the config and the variation, so a link
   composes the same piece again.
