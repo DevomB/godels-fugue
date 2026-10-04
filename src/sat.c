@@ -1,5 +1,7 @@
 #include "sat.h"
 
+#include "solver.h"
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -273,7 +275,8 @@ static int run_dpll(Dpll *d, long max_decisions) {
             result = SAT_SAT;
             break;
         }
-        if (max_decisions > 0 && ++decisions > max_decisions) {
+        if ((max_decisions > 0 && ++decisions > max_decisions) ||
+            ((decisions & 255) == 0 && solver_past_deadline())) {
             result = SAT_LIMIT;
             break;
         }

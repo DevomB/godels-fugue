@@ -265,13 +265,26 @@ static size_t append_decisions(const SolverState *s, const LevelSet *reason, cha
     return used;
 }
 
+/* Was a forced value forced because the search tried the others and they
+ * failed, rather than by the rules propagating? */
+static bool forced_by_search(const SolverState *s, const Explanation *e) {
+    for (int k = 0; k < e->nrejected; k++) {
+        int ev = e->rejected[k].event;
+        if (ev >= 0 && ev < s->proof.event_count && s->proof.events[ev].rule == CID_REFUTED)
+            return true;
+    }
+    return false;
+}
+
 void explain_removal(const SolverState *s, const ProofEvent *ev, char *buf, size_t cap) {
     const Model *m = s->model;
     size_t used = 0;
     buf[0] = '\0';
     if (ev->rule == CID_REFUTED) {
-        used = append(buf, cap, used, "search: every completion failed given ");
-        append_decisions(s, &ev->reason, buf, cap, used);
+        /* the decisions in force when it failed, not a minimal set */
+        used = append(buf, cap, used, "search: every completion failed with these decisions in force: ");
+        used = append_decisions(s, &ev->reason, buf, cap, used);
+        append(buf, cap, used, " (not minimized)");
         return;
     }
     char detail[160];
@@ -376,8 +389,13 @@ void explain_print(FILE *f, const SolverState *s, const Explanation *e) {
         print_candidates(f, s, e);
         break;
     case WHY_FORCED:
-        fprintf(f, "  forced %s: every other value was removed\n",
-                e->level == 0 ? "before any decision" : "by propagation");
+        if (forced_by_search(s, e)) {
+            fprintf(f, "  forced by the search: every other value was tried and failed, or a "
+                       "rule removed it\n");
+        } else {
+            fprintf(f, "  forced %s: every other value was removed\n",
+                    e->level == 0 ? "before any decision" : "by propagation");
+        }
         break;
     default:
         if (s->result == SOLVE_UNSAT) {
@@ -436,9 +454,10 @@ void explain_json(FILE *f, const SolverState *s, const Explanation *e) {
         snprintf(buf, sizeof(buf), "?");
     }
     json_string(f, buf);
-    fprintf(f, ",\"status\":\"%s\",\"event\":%d,\"depth\":%d,\"optimized\":%s",
+    fprintf(f, ",\"status\":\"%s\",\"event\":%d,\"depth\":%d,\"optimized\":%s,\"bySearch\":%s",
             explain_status_name(e->status), e->event, e->level,
-            e->status == WHY_DECIDED && s->decisions[e->decision].guided ? "true" : "false");
+            e->status == WHY_DECIDED && s->decisions[e->decision].guided ? "true" : "false",
+            e->status == WHY_FORCED && forced_by_search(s, e) ? "true" : "false");
 
     fprintf(f, ",\"rejected\":[");
     for (int k = 0; k < e->nrejected; k++) {

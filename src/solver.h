@@ -61,6 +61,7 @@ typedef struct SolverStats {
     long windows;     /* neighbourhoods the optimizer searched */
     bool converged;   /* a full pass of windows searched and found nothing cheaper */
     bool windows_cut; /* a full pass found nothing, but some windows ran out of nodes */
+    bool limited;     /* max_nodes or time_limit stopped the optimizer: not converged */
     double seconds;
 } SolverStats;
 
@@ -124,7 +125,7 @@ typedef struct SolverState {
     unsigned char skip[CID_MAX];
     uint32_t rng;
     int anneal_step;
-    clock_t start;
+    double start; /* wall-clock milliseconds (solver_now) */
 } SolverState;
 
 /* The model must outlive the state. Every constraint starts queued, so
@@ -155,5 +156,13 @@ void solver_restore(SolverState *s, const Snapshot *snap);
  * hits the limit keeps its rule and sets *approximate. */
 bool solver_unsat_core(const Model *m, int *rules, int max_rules, int *n,
                        bool *approximate);
+
+/* Wall-clock milliseconds, for time limits. */
+double solver_now(void);
+/* One deadline for every solve a command runs (the piece, the delays tried,
+ * the unsat core, the counterfactual, counting and sensitivity), ms from now;
+ * 0 clears it. Each solve's own time_limit still applies. */
+void solver_set_deadline(long ms);
+bool solver_past_deadline(void);
 
 #endif

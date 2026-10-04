@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 enum { R_SAT, R_FAIL, R_LIMIT };
 
@@ -520,6 +521,8 @@ static double expected_collapse(SolverState *s, int var) {
     int values[128];
     int n = domain_collect(&s->domains[var], values);
     double sum = 0.0;
+    /* a look-ahead is not part of the search: its removals do not count */
+    SolverStats kept = s->stats;
     solver_save(s, &scratch->snap);
     for (int k = 0; k < n; k++) {
         domain_clear(&s->domains[var]);
@@ -528,6 +531,7 @@ static double expected_collapse(SolverState *s, int var) {
         if (solver_propagate(s)) sum += solver_entropy(s);
         solver_restore(s, &scratch->snap);
     }
+    s->stats = kept;
     return n > 0 ? sum / n : 0.0;
 }
 
@@ -604,6 +608,22 @@ static int pick_variable(SolverState *s) {
     return best;
 }
 
+double solver_now(void) {
+    struct timespec ts;
+    if (timespec_get(&ts, TIME_UTC) != TIME_UTC) return 1000.0 * (double)clock() / CLOCKS_PER_SEC;
+    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+}
+
+static double deadline = 0.0;
+
+void solver_set_deadline(long ms) {
+    deadline = ms > 0 ? solver_now() + (double)ms : 0.0;
+}
+
+bool solver_past_deadline(void) {
+    return deadline > 0.0 && solver_now() > deadline;
+}
+
 static bool limit_reached(SolverState *s) {
     const PieceConfig *c = &model_of(s)->config;
     if (s->guided) return false; /* a replay walks straight to a known piece */
@@ -612,9 +632,11 @@ static bool limit_reached(SolverState *s) {
         s->limit_hit = true;
         return true;
     }
-    if (c->time_limit > 0 && (s->stats.nodes & 63) == 0) {
-        double ms = 1000.0 * (double)(clock() - s->start) / CLOCKS_PER_SEC;
-        if (ms > c->time_limit) {
+    /* the clock every 8 nodes: a node can be slow under look-ahead ordering */
+    if ((s->stats.nodes & 7) == 0 && (c->time_limit > 0 || deadline > 0.0)) {
+        double now = solver_now();
+        if ((c->time_limit > 0 && now - s->start > c->time_limit) ||
+            (deadline > 0.0 && now > deadline)) {
             s->limit_hit = true;
             return true;
         }
@@ -821,12 +843,48 @@ static bool in_window(const Model *m, int var, int start, int width) {
     return false;
 }
 
+/* The next window to search: of the windows not tried since the last
+ * improvement, the one whose notes the best piece's costs fall on most, so
+ * the budget goes where the piece is worst (a far return of the subject
+ * as much as the opening). A window no cost touches cannot get cheaper and
+ * is never searched. -1 when none is left. */
+static int next_window(const SolverState *s, int length, int width, int stride,
+                       const unsigned char *tried) {
+    const Model *m = model_of(s);
+    long cost[MELODY_MAX];
+    memset(cost, 0, sizeof(cost));
+    for (int k = 0; k < m->nterms; k++) {
+        const Constraint *t = &m->terms[k];
+        int vals[SCOPE_MAX];
+        for (int i = 0; i < t->n; i++) vals[i] = s->best[t->vars[i]];
+        int c = term_cost(m, t, vals);
+        if (c == 0) continue;
+        for (int i = 0; i < t->n; i++) {
+            const ModelVar *v = &m->vars[t->vars[i]];
+            if ((v->kind == VAR_PITCH || v->kind == VAR_TIE) && v->index < length) cost[v->index] += c;
+        }
+    }
+    int best = -1;
+    long best_cost = 0;
+    for (int start = 0; start < length; start += stride) {
+        if (tried[start]) continue;
+        long c = 0;
+        for (int i = 0; i < width; i++) c += cost[(start + i) % length];
+        if (c > best_cost) {
+            best = start;
+            best_cost = c;
+        }
+    }
+    return best;
+}
+
 /* Large neighbourhood search. The first piece becomes the best; then a
- * window of notes slides along the melody, everything outside it is
- * fixed to the best piece, and branch and bound looks for a strictly
- * cheaper piece inside. It stops when a full pass of windows finds
- * nothing or the budget runs out, then replays the best piece from the
- * root so the proof log and the decisions describe it. */
+ * window of notes is freed, everything outside it fixed to the best piece,
+ * and branch and bound looks for a strictly cheaper piece inside, the
+ * costliest window first (next_window). It stops when every window has
+ * been tried since the last improvement, or the budget runs out, then
+ * replays the best piece from the root so the proof log and the decisions
+ * describe it. */
 static int optimize(SolverState *s) {
     enum { WINDOW = 6, WINDOW_NODES = 1500 };
     const Model *m = model_of(s);
@@ -841,11 +899,24 @@ static int optimize(SolverState *s) {
     int length = m->config.length;
     int width = length < WINDOW ? length : WINDOW;
     int stride = width / 2 > 0 ? width / 2 : 1;
-    int passes_needed = (length + stride - 1) / stride;
-    int quiet = 0;
-    bool cut = false; /* a window since the last improvement ran out of nodes */
-    for (int start = 0; quiet < passes_needed; start = (start + stride) % length) {
-        if (s->stats.nodes - s->stats.first.nodes > s->optimize || s->limit_hit) break;
+    unsigned char tried[MELODY_MAX];
+    memset(tried, 0, sizeof(tried));
+    bool done = false;    /* every window tried since the last improvement */
+    bool cut = false;     /* a window since the last improvement ran out of nodes */
+    bool limited = false; /* max_nodes or time_limit stopped it */
+    long budget_end = s->stats.first.nodes + s->optimize + 1;
+    for (;;) {
+        if (s->stats.nodes - s->stats.first.nodes > s->optimize) break;
+        if (s->limit_hit) {
+            limited = true;
+            break;
+        }
+        int start = next_window(s, length, width, stride, tried);
+        if (start < 0) {
+            done = true;
+            break;
+        }
+        tried[start] = 1;
         restart(s, root);
         for (int v = 0; v < m->nvars; v++) {
             if (in_window(m, v, start, width) || !domain_contains(&s->domains[v], s->best[v]))
@@ -855,16 +926,24 @@ static int optimize(SolverState *s) {
         }
         long before = s->stats.solutions;
         s->optimizing = true;
+        /* a window ends at its own cap or where the optimize budget does */
         s->window_end = s->stats.nodes + WINDOW_NODES;
+        if (s->window_end > budget_end) s->window_end = budget_end;
         search(s, &conflict);
         s->optimizing = false;
         s->stats.windows++;
+        if (s->limit_hit) {
+            /* a window stopped by a limit proves nothing about its notes */
+            limited = true;
+            break;
+        }
         bool improved = s->stats.solutions > before;
         cut = improved ? false : (cut || s->stats.nodes > s->window_end);
-        quiet = improved ? 0 : quiet + 1;
+        if (improved) memset(tried, 0, sizeof(tried));
     }
-    s->stats.converged = quiet >= passes_needed && !cut;
-    s->stats.windows_cut = quiet >= passes_needed && cut;
+    s->stats.converged = done && !cut && !limited;
+    s->stats.windows_cut = done && cut && !limited;
+    s->stats.limited = limited;
 
     s->limit_hit = false;
     restart(s, root);
@@ -876,7 +955,7 @@ static int optimize(SolverState *s) {
 
 SolveStatus solver_solve(SolverState *s) {
     const PieceConfig *c = &model_of(s)->config;
-    s->start = clock();
+    s->start = solver_now();
     s->rng = (uint32_t)c->seed;
     if (s->rng == 0) s->rng = 1;
     s->anneal_step = 0;
@@ -898,14 +977,14 @@ SolveStatus solver_solve(SolverState *s) {
             note_first_piece(s);
         }
     }
-    s->stats.seconds = (double)(clock() - s->start) / CLOCKS_PER_SEC;
+    s->stats.seconds = (solver_now() - s->start) / 1000.0;
     s->result = r == R_SAT ? SOLVE_SAT : (r == R_LIMIT ? SOLVE_LIMIT : SOLVE_UNSAT);
     return (SolveStatus)s->result;
 }
 
 long solver_count(SolverState *s, long max, bool *exact) {
     const PieceConfig *c = &model_of(s)->config;
-    s->start = clock();
+    s->start = solver_now();
     s->rng = (uint32_t)c->seed;
     if (s->rng == 0) s->rng = 1;
     s->anneal_step = 0;
@@ -918,7 +997,7 @@ long solver_count(SolverState *s, long max, bool *exact) {
     int r = s->failed || max <= 0 ? R_FAIL : search(s, &conflict);
     s->counting = false;
     s->stats.solutions = s->count;
-    s->stats.seconds = (double)(clock() - s->start) / CLOCKS_PER_SEC;
+    s->stats.seconds = (solver_now() - s->start) / 1000.0;
     *exact = r != R_LIMIT;
     return s->count;
 }
