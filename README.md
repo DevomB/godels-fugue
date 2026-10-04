@@ -242,7 +242,7 @@ Every run writes these next to `--out` (default `output/canon.mid`):
 | `score.abc` | ABC notation: one voice per canon voice, with accidentals written out relative to the key signature |
 | `voices.wav` | Stereo, 16-bit, 44.1 kHz: the voices on a plucked string, or the organ or sine that `instrument` picks, panned from left to right in a small reverb that rings on for 1.5 s after the last note |
 | `contour.svg` | Pitch over time for every voice |
-| `score.html` | Interactive score: piano roll per voice, playback (harpsichord, organ or sine, each voice panned in stereo, notes lighting up as they sound, looping for rounds), why each note is there, a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart), what the given notes changed, entropy and energy charts, and the proof log |
+| `score.html` | Interactive score: piano roll per voice, playback (harpsichord, organ or sine, each voice panned in stereo, notes lighting up as they sound, looping for rounds, any voice muted from the legend), why each note is there, a step-by-step replay of the collapse (every melody note's remaining candidates at any proof event, synced to the entropy chart), what the given notes changed, entropy and energy charts, and the proof log |
 | `explain.txt` | The explanation for every variable, as `--explain` prints it |
 | `report.txt` | Keys, search statistics, energy by rule, values removed by each rule, the unsat core, the rules given notes break, and every config key used |
 | `proof.txt` | Every proof event in order: removals, decisions, forced collapses, and entropy after each round of propagation |
@@ -391,9 +391,11 @@ does. On top of `score.html` it adds:
   notes that changed to fit in every voice, or names the rule the value breaks, and can
   undo.
 - **Shape the piece**: drag the tension curve's points and move sliders for following
-  it, smooth lines, consonance and contrary motion; each change writes the matching
-  config line (`tension`, `w_curve`, `w_leap`, `w_dissonance`, `w_contrary`) and
-  composes again.
+  it, smooth lines, consonance, contrary motion and tempo; each change writes the
+  matching config line (`tension`, `w_curve`, `w_leap`, `w_dissonance`, `w_contrary`,
+  `tempo`) and composes again.
+- **Surprise me** rolls a new kind of piece: two or three voices, a random key and mode,
+  an entry delay, a tension curve and a tempo, written out as a commented config.
 - **Sheet music**, engraved from `score.abc` by [abcjs](https://www.abcjs.net).
 - **Share links**: the address carries the config and the variation, so a link
   composes the same piece again.
