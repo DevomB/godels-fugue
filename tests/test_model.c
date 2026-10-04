@@ -706,7 +706,7 @@ static void check_energy_consistency(const PieceConfig *c, unsigned seed) {
 }
 
 static void test_energy(void) {
-    static const char *const shapes[][6] = {
+    static const char *const shapes[][14] = {
         {"voices=2", NULL},
         {"voices=4", "delay=3", NULL},
         {"voices=3", "delay_1=2", "delay_2=7", "phase=1", NULL},
@@ -730,6 +730,10 @@ static void test_energy(void) {
         {"grid=sixteenth", "voices=3", "delay=5", "length=20", NULL},
         {"w_arc=3", "w_sequence=2", "rhythm=1", "voices=3", NULL},
         {"grid=eighth", "w_arc=2", "climax=40", "w_sequence=3", "rhythm=1", NULL},
+        {"grid=eighth", "length=40", "phrase=1", "w_sequence=3", "rhythm=1", "harmony=1",
+         "ensemble=strings", "voices=3", "transpose_1=-12", "transpose_2=-24", "range_low=40",
+         "range_high=88", NULL},
+        {"grid=sixteenth", "length=48", "phrase=1", "w_sequence=2", "rhythm=1", "max_hold=3", NULL},
     };
     for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
         PieceConfig c = test_config();
@@ -741,9 +745,10 @@ static void test_energy(void) {
     }
 }
 
-/* Leaps and double leaps are checked once per line shape, and range
- * once per transposition: diatonic transposition changes interval
- * sizes, chromatic transposition does not. */
+/* Leaps and double leaps are checked once per line shape (diatonic
+ * transposition changes interval sizes, chromatic transposition does not),
+ * and range for every voice that plays the note, since each voice may have
+ * an instrument with a range of its own. */
 static void test_voice_transpose(void) {
     PieceConfig c = test_config();
     test_set(&c, "voices=3");
@@ -782,6 +787,204 @@ static void test_voice_transpose(void) {
     test_close(r);
 }
 
+/* A form of two-bar phrases over eight bars of eighths: the subject, a
+ * development that echoes its head, the climax's phrase that contrasts with
+ * it, and the return; each phrase but the last breathes, and with harmony
+ * ends on a prepared dominant. */
+static void test_form(void) {
+    PieceConfig c = test_config();
+    test_set(&c, "grid=eighth");
+    test_set(&c, "length=64");
+    test_set(&c, "delay=16");
+    test_set(&c, "rhythm=1");
+    test_set(&c, "harmony=1");
+    test_set(&c, "max_hold=5");
+    test_set(&c, "range_low=55");
+    test_set(&c, "range_high=79");
+    test_set(&c, "phrase=2");
+    test_set(&c, "w_sequence=3");
+    TestRun *r = test_open(&c);
+    const Model *m = &r->model;
+    const FormPlan *f = &m->form;
+    CHECK(f->count == 4 && f->head == 8);
+    CHECK(f->start[1] == 16 && f->start[2] == 32 && f->start[3] == 48 && f->start[4] == 64);
+    CHECK(f->role[0] == ROLE_SUBJECT && f->role[1] == ROLE_DEVELOP);
+    CHECK(f->role[2] == ROLE_CLIMAX && f->role[3] == ROLE_RETURN);
+    CHECK(f->climax == 44); /* 66% of 63 steps, on the nearest half bar */
+    /* the development echoes seven intervals of the head; the return the
+     * same and its first pitch; the climax's phrase does not echo */
+    CHECK(count_term(m, TERM_ECHO) == 7 + 7 + 1);
+    CHECK(count_term(m, TERM_SEQUENCE) == 0); /* a form replaces bar-to-bar echoes */
+    CHECK(count_term(m, TERM_CONTRAST) == 1);
+    CHECK(count_term(m, TERM_BREATH) == 3);
+    CHECK(count_term(m, TERM_ARRIVAL) == 3 * 2 + 1);
+    /* the subject's rhythm and contour return, as rules: a tie and a move
+     * per echoed step, the development's upside down */
+    int same = 0;
+    int contours = 0;
+    for (int k = 0; k < m->ncons; k++) {
+        const Constraint *rule = &m->cons[k];
+        if (rule->rule != CID_FORM) continue;
+        if (rule->type == C_SAME) {
+            CHECK(rule->vars[rule->slot[1]] == m->tie[rule->time]);
+            CHECK(rule->vars[rule->slot[0]] == m->tie[rule->param]);
+            same++;
+        } else {
+            CHECK(rule->type == C_CONTOUR);
+            CHECK((rule->param & 1) == (rule->time < 32)); /* the development is inverted */
+            int cv[SCOPE_MAX];
+            cv[rule->slot[0]] = 60;
+            cv[rule->slot[1]] = 62;
+            cv[rule->slot[2]] = 67;
+            cv[rule->slot[3]] = (rule->param & 1) ? 64 : 71;
+            CHECK(constraint_holds(m, rule, cv));
+            cv[rule->slot[3]] = 67;
+            CHECK(!constraint_holds(m, rule, cv)); /* level where the subject moved */
+            cv[rule->slot[3]] = PITCH_REST;
+            CHECK(!constraint_holds(m, rule, cv)); /* a rest where the subject sounds */
+            contours++;
+        }
+    }
+    CHECK(same == 7 + 7 && contours == 7 + 7);
+    /* no rest or hold costs where a phrase breathes, its last half bar */
+    CHECK(form_breathes(m, 12) && form_breathes(m, 15) && !form_breathes(m, 11));
+    CHECK(!form_breathes(m, 63));
+    for (int k = 0; k < m->nterms; k++) {
+        const Constraint *t = &m->terms[k];
+        if (t->rule == TERM_REST || t->rule == TERM_HOLD) CHECK(!form_breathes(m, t->time));
+    }
+
+    /* the return, against no other voice's subject, echoes the head as it
+     * is: the same interval and rhythm costs nothing, the same direction a
+     * different size half, another rhythm or direction all */
+    const Constraint *t = find_term(m, TERM_ECHO, 48 + 3, 6);
+    CHECK(t != NULL && t->param == 0);
+    CHECK(t->vars[t->slot[0]] == m->pitch[2] && t->vars[t->slot[3]] == m->pitch[51]);
+    int v[SCOPE_MAX];
+    v[t->slot[0]] = 60;
+    v[t->slot[1]] = 64;
+    v[t->slot[2]] = 62;
+    v[t->slot[3]] = 66;
+    v[t->slot[4]] = TIE_NOTE;
+    v[t->slot[5]] = TIE_NOTE;
+    CHECK(term_cost(m, t, v) == 0);
+    v[t->slot[3]] = 65;
+    CHECK(term_cost(m, t, v) == 0); /* a diatonic sequence */
+    v[t->slot[3]] = 69;
+    CHECK(term_cost(m, t, v) == 2);
+    v[t->slot[3]] = 60;
+    CHECK(term_cost(m, t, v) == 3);
+    v[t->slot[3]] = 66;
+    v[t->slot[5]] = TIE_HOLD;
+    CHECK(term_cost(m, t, v) == 3); /* held where the subject moved */
+    /* the development sounds while voice 2 enters with the subject, so it
+     * echoes the head upside down, in contrary motion against it */
+    t = find_term(m, TERM_ECHO, 16 + 3, 6);
+    CHECK(t != NULL && t->param == 1);
+    v[t->slot[0]] = 60;
+    v[t->slot[1]] = 64;
+    v[t->slot[2]] = 62;
+    v[t->slot[3]] = 58;
+    v[t->slot[4]] = TIE_NOTE;
+    v[t->slot[5]] = TIE_NOTE;
+    CHECK(term_cost(m, t, v) == 0);
+    v[t->slot[3]] = 66;
+    CHECK(term_cost(m, t, v) == 3); /* the same way up is the wrong way here */
+    /* the return starts on the subject's first pitch */
+    t = find_term(m, TERM_ECHO, 48, 2);
+    CHECK(t != NULL);
+    v[t->slot[0]] = 62;
+    v[t->slot[1]] = 62;
+    CHECK(term_cost(m, t, v) == 0);
+    v[t->slot[1]] = 74;
+    CHECK(term_cost(m, t, v) == 3);
+
+    /* contrast: the head's attacks (its first step always one) against the
+     * climax bar's; a difference under two attacks costs */
+    t = find_term(m, TERM_CONTRAST, 40, 15);
+    CHECK(t != NULL && t->param == 7);
+    CHECK(tie_cost(m, t, "HNHNHNH" "NHNHNHNH") == 3 * 2); /* four against four */
+    CHECK(tie_cost(m, t, "HNHNHNH" "NNNNNNNN") == 0);     /* four against eight */
+    CHECK(tie_cost(m, t, "HNHNHNN" "NHNHNHNH") == 3);     /* five against four */
+
+    /* a breath: each attack after the first step of the last half bar */
+    t = find_term(m, TERM_BREATH, 12, 6);
+    CHECK(t != NULL);
+    v[t->slot[0]] = TIE_HOLD;
+    v[t->slot[1]] = 60;
+    v[t->slot[2]] = TIE_HOLD;
+    v[t->slot[3]] = 60;
+    v[t->slot[4]] = TIE_HOLD;
+    v[t->slot[5]] = 60;
+    CHECK(term_cost(m, t, v) == 0); /* a half note */
+    v[t->slot[2]] = TIE_NOTE;
+    v[t->slot[3]] = PITCH_REST;
+    CHECK(term_cost(m, t, v) == 0); /* a rest breathes too */
+    v[t->slot[4]] = TIE_NOTE;
+    v[t->slot[5]] = 62;
+    CHECK(term_cost(m, t, v) == 3); /* a note attacked in it */
+
+    /* arrivals: a dominant at the phrase's end, prepared by IV or ii */
+    t = find_term(m, TERM_ARRIVAL, 8, 1);
+    CHECK(t != NULL && t->weight == 2 * c.w_harmony);
+    v[t->slot[0]] = DEGREE_V;
+    CHECK(term_cost(m, t, v) == 0);
+    v[t->slot[0]] = DEGREE_I;
+    CHECK(term_cost(m, t, v) == 2);
+    t = find_term(m, TERM_ARRIVAL, 0, 1);
+    CHECK(t != NULL);
+    v[t->slot[0]] = DEGREE_II;
+    CHECK(term_cost(m, t, v) == 0);
+    test_close(r);
+
+    /* the solver keeps the form's promises it can: here the head comes back */
+    test_set(&c, "optimize=4000");
+    r = test_solve(&c);
+    CHECK(r->status == SOLVE_SAT);
+    int breakdown[TERM_COUNT];
+    model_energy(&r->model, r->values, breakdown);
+    CHECK(breakdown[TERM_ECHO] < 15 * 3 / 2); /* most of the echo holds */
+    test_close(r);
+
+    /* with an arc, the climax is the top: it sounds, and nothing is above it */
+    test_set(&c, "w_arc=3");
+    r = test_open(&c);
+    CHECK(count_rule(&r->model, CID_FORM) == 28 + 1 + 63);
+    const Constraint *top = NULL;
+    for (int k = 0; k < r->model.ncons && top == NULL; k++) {
+        if (r->model.cons[k].type == C_NOT_ABOVE) top = &r->model.cons[k];
+    }
+    CHECK(top != NULL && top->param == 44);
+    int pv[SCOPE_MAX];
+    pv[top->slot[0]] = 70;
+    pv[top->slot[1]] = 72;
+    CHECK(constraint_holds(&r->model, top, pv));
+    pv[top->slot[0]] = 74;
+    CHECK(!constraint_holds(&r->model, top, pv));
+    pv[top->slot[0]] = PITCH_REST;
+    CHECK(constraint_holds(&r->model, top, pv));
+    test_close(r);
+    r = test_solve(&c);
+    CHECK(r->status == SOLVE_SAT);
+    for (int i = 0; i < c.length; i++) {
+        int p = test_pitch(r, i);
+        /* the single top: only within a held note's length (5) may share it */
+        CHECK(p == PITCH_REST || p < test_pitch(r, 44) || (i >= 39 && i <= 49 && p == test_pitch(r, 44)));
+    }
+    for (int j = 1; j < 8; j++) {
+        CHECK(r->values[r->model.tie[16 + j]] == r->values[r->model.tie[j]]);
+        CHECK(r->values[r->model.tie[48 + j]] == r->values[r->model.tie[j]]);
+    }
+    test_close(r);
+
+    /* no form: a phrase as long as the melody, or phrase 0 */
+    c = test_config();
+    test_set(&c, "phrase=3");
+    r = test_open(&c);
+    CHECK(r->model.form.count == 1 && count_term(&r->model, TERM_ECHO) == 0);
+    test_close(r);
+}
+
 int main(void) {
     test_variables();
     test_voice_transpose();
@@ -794,6 +997,7 @@ int main(void) {
     test_step();
     test_arc();
     test_sequence();
+    test_form();
     test_energy();
     printf("ok\n");
     return 0;

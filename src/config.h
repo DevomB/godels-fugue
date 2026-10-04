@@ -9,7 +9,14 @@
 
 enum { CONSONANCE_OFF, CONSONANCE_STRONG, CONSONANCE_ALL };
 enum { ORDER_MRV, ORDER_ENTROPY, ORDER_COLLAPSE, ORDER_INDEX };
-enum { INSTRUMENT_PLUCK, INSTRUMENT_ORGAN, INSTRUMENT_SINE, INSTRUMENT_COUNT };
+/* The synths of voices.wav; auto picks one per voice from its instrument. */
+enum {
+    INSTRUMENT_PLUCK,
+    INSTRUMENT_ORGAN,
+    INSTRUMENT_SINE,
+    INSTRUMENT_COUNT,
+    INSTRUMENT_AUTO = INSTRUMENT_COUNT
+};
 enum { GRID_QUARTER, GRID_EIGHTH, GRID_SIXTEENTH, GRID_COUNT };
 /* The instruments the score files are written for (parts.c gives each voice
  * one), and whether transposing instruments are written in their own key. */
@@ -42,8 +49,17 @@ enum {
     MOOD_NOCTURNE,
     MOOD_COUNT
 };
+/* How a voice's notes are joined (articulation key); auto follows the mood. */
+enum {
+    ARTICULATION_AUTO,
+    ARTICULATION_LEGATO,
+    ARTICULATION_NORMAL,
+    ARTICULATION_DETACHED,
+    ARTICULATION_STACCATO,
+    ARTICULATION_COUNT
+};
 enum { KEY_SEARCH = -1 };
-enum { TRANSPOSE_SAME = -128 };
+enum { TRANSPOSE_SAME = -128, PAN_AUTO = -128 };
 
 /* Every field is an int so one table can load, check and print them.
  * See config.c for ranges, defaults and the help text of each key. */
@@ -126,6 +142,7 @@ typedef struct PieceConfig {
     int motif_c;
     int motif_d;
     int w_sequence;
+    int phrase;
     int w_modulate;
     int w_harmony;
     int w_rest;
@@ -154,6 +171,14 @@ typedef struct PieceConfig {
     int ensemble;
     int written;
     int mood;
+    /* players: one entry per voice */
+    int part[VOICE_MAX];      /* PART_* (parts.h); 0 = the ensemble's */
+    int part_low[VOICE_MAX];  /* 0 = the instrument's own limit */
+    int part_high[VOICE_MAX];
+    int volume[VOICE_MAX];    /* 0..127, MIDI volume */
+    int pan[VOICE_MAX];       /* -100 left .. 100 right, or PAN_AUTO */
+    int articulation[VOICE_MAX];
+    int intensity[VOICE_MAX]; /* percent of the mood's dynamics and accents */
 } PieceConfig;
 
 void config_defaults(PieceConfig *config);
@@ -173,6 +198,12 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap);
 
 /* Every key and its current value, in the text format. */
 void config_write(FILE *f, const PieceConfig *config);
+/* The same as one JSON object of strings, as proof.json and --resolve give it. */
+void config_write_json(FILE *f, const PieceConfig *config);
+/* Does the key change only how the piece is performed or written out (tempo,
+ * mood, the mix, articulation, concert pitch), never its notes? Every other
+ * key may change the notes. */
+bool config_keeps_notes(const char *key);
 int config_key_count(void);
 const char *config_key_name(int index);
 /* Text form of one key's value; arrays are comma-separated. The longest,

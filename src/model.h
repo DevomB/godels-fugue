@@ -34,6 +34,7 @@ enum {
     CID_LOCK,
     CID_MODULATION,
     CID_MIRROR,
+    CID_FORM, /* the subject's rhythm returns; nothing rises above the climax */
     CID_REFUTED, /* the search tried the value and every completion failed */
     CID_LEARNED, /* a learned conflict excluded the value */
     CID_MAX
@@ -66,8 +67,27 @@ enum {
     TERM_FIGURE,
     TERM_ARC,
     TERM_SEQUENCE,
+    TERM_ECHO,     /* a phrase that brings back the subject's head, or its inversion (form) */
+    TERM_CONTRAST, /* the climax's bar moving like the subject's (form) */
+    TERM_BREATH,   /* a phrase that runs on through its last half bar (form) */
+    TERM_ARRIVAL,  /* a phrase end without its cadence chord (form) */
     TERM_COUNT
 };
+
+/* The melody's form: phrases of `phrase` bars (config), each with a role.
+ * The subject is stated first; development phrases bring its head (first
+ * bar) back as a sequence; the phrase holding the climax contrasts with it;
+ * the return brings the head back at its own pitch before the cadence. */
+enum { ROLE_SUBJECT, ROLE_DEVELOP, ROLE_CLIMAX, ROLE_RETURN, ROLE_COUNT };
+enum { PHRASE_MAX = MELODY_MAX / 4 };
+
+typedef struct FormPlan {
+    int count;                 /* phrases; 1 without a form */
+    int start[PHRASE_MAX + 1]; /* melody step each phrase starts; start[count] = length */
+    int role[PHRASE_MAX];
+    int head;   /* steps of the subject's head */
+    int climax; /* melody step of the peak: climax percent, on the nearest half bar */
+} FormPlan;
 
 /* Predicate shapes of hard constraints. */
 enum {
@@ -92,7 +112,12 @@ enum {
     C_SAME_MODE,        /* (key, key) same mode */
     C_LEADING_TONE,     /* (pitch, next pitch, key[, next tie]) the melody */
     C_DOUBLE_LEAP,      /* (pitch, pitch, pitch) consecutive notes of one voice */
-    C_MIRROR            /* (pitch, pitch) mirrored around param; one slot: the middle note */
+    C_MIRROR,           /* (pitch, pitch) mirrored around param; one slot: the middle note */
+    C_SAME,             /* (tie, tie) equal: a return keeps the subject's rhythm */
+    C_CONTOUR,          /* (a, b, a', b') b-a and b'-a' move the same way (param 1: opposite) */
+    C_NOT_ABOVE,        /* (pitch, the climax's pitch) no higher, rests aside */
+    C_BELOW,            /* (pitch, the climax's pitch) lower, rests aside */
+    C_SOUNDS            /* (pitch) not a rest: the climax */
 };
 
 /* The widest rule is the cadence approach to a final note held max_hold
@@ -136,6 +161,10 @@ typedef struct Model {
     int key[SECTION_MAX];
     int source[VOICE_MAX][SPAN_MAX]; /* melody index or -1 */
     int max_rests_con; /* index of the rest-count constraint, or -1 */
+    FormPlan form;
+    int part[VOICE_MAX]; /* each voice's instrument, PART_* (parts.h) */
+    int low[VOICE_MAX];  /* the sounding range each voice keeps to (part_range) */
+    int high[VOICE_MAX];
 
     Constraint *cons;
     int ncons;
@@ -156,6 +185,14 @@ bool model_build(Model *m, const PieceConfig *config, char *err, size_t cap);
  * model assembled by hand (as in the tests) must call it too. */
 bool model_link(Model *m);
 void model_free(Model *m);
+
+/* The form of a melody under this config; one phrase when phrase is 0 or
+ * the melody is no longer than a phrase. The climax is set either way. */
+void form_plan(const PieceConfig *config, FormPlan *form);
+const char *role_name(int role);
+/* Is melody step i in the last half bar of a phrase other than the last,
+ * where the melody breathes? */
+bool form_breathes(const Model *m, int i);
 
 int model_section_at(const Model *m, int time);
 bool model_rule_used(const Model *m, int rule);

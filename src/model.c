@@ -1,6 +1,7 @@
 #include "model.h"
 
 #include "canon.h"
+#include "parts.h"
 #include "theory.h"
 
 #include <stdio.h>
@@ -14,7 +15,8 @@ const char *rule_name(int rule) {
         "consonance", "parallel fifth", "parallel octave", "spacing",
         "crossing",   "chord tone", "progression",     "cadence",
         "tie",        "max hold",   "rest",            "lock",
-        "modulation", "mirror",     "search",          "learned conflict"};
+        "modulation", "mirror",     "form",            "search",
+        "learned conflict"};
     if (rule <= 0 || rule >= CID_MAX) return "unknown";
     return names[rule];
 }
@@ -24,9 +26,53 @@ const char *term_name(int term) {
         "gravity",   "curve",       "corpus", "rest",  "leap",       "repeat",
         "recovery",  "motif",       "dissonance", "direct perfect", "contrary motion", "hold",
         "syncopation", "rhythm",    "final",  "chord", "chord motion", "non-chord tone", "key",
-        "key distance", "run", "step", "figure", "arc", "sequence"};
+        "key distance", "run", "step", "figure", "arc", "sequence", "subject", "contrast",
+        "breath", "arrival"};
     if (term < 0 || term >= TERM_COUNT) return "unknown";
     return names[term];
+}
+
+const char *role_name(int role) {
+    static const char *const names[ROLE_COUNT] = {"subject", "development", "climax", "return"};
+    return role >= 0 && role < ROLE_COUNT ? names[role] : "?";
+}
+
+void form_plan(const PieceConfig *c, FormPlan *f) {
+    memset(f, 0, sizeof(*f));
+    int length = c->length > 0 ? c->length : 1;
+    int bar = config_bar_steps(c);
+    /* the peak lands on the nearest half bar (beat 1 or 3) */
+    int half = 2 * config_beat_steps(c);
+    int peak = (c->climax * (length - 1) + 50) / 100;
+    peak = (peak + half / 2) / half * half;
+    if (peak > length - 1) peak = (length - 1) / half * half;
+    f->climax = peak;
+    f->head = bar < length ? bar : length;
+    f->count = 1;
+    f->start[0] = 0;
+    f->start[1] = length;
+    f->role[0] = ROLE_SUBJECT;
+    int steps = c->phrase * bar;
+    if (steps <= 0 || steps >= length) return;
+    int n = 0;
+    for (int s = 0; s < length && n < PHRASE_MAX; s += steps) f->start[n++] = s;
+    /* a last phrase shorter than a bar joins the one before */
+    if (n > 1 && length - f->start[n - 1] < bar) n--;
+    f->count = n;
+    f->start[n] = length;
+    for (int k = 1; k < n; k++) f->role[k] = k == n - 1 ? ROLE_RETURN : ROLE_DEVELOP;
+    for (int k = 1; k + 1 < n; k++) {
+        if (peak >= f->start[k] && peak < f->start[k + 1]) f->role[k] = ROLE_CLIMAX;
+    }
+}
+
+bool form_breathes(const Model *m, int i) {
+    const FormPlan *f = &m->form;
+    int half = config_bar_steps(&m->config) / 2;
+    for (int k = 1; k < f->count; k++) {
+        if (i >= f->start[k] - half && i < f->start[k]) return true;
+    }
+    return false;
 }
 
 const char *var_kind_name(int kind) {
@@ -221,19 +267,25 @@ static void build_pitch_rules(Builder *b) {
     const PieceConfig *c = &m->config;
     int length = c->length;
     unsigned char sounds[MELODY_MAX][VOICE_MAX][SECTION_MAX];
+    unsigned char plays[MELODY_MAX][VOICE_MAX];
     memset(sounds, 0, sizeof(sounds));
+    memset(plays, 0, sizeof(plays));
     for (int v = 0; v < m->voices; v++) {
         for (int t = 0; t < m->span; t++) {
             int i = m->source[v][t];
-            if (i >= 0) sounds[i][transform_rep(c, v)][model_section_at(m, t)] = 1;
+            if (i < 0) continue;
+            sounds[i][transform_rep(c, v)][model_section_at(m, t)] = 1;
+            plays[i][v] = 1;
         }
     }
 
+    /* every voice keeps to its own range, its instrument's included, so
+     * voices transposed alike still get a slot each */
     for (int i = 0; i < length; i++) {
         Constraint *r = add_con(b, CID_RANGE, C_RANGE);
         add_slot(r, m->pitch[i], 0);
         for (int v = 1; v < m->voices; v++) {
-            if (sounds[i][v][0] || sounds[i][v][1]) add_slot(r, m->pitch[i], v);
+            if (plays[i][v]) add_slot(r, m->pitch[i], v);
         }
         for (int sec = 0; sec < m->nsections; sec++) {
             bool any = false;
@@ -563,6 +615,199 @@ static bool uses_motif(const PieceConfig *c) {
     return c->w_motif > 0 && c->motif_a != -128;
 }
 
+/* Would the head, stated at melody step d, sound in some voice at the same
+ * time as another voice states the subject's head? In a canon whose entries
+ * fall on phrase starts it would: the two would move in parallel, which the
+ * rules forbid at the octave and the costs dislike elsewhere. The echo is
+ * then inverted, so the two move in contrary motion against each other.
+ * Only for voices that play the melody as it is, in time. */
+static bool head_collides(const Model *m, int d) {
+    const PieceConfig *c = &m->config;
+    if (c->invert || c->retrograde || c->augment >= 2 || c->diminish >= 2) return false;
+    int head = m->form.head;
+    int length = c->length;
+    for (int u = 0; u < m->voices; u++) {
+        for (int v = 0; v < m->voices; v++) {
+            if (u == v) continue;
+            int gap = canon_voice_delay(c, u) + d - canon_voice_delay(c, v);
+            if (c->cyclic) {
+                gap %= length;
+                if (gap < 0) gap += length;
+                if (gap > length / 2) gap -= length;
+            }
+            if (gap > -head && gap < head) return true;
+        }
+    }
+    return false;
+}
+
+/* The form's promises that are rules, not costs: a phrase that brings back
+ * the subject's head keeps its rhythm, tie for tie, its rests, and its
+ * contour, each move up, down or level the same way (upside down where it
+ * meets another voice's subject); the sizes of the moves are weighed, so a
+ * return can be a sequence or vary. With an arc the climax is the melody's
+ * single top: it sounds, and only notes near it, as long as a held note,
+ * may reach its pitch. These relate notes far apart, which the optimizer's
+ * local windows cannot keep as costs. */
+static void build_form_rules(Builder *b) {
+    Model *m = b->m;
+    const PieceConfig *c = &m->config;
+    const FormPlan *f = &m->form;
+    if (f->count < 2) return;
+    int length = c->length;
+    int half = config_bar_steps(c) / 2;
+    for (int k = 1; k < f->count && c->rhythm; k++) {
+        if (f->role[k] == ROLE_CLIMAX) continue;
+        int d = f->start[k];
+        int end = f->role[k] == ROLE_RETURN ? length - half : f->start[k + 1];
+        for (int j = 1; j < f->head && d + j < end; j++) {
+            Constraint *r = add_con(b, CID_FORM, C_SAME);
+            add_slot(r, m->tie[j], -1);
+            add_slot(r, m->tie[d + j], -1);
+            if (r != NULL) {
+                r->time = d + j;
+                r->param = j;
+            }
+        }
+    }
+    for (int k = 1; k < f->count; k++) {
+        if (f->role[k] == ROLE_CLIMAX) continue;
+        int d = f->start[k];
+        int end = f->role[k] == ROLE_RETURN ? length - half : f->start[k + 1];
+        bool inverted = head_collides(m, d);
+        for (int j = 1; j < f->head && d + j < end; j++) {
+            Constraint *r = add_con(b, CID_FORM, C_CONTOUR);
+            add_slot(r, m->pitch[j - 1], -1);
+            add_slot(r, m->pitch[j], -1);
+            add_slot(r, m->pitch[d + j - 1], -1);
+            add_slot(r, m->pitch[d + j], -1);
+            if (r != NULL) {
+                r->time = d + j;
+                r->param = 2 * j + inverted; /* the head's step, and whether upside down */
+            }
+        }
+    }
+    if (c->w_arc <= 0) return;
+    int peak = f->climax;
+    if (c->rhythm) {
+        Constraint *r = add_con(b, CID_FORM, C_SOUNDS);
+        add_slot(r, m->pitch[peak], -1);
+        if (r != NULL) r->time = peak;
+    }
+    /* a note within a held note's length of the climax may share its pitch */
+    int near = c->rhythm ? c->max_hold : 0;
+    for (int i = 0; i < length; i++) {
+        if (i == peak) continue;
+        bool beside = i >= peak - near && i <= peak + near;
+        Constraint *r = add_con(b, CID_FORM, beside ? C_NOT_ABOVE : C_BELOW);
+        add_slot(r, m->pitch[i], -1);
+        add_slot(r, m->pitch[peak], -1);
+        if (r != NULL) {
+            r->time = i;
+            r->param = peak;
+        }
+    }
+}
+
+/* The form's terms (form_plan). Each later phrase's head echoes the
+ * subject's head interval by interval, and in rhythm where there are ties,
+ * upside down where it would sound against another voice's subject
+ * (head_collides); the return also starts on the subject's first pitch.
+ * The climax's bar moves in more or fewer notes than the head. Every phrase
+ * but the last ends on a long note or a rest, and with harmony on a dominant
+ * chord prepared by IV or ii. */
+static void build_form_terms(Builder *b) {
+    Model *m = b->m;
+    const PieceConfig *c = &m->config;
+    const FormPlan *f = &m->form;
+    int length = c->length;
+    int bar = config_bar_steps(c);
+    int half = bar / 2;
+    for (int k = 1; k < f->count; k++) {
+        int d = f->start[k];
+        bool back = f->role[k] == ROLE_RETURN;
+        if (f->role[k] == ROLE_CLIMAX) continue;
+        /* the return leaves its last half bar to the cadence */
+        int end = back ? length - half : f->start[k + 1];
+        bool inverted = head_collides(m, d);
+        for (int j = 1; j < f->head && d + j < end; j++) {
+            Constraint *t = add_term(b, TERM_ECHO, c->w_sequence);
+            add_slot(t, m->pitch[j - 1], 0);
+            add_slot(t, m->pitch[j], 0);
+            add_slot(t, m->pitch[d + j - 1], 0);
+            add_slot(t, m->pitch[d + j], 0);
+            add_slot(t, m->tie[j], -1);
+            add_slot(t, m->tie[d + j], -1);
+            if (t != NULL) {
+                t->time = d + j;
+                t->param = inverted;
+            }
+        }
+        if (back && d < end) {
+            Constraint *t = add_term(b, TERM_ECHO, c->w_sequence);
+            add_slot(t, m->pitch[0], 0);
+            add_slot(t, m->pitch[d], 0);
+            if (t != NULL) t->time = d;
+        }
+    }
+    if (c->rhythm) {
+        /* activity sampled every step, or every eighth on the sixteenth grid */
+        int stride = config_beat_steps(c) == 4 ? 2 : 1;
+        for (int k = 1; k + 1 < f->count; k++) {
+            if (f->role[k] != ROLE_CLIMAX) continue;
+            int from = f->climax / bar * bar;
+            Constraint *t = add_term(b, TERM_CONTRAST, c->w_sequence);
+            if (t == NULL) break;
+            int head = 0;
+            for (int p = stride; p < bar && p < length; p += stride) {
+                add_slot(t, m->tie[p], -1);
+                head++;
+            }
+            for (int p = 0; p < bar && from + p < length; p += stride)
+                add_slot(t, m->tie[from + p], -1);
+            t->time = from;
+            t->param = head;
+        }
+        for (int k = 1; k < f->count; k++) {
+            Constraint *t = add_term(b, TERM_BREATH, c->w_rhythm);
+            for (int i = f->start[k] - half + 1; i < f->start[k]; i++) {
+                add_slot(t, m->tie[i], -1);
+                add_slot(t, m->pitch[i], -1);
+            }
+            if (t != NULL) t->time = f->start[k] - half;
+        }
+    }
+    if (c->harmony) {
+        for (int k = 1; k < f->count; k++) {
+            int arrive = (f->start[k] - 1) / bar;
+            int before = arrive - 1;
+            Constraint *t = add_term(b, TERM_ARRIVAL, c->w_harmony);
+            add_slot(t, m->chord[arrive], -1);
+            if (t != NULL) {
+                t->time = arrive * bar;
+                t->param = (1 << DEGREE_V) | (1 << DEGREE_VII);
+                t->weight *= 2;
+            }
+            if (before < 0 || before * bar < f->start[k - 1]) continue;
+            t = add_term(b, TERM_ARRIVAL, c->w_harmony);
+            add_slot(t, m->chord[before], -1);
+            if (t != NULL) {
+                t->time = before * bar;
+                t->param = (1 << DEGREE_IV) | (1 << DEGREE_II);
+            }
+        }
+        /* the final cadence's dominant (a rule) prepared the same way */
+        if (f->count > 1 && m->nbars >= 3) {
+            Constraint *t = add_term(b, TERM_ARRIVAL, c->w_harmony);
+            add_slot(t, m->chord[m->nbars - 3], -1);
+            if (t != NULL) {
+                t->time = (m->nbars - 3) * bar;
+                t->param = (1 << DEGREE_IV) | (1 << DEGREE_II);
+            }
+        }
+    }
+}
+
 static void build_terms(Builder *b) {
     Model *m = b->m;
     const PieceConfig *c = &m->config;
@@ -590,7 +835,8 @@ static void build_terms(Builder *b) {
             add_slot(t, m->pitch[i], 0);
             if (t != NULL) t->time = i;
         }
-        if (c->rhythm) {
+        /* a rest where a phrase breathes costs nothing */
+        if (c->rhythm && !form_breathes(m, i)) {
             t = add_term(b, TERM_REST, c->w_rest);
             add_slot(t, m->pitch[i], 0);
             if (t != NULL) t->time = i;
@@ -630,10 +876,7 @@ static void build_terms(Builder *b) {
         /* one peak, on the strong beat nearest the climax: every other note
          * is weighed against it, and the opening quarter must start a major
          * third or more below it, so the line climbs and comes down */
-        int strong = 2 * config_beat_steps(c);
-        int peak = (c->climax * (length - 1) + 50) / 100;
-        peak = (peak + strong / 2) / strong * strong;
-        if (peak > length - 1) peak = (length - 1) / strong * strong;
+        int peak = m->form.climax;
         for (int i = 0; i < length; i++) {
             if (i == peak) continue;
             Constraint *t = add_term(b, TERM_ARC, c->w_arc);
@@ -645,7 +888,9 @@ static void build_terms(Builder *b) {
             }
         }
     }
-    if (c->w_sequence > 0) {
+    if (m->form.count > 1) {
+        build_form_terms(b);
+    } else if (c->w_sequence > 0) {
         /* each interval against the one at the same place a bar before */
         int bar = 4 * config_beat_steps(c);
         for (int i = bar + 1; i < length; i++) {
@@ -695,7 +940,8 @@ static void build_terms(Builder *b) {
     int bar_steps = config_bar_steps(c);
     if (c->rhythm) {
         for (int i = 1; i < length; i++) {
-            Constraint *t = add_term(b, TERM_HOLD, c->w_hold);
+            /* a long note where a phrase breathes costs nothing */
+            Constraint *t = form_breathes(m, i) ? NULL : add_term(b, TERM_HOLD, c->w_hold);
             add_slot(t, m->tie[i], -1);
             if (t != NULL) t->time = i;
             /* a note attacked on beat 2 or 4 and held over beat 3 or 1 */
@@ -855,6 +1101,9 @@ bool model_build(Model *m, const PieceConfig *config, char *err, size_t cap) {
     m->voices = config_voice_count(config);
     m->nbars = (m->span + config_bar_steps(config) - 1) / config_bar_steps(config);
     m->nsections = config->modulate_at >= 0 ? 2 : 1;
+    form_plan(config, &m->form);
+    parts_for_config(config, m->part);
+    for (int v = 0; v < VOICE_MAX; v++) part_range(config, v, &m->low[v], &m->high[v]);
     for (int v = 0; v < VOICE_MAX; v++) {
         for (int t = 0; t < SPAN_MAX; t++) {
             m->source[v][t] = (v < m->voices && t < m->span) ? canon_map_source(config, v, t) : -1;
@@ -870,6 +1119,7 @@ bool model_build(Model *m, const PieceConfig *config, char *err, size_t cap) {
     build_cadence_rules(&b);
     build_rhythm_rules(&b);
     build_mirror_rules(&b);
+    build_form_rules(&b);
     build_key_rules(&b);
     build_terms(&b);
     if (b.oom || !model_link(m)) {
@@ -920,7 +1170,7 @@ bool constraint_holds(const Model *m, const Constraint *c, const int *vals) {
         for (int k = 0; k < c->nslots; k++) {
             int s = slot_sound(m, c, vals, k);
             if (s == SOUND_REST) continue;
-            if (s < cfg->range_low || s > cfg->range_high) return false;
+            if (s < m->low[c->voice[k]] || s > m->high[c->voice[k]]) return false;
         }
         return true;
     case C_SCALE: {
@@ -1051,6 +1301,29 @@ bool constraint_holds(const Model *m, const Constraint *c, const int *vals) {
         if (a == PITCH_REST || b == PITCH_REST) return a == b;
         return a + b == 2 * c->param;
     }
+    case C_SAME:
+        return slot_value(c, vals, 0) == slot_value(c, vals, 1);
+    case C_CONTOUR: {
+        int a0 = slot_value(c, vals, 0);
+        int b0 = slot_value(c, vals, 1);
+        int a1 = slot_value(c, vals, 2);
+        int b1 = slot_value(c, vals, 3);
+        if ((b0 == PITCH_REST) != (b1 == PITCH_REST)) return false;
+        if (a0 == PITCH_REST || b0 == PITCH_REST || a1 == PITCH_REST || b1 == PITCH_REST)
+            return true;
+        int was = (b0 > a0) - (b0 < a0);
+        int now = (b1 > a1) - (b1 < a1);
+        return (c->param & 1) ? was == -now : was == now;
+    }
+    case C_NOT_ABOVE:
+    case C_BELOW: {
+        int a = slot_value(c, vals, 0);
+        int peak = slot_value(c, vals, 1);
+        if (a == PITCH_REST || peak == PITCH_REST) return true;
+        return c->type == C_BELOW ? a < peak : a <= peak;
+    }
+    case C_SOUNDS:
+        return slot_value(c, vals, 0) != PITCH_REST;
     case C_MAX_RESTS:
     default:
         return true;
@@ -1287,6 +1560,57 @@ int term_cost(const Model *m, const Constraint *t, const int *vals) {
         if (((was > 0) - (was < 0)) != ((now > 0) - (now < 0))) return w;
         return iabs(was - now) <= 1 ? 0 : (w + 1) / 2;
     }
+    case TERM_ECHO: {
+        /* two slots: the return starts on the subject's first pitch; four:
+         * an interval of the head against its echo, as for a sequence, the
+         * echo's turned over when it is inverted (param); six: the same with
+         * both notes' ties, a different rhythm (or a rest against a note)
+         * costing all of it */
+        if (t->nslots == 2) return slot_value(t, vals, 0) == slot_value(t, vals, 1) ? 0 : w;
+        int a0 = slot_value(t, vals, 0);
+        int b0 = slot_value(t, vals, 1);
+        int a1 = slot_value(t, vals, 2);
+        int b1 = slot_value(t, vals, 3);
+        if (t->nslots == 6 && (slot_value(t, vals, 4) != slot_value(t, vals, 5) ||
+                               (b0 == PITCH_REST) != (b1 == PITCH_REST)))
+            return w;
+        if (a0 == PITCH_REST || b0 == PITCH_REST || a1 == PITCH_REST || b1 == PITCH_REST)
+            return 0;
+        int was = b0 - a0;
+        int now = t->param ? a1 - b1 : b1 - a1;
+        if (((was > 0) - (was < 0)) != ((now > 0) - (now < 0))) return w;
+        return iabs(was - now) <= 1 ? 0 : (w + 1) / 2;
+    }
+    case TERM_CONTRAST: {
+        /* the head's ties after its first step (param of them), then the
+         * climax bar's from its first: attacks per bar, sampled the same way,
+         * should differ by a quarter of the samples */
+        int head = 1;
+        int peak = 0;
+        for (int k = 0; k < t->nslots; k++) {
+            if (slot_value(t, vals, k) != TIE_NOTE) continue;
+            if (k < t->param) {
+                head++;
+            } else {
+                peak++;
+            }
+        }
+        int need = (t->param + 1) / 4 > 0 ? (t->param + 1) / 4 : 1;
+        int differ = iabs(head - peak);
+        return differ >= need ? 0 : w * (need - differ);
+    }
+    case TERM_BREATH: {
+        /* pairs of tie and pitch: each note attacked after the first step
+         * of the phrase's last half bar */
+        int runs = 0;
+        for (int k = 0; k + 1 < t->nslots; k += 2) {
+            if (slot_value(t, vals, k) == TIE_NOTE && slot_value(t, vals, k + 1) != PITCH_REST)
+                runs++;
+        }
+        return w * runs;
+    }
+    case TERM_ARRIVAL:
+        return (t->param >> slot_value(t, vals, 0)) & 1 ? 0 : w;
     default:
         return 0;
     }
@@ -1381,10 +1705,21 @@ void constraint_describe(const Model *m, const Constraint *c, char *buf, size_t 
         used += (size_t)w;
     }
     switch (c->type) {
-    case C_RANGE:
-        snprintf(buf, cap, "every voice stays within %d..%d", cfg->range_low,
-                 cfg->range_high);
+    case C_RANGE: {
+        /* each voice that plays the note, with its own range */
+        size_t at = 0;
+        buf[0] = '\0';
+        for (int k = 0; k < c->nslots && at < cap; k++) {
+            int v = c->voice[k];
+            const Part *p = part_get(m->part[v]);
+            int w = snprintf(buf + at, cap - at, "%svoice %d%s%s%s stays within %d..%d",
+                             k ? ", " : "", v + 1, p ? " (" : "", p ? p->name : "", p ? ")" : "",
+                             m->low[v], m->high[v]);
+            if (w < 0) break;
+            at += (size_t)w;
+        }
         break;
+    }
     case C_SCALE:
         snprintf(buf, cap, "notes stay in the key");
         break;
@@ -1452,6 +1787,24 @@ void constraint_describe(const Model *m, const Constraint *c, char *buf, size_t 
         break;
     case C_SAME_MODE:
         snprintf(buf, cap, "both keys share a mode");
+        break;
+    case C_SAME:
+        snprintf(buf, cap, "a return of the subject keeps its rhythm: note %d is tied as note %d is",
+                 c->time, c->param);
+        break;
+    case C_CONTOUR:
+        snprintf(buf, cap, "a return of the subject keeps its contour%s: note %d moves as note %d does",
+                 (c->param & 1) ? ", upside down" : "", c->time, c->param >> 1);
+        break;
+    case C_NOT_ABOVE:
+        snprintf(buf, cap, "no melody note rises above the climax at note %d", c->param);
+        break;
+    case C_BELOW:
+        snprintf(buf, cap, "the climax at note %d is the highest note: note %d stays below it",
+                 c->param, c->time);
+        break;
+    case C_SOUNDS:
+        snprintf(buf, cap, "the climax at note %d sounds", c->time);
         break;
     case C_MIRROR: {
         char axis[16];

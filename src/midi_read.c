@@ -295,7 +295,9 @@ bool midi_read_file(MidiFile *file, const char *path, char *err, size_t cap) {
 
 int midi_first_track(const MidiFile *file) {
     for (int k = 0; k < file->ntracks; k++) {
-        if (file->tracks[k].count > 0) return k;
+        for (int n = 0; n < file->tracks[k].count; n++) {
+            if (file->tracks[k].notes[n].pitch != PITCH_REST) return k;
+        }
     }
     return -1;
 }

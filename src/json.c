@@ -1,5 +1,6 @@
 #include "json.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -173,6 +174,10 @@ static char *parse_string(Parser *p) {
                 fail(p, "\\u0000 in a string");
                 break;
             }
+            if (cp >= 0xD800 && cp <= 0xDFFF) {
+                fail(p, "lone surrogate in a string");
+                break;
+            }
             ok = buf_utf8(&b, cp);
             break;
         }
@@ -313,8 +318,14 @@ static bool parse_number(Parser *p, JsonValue *out) {
         while (s[i] >= '0' && s[i] <= '9') i++;
     }
     out->type = JSON_NUMBER;
+    errno = 0;
     out->number = strtod(s + start, NULL);
     p->pos = i;
+    /* 1e-400 would read as 0 and 1e400 as infinity: neither is the number given */
+    if (errno == ERANGE) {
+        fail(p, "number out of range");
+        return false;
+    }
     return true;
 }
 

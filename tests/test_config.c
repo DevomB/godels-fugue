@@ -1,4 +1,5 @@
 #include "config.h"
+#include "parts.h"
 #include "corpus.h"
 #include "theory.h"
 #include "test_util.h"
@@ -50,7 +51,7 @@ static void test_defaults_and_set(void) {
     CHECK(c.rhythm == 0);
     CHECK(config_set(&c, "var_order", "entropy", err, sizeof(err)));
     CHECK(c.var_order == ORDER_ENTROPY);
-    CHECK(c.instrument == INSTRUMENT_PLUCK);
+    CHECK(c.instrument == INSTRUMENT_AUTO);
     CHECK(config_set(&c, "instrument", "organ", err, sizeof(err)));
     CHECK(c.instrument == INSTRUMENT_ORGAN);
     CHECK(config_set(&c, "instrument", "sine", err, sizeof(err)));
@@ -263,6 +264,58 @@ static void test_presets(void) {
     CHECK(config_apply_preset(&c, "triumph", err, sizeof(err)));
     CHECK(c.voices == 3 && c.harmony == 1);
     CHECK(c.ensemble == ENSEMBLE_BRASS && c.mood == MOOD_TRIUMPH);
+    CHECK(c.phrase > 0); /* every preset has a form */
+
+    /* a preset starts from the defaults: a second one keeps nothing of the
+     * first (longing is minor and modulates; triumph neither) */
+    config_defaults(&c);
+    CHECK(config_apply_preset(&c, "longing", err, sizeof(err)));
+    CHECK(c.mode == MODE_MINOR && c.modulate_at >= 0);
+    CHECK(config_apply_preset(&c, "triumph", err, sizeof(err)));
+    CHECK(c.mode == MODE_MAJOR && c.modulate_at == -1 && c.key == 0);
+
+    /* only the keys that leave the notes alone keep them */
+    CHECK(config_keeps_notes("tempo") && config_keeps_notes("mood") && config_keeps_notes("volume"));
+    CHECK(config_keeps_notes("articulation") && config_keeps_notes("written"));
+    CHECK(!config_keeps_notes("parts") && !config_keeps_notes("ensemble"));
+    CHECK(!config_keeps_notes("part_low") && !config_keeps_notes("seed"));
+}
+
+/* Each voice's player: an instrument, a range, a mix and a way of playing,
+ * one value per voice; voices past the list keep the defaults. */
+static void test_players(void) {
+    PieceConfig c;
+    char err[300];
+    config_defaults(&c);
+    CHECK(c.part[0] == PART_NONE && c.volume[1] == 100 && c.pan[0] == PAN_AUTO);
+    CHECK(c.articulation[0] == ARTICULATION_AUTO && c.intensity[3] == 100);
+    test_set(&c, "parts=flute,cello");
+    CHECK(c.part[0] == PART_FLUTE && c.part[1] == PART_CELLO && c.part[2] == PART_NONE);
+    test_set(&c, "pan=auto,-30");
+    CHECK(c.pan[0] == PAN_AUTO && c.pan[1] == -30);
+    test_set(&c, "articulation=legato,staccato");
+    CHECK(c.articulation[0] == ARTICULATION_LEGATO && c.articulation[1] == ARTICULATION_STACCATO);
+    CHECK(!config_set(&c, "parts", "kazoo", err, sizeof(err)));
+    CHECK(!config_set(&c, "pan", "-101", err, sizeof(err)));
+    CHECK(strstr(err, "-100..100") != NULL);
+    CHECK(!config_set(&c, "volume", "1,2,3,4,5", err, sizeof(err)));
+    CHECK(config_validate(&c, err, sizeof(err)));
+
+    /* an instrument and a range that cannot meet are explained */
+    test_set(&c, "range_low=80");
+    test_set(&c, "range_high=96");
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "voice 2 (Cello)") != NULL);
+    /* two voices whose ranges, transposed, share no melody note */
+    config_defaults(&c);
+    test_set(&c, "parts=flute,tuba");
+    test_set(&c, "range_low=20");
+    test_set(&c, "range_high=100");
+    test_set(&c, "transpose_1=24"); /* a tuba two octaves above a flute */
+    CHECK(!config_validate(&c, err, sizeof(err)));
+    CHECK(strstr(err, "voice 1 (Flute)") != NULL && strstr(err, "voice 2 (Tuba)") != NULL);
+    test_set(&c, "transpose_1=-24");
+    CHECK(config_validate(&c, err, sizeof(err))); /* two octaves apart they meet */
 }
 
 static void test_files(void) {
@@ -438,6 +491,13 @@ static void test_round_trip(void) {
     test_set(&a, "mirror=1");
     test_set(&a, "mirror_axis=62");
     test_set(&a, "instrument=sine");
+    test_set(&a, "parts=auto,viola,cello");
+    test_set(&a, "part_low=0,50");
+    test_set(&a, "volume=90,80,70,60");
+    test_set(&a, "pan=auto,-30");
+    test_set(&a, "articulation=legato,auto,staccato");
+    test_set(&a, "intensity=150");
+    test_set(&a, "phrase=2");
     FILE *f = fopen("output/tests/round.txt", "w");
     CHECK(f != NULL);
     config_write(f, &a);
@@ -642,6 +702,7 @@ int main(void) {
     test_defaults_and_set();
     test_validation();
     test_presets();
+    test_players();
     test_files();
     test_round_trip();
     test_grid();

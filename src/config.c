@@ -2,6 +2,7 @@
 
 #include "canon.h"
 #include "json.h"
+#include "parts.h"
 #include "theory.h"
 
 #include <ctype.h>
@@ -104,7 +105,7 @@ static void print_second_mode_word(int v, char *buf, size_t cap) {
 
 static const char *const consonance_words[] = {"off", "strong", "all"};
 static const char *const order_words[] = {"mrv", "entropy", "collapse", "index"};
-static const char *const instrument_words[] = {"pluck", "organ", "sine"};
+static const char *const instrument_words[] = {"pluck", "organ", "sine", "auto"};
 static const char *const grid_words[] = {"quarter", "eighth", "sixteenth"};
 static const char *const ensemble_words[] = {
     "none", "chamber", "strings", "winds", "saxes", "brass", "band",
@@ -140,11 +141,11 @@ static void print_order_word(int v, char *buf, size_t cap) {
 }
 
 static bool parse_instrument_word(const char *w, int *out) {
-    return parse_list_word(w, instrument_words, INSTRUMENT_COUNT, out);
+    return parse_list_word(w, instrument_words, INSTRUMENT_AUTO + 1, out);
 }
 
 static void print_instrument_word(int v, char *buf, size_t cap) {
-    snprintf(buf, cap, "%s", v >= 0 && v < INSTRUMENT_COUNT ? instrument_words[v] : "?");
+    snprintf(buf, cap, "%s", v >= 0 && v <= INSTRUMENT_AUTO ? instrument_words[v] : "?");
 }
 
 static bool parse_ensemble_word(const char *w, int *out) {
@@ -251,6 +252,44 @@ static void print_tension_word(int v, char *buf, size_t cap) {
     }
 }
 
+static bool parse_part_word(const char *w, int *out) {
+    int id = part_find(w);
+    if (id < 0) return false;
+    *out = id;
+    return true;
+}
+
+static void print_part_word(int v, char *buf, size_t cap) {
+    const Part *p = part_get(v);
+    snprintf(buf, cap, "%s", p != NULL ? p->id : "auto");
+}
+
+static const char *const articulation_words[] = {"auto", "legato", "normal", "detached",
+                                                 "staccato"};
+
+static bool parse_articulation_word(const char *w, int *out) {
+    return parse_list_word(w, articulation_words, ARTICULATION_COUNT, out);
+}
+
+static void print_articulation_word(int v, char *buf, size_t cap) {
+    snprintf(buf, cap, "%s",
+             v >= 0 && v < ARTICULATION_COUNT ? articulation_words[v] : "?");
+}
+
+static bool parse_auto_word(const char *w, int *out) {
+    if (strcmp(w, "auto") != 0) return false;
+    *out = PAN_AUTO;
+    return true;
+}
+
+static void print_auto_word(int v, char *buf, size_t cap) {
+    if (v == PAN_AUTO) {
+        snprintf(buf, cap, "auto");
+    } else {
+        snprintf(buf, cap, "%d", v);
+    }
+}
+
 static bool parse_motif_word(const char *w, int *out) {
     if (strcmp(w, "off") != 0) return false;
     *out = -128;
@@ -267,6 +306,8 @@ static void print_motif_word(int v, char *buf, size_t cap) {
 
 #define F(field) offsetof(PieceConfig, field)
 #define VOICE_DELAY(v) (offsetof(PieceConfig, voice_delay) + (v) * sizeof(int))
+#define PLAYERS(what)                                                                      \
+    "One value per voice, voice 1 first; voices past the list keep the default. " what
 #define VOICE_TRANSPOSE(v) (offsetof(PieceConfig, voice_transpose) + (v) * sizeof(int))
 
 static const KeyDef keys[] = {
@@ -452,7 +493,9 @@ static const KeyDef keys[] = {
     {"w_arc", F(w_arc), 1, 0, 100, 0, NULL, NULL, "energy",
      "Cost of a melody note above the note at the climax, and of a note in the melody's "
      "first quarter less than a major third below it: this times 1 + semitones / 3. The "
-     "melody climbs to one peak and comes down from it."},
+     "melody climbs to one peak and comes down from it. With a form (phrase) the climax is "
+     "the melody's single top, by rule: it sounds, no note rises above it, and only notes "
+     "within max_hold steps of it may reach its pitch."},
     {"climax", F(climax), 1, 5, 95, 66, NULL, NULL, "energy",
      "Where the peak falls for w_arc, in percent of the melody, moved to the nearest strong "
      "beat (beat 1 or 3)."},
@@ -479,10 +522,22 @@ static const KeyDef keys[] = {
     {"motif_d", F(motif_d), 1, -128, 24, -128, parse_motif_word, print_motif_word,
      "energy", "Fourth interval (off = pattern ends)."},
     {"w_sequence", F(w_sequence), 1, 0, 100, 0, NULL, NULL, "energy",
-     "Cost of each melodic interval that does not echo the one at the same place a bar "
-     "before: nothing for the same interval or one a semitone off in the same direction, "
-     "half (rounded up) for another in the same direction, all of it for the other way, so "
-     "bars repeat the opening's shape as a sequence."},
+     "Cost of each melodic interval that does not echo the one it should: nothing for the "
+     "same interval or one a semitone off in the same direction, half (rounded up) for "
+     "another in the same direction, all of it for the other way or, with rhythm, a "
+     "different rhythm. Without a form (phrase 0) each interval echoes the one a bar "
+     "before, so bars repeat the opening's shape; with a form it weighs the subject's "
+     "returns and the climax's contrast instead (see phrase)."},
+    {"phrase", F(phrase), 1, 0, 8, 0, NULL, NULL, "energy",
+     "Bars in each phrase of the melody's form (0 = no form). The first phrase states the "
+     "subject; each later phrase brings back the subject's first bar, its head, with the same "
+     "rhythm, rests and contour (rules: each move up, down or level the same way, upside down "
+     "where it would sound against another voice's subject) and similar intervals "
+     "(w_sequence), so it returns as a sequence or a variation; the last brings it back at its "
+     "own pitch before the cadence. The phrase holding the climax instead moves in more or "
+     "fewer notes than the subject's head (w_sequence), every phrase but the last ends with a "
+     "long note or a rest in its last half bar (w_rhythm), and with harmony each of those "
+     "phrase ends has a dominant chord prepared by IV or ii (w_harmony)."},
     {"w_modulate", F(w_modulate), 1, 0, 100, 1, NULL, NULL, "energy",
      "Cost per fifth between the two keys, and per accidental of a searched key."},
     {"w_harmony", F(w_harmony), 1, 0, 100, 1, NULL, NULL, "energy",
@@ -546,9 +601,13 @@ static const KeyDef keys[] = {
 
     {"tempo", F(tempo), 1, 20, 300, 120, NULL, NULL, "output",
      "Quarter notes per minute in MIDI and WAV, whatever the grid."},
-    {"instrument", F(instrument), 1, 0, INSTRUMENT_COUNT - 1, INSTRUMENT_PLUCK,
-     parse_instrument_word, print_instrument_word, "output",
-     "Sound of voices.wav: pluck (a plucked string, like a harpsichord), organ, or sine."},
+    {"instrument", F(instrument), 1, 0, INSTRUMENT_AUTO, INSTRUMENT_AUTO, parse_instrument_word,
+     print_instrument_word, "output",
+     "Synth of voices.wav, which cannot sound like the sampled instruments the score page "
+     "plays: auto gives a voice whose instrument is struck or plucked (piano, harpsichord, "
+     "harp, mallets) or that has no instrument a plucked string, and any other voice the organ "
+     "tone; pluck, organ or sine plays every voice on that synth. The score page plays the "
+     "same synths when the sampled instruments cannot load."},
     {"ensemble", F(ensemble), 1, 0, ENSEMBLE_COUNT - 1, ENSEMBLE_NONE, parse_ensemble_word,
      print_ensemble_word, "output",
      "Instruments the score files are written for, one per voice from the highest voice "
@@ -565,13 +624,45 @@ static const KeyDef keys[] = {
      "F a fifth, double bass an octave), or concert, at sounding pitch."},
     {"mood", F(mood), 1, 0, MOOD_COUNT - 1, MOOD_AUTO, parse_mood_word, print_mood_word,
      "output",
-     "How score.html plays the piece: plain, lament, hymn, triumph, longing, dance or "
-     "nocturne set its dynamics, accents, legato, rubato, closing ritardando and how long "
-     "the last chord is held; auto guesses from the key and tempo."},
+     "How the piece is performed in the score page, canon.mid and voices.wav: lament, "
+     "hymn, triumph, longing, dance or nocturne set its dynamics (rising to the climax and "
+     "falling away), accents, articulation, rubato, breaths at phrase ends, closing "
+     "ritardando and how long the last chord is held; plain plays exactly as written, at "
+     "one tempo and one loudness, for comparison; auto guesses from the key and tempo."},
+
+    {"parts", F(part), OPEN(VOICE_MAX), 0, PART_COUNT - 1, PART_NONE, parse_part_word,
+     print_part_word, "players",
+     PLAYERS("Each voice's instrument: auto (the ensemble's), flute, oboe, clarinet, bassoon, "
+             "soprano_sax, alto_sax, tenor_sax, baritone_sax, trumpet, horn, trombone, "
+             "euphonium, tuba, violin, viola, cello, double_bass, piano, harpsichord, organ, "
+             "harp, vibraphone or marimba. It overrides the ensemble for that voice. The "
+             "instrument's range is a rule: every note the voice sounds stays in it.")},
+    {"part_low", F(part_low), OPEN(VOICE_MAX), 0, 127, 0, NULL, NULL, "players",
+     PLAYERS("Lowest MIDI pitch the voice may sound, narrowing range_low and its "
+             "instrument's range (0 = no narrower).")},
+    {"part_high", F(part_high), OPEN(VOICE_MAX), 0, 127, 0, NULL, NULL, "players",
+     PLAYERS("Highest MIDI pitch the voice may sound, narrowing range_high and its "
+             "instrument's range (0 = no narrower).")},
+    {"volume", F(volume), OPEN(VOICE_MAX), 0, 127, 100, NULL, NULL, "players",
+     PLAYERS("Mix level of the voice, 0..127 as MIDI volume: the score page's mixer, "
+             "canon.mid's volume controller and voices.wav. It does not change the notes.")},
+    {"pan", F(pan), OPEN(VOICE_MAX), PAN_AUTO, 100, PAN_AUTO, parse_auto_word,
+     print_auto_word, "players",
+     PLAYERS("Stereo place of the voice from -100 (left) to 100 (right), or auto to spread "
+             "the voices evenly. It does not change the notes.")},
+    {"articulation", F(articulation), OPEN(VOICE_MAX), 0, ARTICULATION_COUNT - 1,
+     ARTICULATION_AUTO, parse_articulation_word, print_articulation_word, "players",
+     PLAYERS("How the voice joins its notes: auto (as the mood plays), legato, normal, "
+             "detached or staccato. It shortens or joins the sounding notes in playback, "
+             "canon.mid and voices.wav, not the written ones.")},
+    {"intensity", F(intensity), OPEN(VOICE_MAX), 0, 200, 100, NULL, NULL, "players",
+     PLAYERS("How strongly the voice is shaped, in percent of the mood: 0 plays it at one "
+             "loudness, 200 doubles the swell to the climax and the accents.")},
 };
 
 #undef F
 #undef VOICE_DELAY
+#undef PLAYERS
 
 enum { KEY_DEF_COUNT = (int)(sizeof(keys) / sizeof(keys[0])) };
 
@@ -638,9 +729,9 @@ static bool set_scalar(const KeyDef *def, int *slot, const char *value, char *er
         snprintf(err, cap, "config value for %s is not valid: %s", def->name, value);
         return false;
     }
-    /* -128 is only the stored form of a transposition's "same" or a motif
-     * interval's "off"; as numbers these take -24 and up */
-    int low = def->parse != NULL && def->min == TRANSPOSE_SAME ? -24 : def->min;
+    /* -128 is only the stored form of a transposition's "same", a motif
+     * interval's "off" or a pan's "auto"; as numbers these take -max and up */
+    int low = def->parse != NULL && def->min == TRANSPOSE_SAME ? -def->max : def->min;
     if (v < low || v > def->max) {
         if (low != def->min) {
             char name[16];
@@ -675,8 +766,22 @@ bool config_set(PieceConfig *config, const char *key, const char *value, char *e
         return false;
     }
     snprintf(buf, sizeof(buf), "%s", value);
-    /* a list replaces the whole array */
-    for (int k = 0; k < count; k++) slot[k] = def->def;
+    /* an empty item (60,,62 or a trailing comma) is refused, not skipped */
+    for (const char *q = buf;; q++) {
+        const char *next = strchr(q, ',');
+        const char *end = next != NULL ? next : q + strlen(q);
+        bool blank = true;
+        for (const char *r = q; r < end; r++) blank = blank && isspace((unsigned char)*r);
+        if (blank && (next != NULL || q != buf)) {
+            snprintf(err, cap, "config value for %s has an empty item: %s", def->name, value);
+            return false;
+        }
+        if (next == NULL) break;
+        q = next;
+    }
+    /* a list replaces the whole array, and only when all of it is valid */
+    int list[MELODY_MAX];
+    for (int k = 0; k < count; k++) list[k] = def->def;
     int n = 0;
     for (char *tok = strtok(buf, ", \t"); tok != NULL; tok = strtok(NULL, ", \t")) {
         if (n >= count) {
@@ -684,7 +789,7 @@ bool config_set(PieceConfig *config, const char *key, const char *value, char *e
                      key_open(def) ? "at most " : "", count);
             return false;
         }
-        if (!set_scalar(def, &slot[n], tok, err, cap)) return false;
+        if (!set_scalar(def, &list[n], tok, err, cap)) return false;
         n++;
     }
     if (n != count && !(key_open(def) && n > 0)) {
@@ -692,6 +797,7 @@ bool config_set(PieceConfig *config, const char *key, const char *value, char *e
                  key_open(def) ? "at most " : "", count);
         return false;
     }
+    memcpy(slot, list, (size_t)count * sizeof(int));
     return true;
 }
 
@@ -720,49 +826,51 @@ typedef struct Preset {
 
 static const Preset presets[] = {
     {"lament",
-     "Grief: strings in D minor, slow, crying out early and falling a long way by step, its "
-     "sighs echoing from bar to bar.",
-     {"grid=eighth", "length=48", "voices=3", "delay=24", "transpose_1=-12", "transpose_2=-24",
-      "key=D", "mode=minor", "harmony=1", "rhythm=1", "max_hold=5", "max_rests=1",
+     "Grief: strings in D minor, slow. The subject sighs downward; the next phrase cries out "
+     "at the climax early on, then the sighs return lower, and the subject comes back to end.",
+     {"grid=eighth", "length=64", "voices=3", "delay=16", "transpose_1=-12", "transpose_2=-24",
+      "key=D", "mode=minor", "harmony=1", "rhythm=1", "max_hold=5", "max_rests=4",
       "leading_tone=1", "range_low=38", "range_high=84", "w_step=4", "w_gravity=0", "w_hold=0",
-      "w_repeat=6", "w_contrary=1", "w_arc=8", "climax=35", "w_sequence=2", "tempo=56",
-      "optimize=4000", "ensemble=strings", "mood=lament", NULL}},
+      "w_repeat=6", "w_contrary=1", "w_arc=8", "climax=35", "phrase=2", "w_sequence=3",
+      "tempo=56", "optimize=4000", "ensemble=strings", "mood=lament", NULL}},
     {"hymn",
-     "Calm: an organ in G major, long notes moving by step, consonant on every strong beat, "
-     "rising to a peak and coming to rest.",
-     {"length=24", "voices=3", "delay=12", "transpose_1=-12", "transpose_2=-24", "key=G",
-      "harmony=1", "rhythm=1", "max_hold=3", "max_rests=0", "max_leap=5", "leading_tone=1",
+     "Calm: an organ in G major, long notes moving by step in two-bar phrases that each come "
+     "to rest, rising to a peak and returning to the opening line.",
+     {"length=32", "voices=3", "delay=8", "transpose_1=-12", "transpose_2=-24", "key=G",
+      "harmony=1", "rhythm=1", "max_hold=3", "max_rests=2", "max_leap=5", "leading_tone=1",
       "range_low=36", "range_high=79", "w_step=4", "w_gravity=0", "w_hold=0", "w_arc=5",
-      "climax=60", "w_sequence=2", "tempo=63", "ensemble=organ", "mood=hymn", NULL}},
+      "climax=60", "phrase=2", "w_sequence=3", "tempo=63", "ensemble=organ", "mood=hymn", NULL}},
     {"triumph",
-     "Victory: brass in C major, leaping like fanfares, its motifs in sequence, climbing to "
-     "the peak near the end and finishing loud.",
-     {"grid=eighth", "length=64", "voices=3", "delay=24", "transpose_1=-12", "transpose_2=-24",
-      "harmony=1", "rhythm=1", "max_hold=3", "max_rests=1", "leading_tone=1", "range_low=36",
-      "range_high=84", "w_step=1", "w_leap=0", "w_arc=6", "climax=80", "w_sequence=3",
-      "w_contrary=1", "tempo=112", "optimize=4000", "ensemble=brass", "mood=triumph", NULL}},
+     "Victory: brass in C major. A fanfare subject climbs in sequence, a busier phrase drives "
+     "to the peak late, and the fanfare returns, played at full strength to the end.",
+     {"grid=eighth", "length=64", "voices=3", "delay=16", "transpose_1=-12", "transpose_2=-24",
+      "harmony=1", "rhythm=1", "max_hold=3", "max_rests=2", "leading_tone=1", "range_low=36",
+      "range_high=84", "w_step=1", "w_leap=0", "w_arc=6", "climax=70", "phrase=2",
+      "w_sequence=4", "w_contrary=1", "tempo=112", "optimize=4000", "ensemble=brass",
+      "mood=triumph", NULL}},
     {"longing",
-     "Longing: a flute and a cello in A minor that turn to C major, reaching up to the peak "
-     "late and letting go.",
+     "Longing: a flute and a cello in A minor. The subject reaches up, the line turns to C "
+     "major as it climbs to the peak late, and lets go as the subject returns.",
      {"grid=eighth", "length=64", "voices=2", "delay=16", "transpose_1=-12", "key=A",
-      "mode=minor", "modulate_at=40", "key_second=C", "harmony=1", "rhythm=1", "max_hold=5",
-      "max_rests=1", "leading_tone=1", "range_low=45", "range_high=84", "w_step=3",
-      "w_gravity=0", "w_hold=0", "w_arc=6", "climax=70", "w_sequence=2", "tempo=66",
-      "optimize=4000", "ensemble=chamber", "mood=longing", NULL}},
+      "mode=minor", "modulate_at=40", "key_second=C", "mode_second=major", "harmony=1", "rhythm=1", "max_hold=5",
+      "max_rests=4", "leading_tone=1", "range_low=45", "range_high=84", "w_step=3",
+      "w_gravity=0", "w_hold=0", "w_arc=6", "climax=70", "phrase=2", "w_sequence=3",
+      "tempo=66", "optimize=4000", "ensemble=chamber", "mood=longing", NULL}},
     {"dance",
-     "Joy: a round for woodwinds in F major, quick and light, a bouncing motif that keeps "
-     "coming back.",
+     "Joy: a round for woodwinds in F major, quick and light. A bouncing subject, a phrase "
+     "that leaps up for contrast, and the subject again, looping.",
      {"grid=eighth", "length=48", "voices=3", "delay=16", "cyclic=1", "key=F", "harmony=1",
-      "rhythm=1", "max_hold=1", "max_rests=1", "range_low=53", "range_high=81", "w_step=2",
-      "w_sequence=4", "w_arc=2", "climax=66", "tempo=132", "optimize=4000", "ensemble=winds",
-      "mood=dance", NULL}},
+      "rhythm=1", "max_hold=1", "max_rests=2", "range_low=53", "range_high=81", "w_step=2",
+      "w_arc=2", "climax=45", "phrase=2", "w_sequence=4", "tempo=132", "optimize=4000",
+      "ensemble=winds", "mood=dance", NULL}},
     {"nocturne",
-     "Night: a quiet piano duet in E-flat major, slow and songlike, rising once and falling "
-     "away.",
+     "Night: a quiet piano duet in E-flat major, slow and songlike: one phrase sung, one that "
+     "rises once, and the first again, falling away.",
      {"grid=eighth", "length=48", "voices=2", "delay=16", "transpose_1=-12", "key=Eb",
-      "harmony=1", "rhythm=1", "max_hold=5", "max_rests=1", "leading_tone=1", "range_low=39",
+      "harmony=1", "rhythm=1", "max_hold=5", "max_rests=2", "leading_tone=1", "range_low=39",
       "range_high=79", "w_step=3", "w_gravity=0", "w_hold=0", "w_arc=4", "climax=62",
-      "w_sequence=2", "tempo=52", "optimize=4000", "ensemble=piano", "mood=nocturne", NULL}},
+      "phrase=2", "w_sequence=3", "tempo=52", "optimize=4000", "ensemble=piano",
+      "mood=nocturne", NULL}},
 };
 
 enum { PRESET_COUNT = (int)(sizeof(presets) / sizeof(presets[0])) };
@@ -775,9 +883,12 @@ const char *config_preset_name(int index) {
     return index >= 0 && index < PRESET_COUNT ? presets[index].name : NULL;
 }
 
+/* A preset starts from the defaults, so a second preset replaces the first
+ * rather than inheriting its keys. */
 bool config_apply_preset(PieceConfig *config, const char *name, char *err, size_t cap) {
     for (int i = 0; i < PRESET_COUNT; i++) {
         if (strcmp(presets[i].name, name) != 0) continue;
+        config_defaults(config);
         for (int k = 0; presets[i].settings[k] != NULL; k++) {
             if (!config_assign(config, presets[i].settings[k], err, cap)) return false;
         }
@@ -795,13 +906,15 @@ static void trim(char *s) {
     if (start > 0) memmove(s, s + start, n - start + 1);
 }
 
+enum { CONFIG_FILE_MAX = 1 << 20 };
+
 static char *read_file(const char *path, size_t *length) {
     FILE *f = fopen(path, "rb");
     if (f == NULL) return NULL;
     size_t cap = 4096;
     size_t len = 0;
     char *data = malloc(cap);
-    while (data != NULL) {
+    while (data != NULL && len <= CONFIG_FILE_MAX) {
         size_t got = fread(data + len, 1, cap - len - 1, f);
         len += got;
         if (len + 1 < cap) break;
@@ -847,6 +960,13 @@ static bool load_text(PieceConfig *config, char *text, const char *path, char *e
             size_t len = next != NULL ? (size_t)(next - cursor) : strlen(cursor);
             char line[TEXT_MAX];
             line_no++;
+            /* only the part before a comment has to fit */
+            for (size_t i = 0; i < len; i++) {
+                if (cursor[i] == '#' && (i == 0 || isspace((unsigned char)cursor[i - 1]))) {
+                    len = i;
+                    break;
+                }
+            }
             if (len >= sizeof(line)) {
                 snprintf(err, cap, "%s:%d: line too long", path, line_no);
                 return false;
@@ -882,7 +1002,10 @@ static bool load_text(PieceConfig *config, char *text, const char *path, char *e
     return true;
 }
 
-static bool json_scalar_text(const JsonValue *v, char *out, size_t cap) {
+/* A JSON value as the text a config line would give: a whole number, true
+ * or false for an on/off key, or a string, trimmed as a line is. Anything
+ * that would not fit whole is refused rather than cut short. */
+static bool json_scalar_text(const JsonValue *v, bool on_off, char *out, size_t cap) {
     switch (v->type) {
     case JSON_NUMBER:
         if (v->number != floor(v->number) || v->number < INT_MIN ||
@@ -891,11 +1014,15 @@ static bool json_scalar_text(const JsonValue *v, char *out, size_t cap) {
         snprintf(out, cap, "%d", (int)v->number);
         return true;
     case JSON_BOOL:
+        if (!on_off) return false;
         snprintf(out, cap, "%d", v->boolean ? 1 : 0);
         return true;
-    case JSON_STRING:
-        snprintf(out, cap, "%s", v->string);
+    case JSON_STRING: {
+        int w = snprintf(out, cap, "%s", v->string);
+        if (w < 0 || (size_t)w >= cap) return false;
+        trim(out);
         return true;
+    }
     default:
         return false;
     }
@@ -921,12 +1048,16 @@ static bool load_json(PieceConfig *config, const char *text, const char *path,
             const JsonValue *v = &root.items[i];
             if ((strcmp(key, "preset") == 0) != (pass == 0)) continue;
             char value[TEXT_MAX];
+            const KeyDef *def = find_key(key);
+            bool on_off = def != NULL && is_bool_key(def);
             if (v->type == JSON_ARRAY) {
                 size_t used = 0;
                 value[0] = '\0';
                 for (int k = 0; k < v->count && ok; k++) {
-                    char item[64];
-                    if (!json_scalar_text(&v->items[k], item, sizeof(item))) {
+                    char item[TEXT_MAX];
+                    /* one value per item: "60 62" in one item is a mistake */
+                    if (!json_scalar_text(&v->items[k], false, item, sizeof(item)) ||
+                        item[0] == '\0' || strpbrk(item, ", \t") != NULL) {
                         ok = false;
                         break;
                     }
@@ -938,7 +1069,7 @@ static bool load_json(PieceConfig *config, const char *text, const char *path,
                     }
                     used += (size_t)w;
                 }
-            } else if (!json_scalar_text(v, value, sizeof(value))) {
+            } else if (!json_scalar_text(v, on_off, value, sizeof(value))) {
                 ok = false;
             }
             if (!ok) {
@@ -971,6 +1102,11 @@ bool config_load_file(PieceConfig *config, const char *path, char *err, size_t c
     char *text = read_file(path, &length);
     if (text == NULL) {
         snprintf(err, cap, "cannot read config: %s", path);
+        return false;
+    }
+    if (length > CONFIG_FILE_MAX) {
+        snprintf(err, cap, "%s: larger than 1 MB, so not a config file", path);
+        free(text);
         return false;
     }
     if (strlen(text) != length) {
@@ -1107,9 +1243,13 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap) {
         snprintf(err, cap, "invalid delay_search: delay_min is above delay_max");
         return false;
     }
+    PieceConfig shortest = *config;
     PieceConfig widest = *config;
-    if (config->delay_search) widest.delay = config->delay_max;
-    int span = canon_span_config(&widest);
+    if (config->delay_search) {
+        shortest.delay = config->delay_min;
+        widest.delay = config->delay_max;
+    }
+    int span = canon_span_config(&shortest);
     if (span > SPAN_MAX) {
         snprintf(err, cap, "piece too long: canon spans more than %d steps", SPAN_MAX);
         return false;
@@ -1124,7 +1264,13 @@ bool config_validate(const PieceConfig *config, char *err, size_t cap) {
         snprintf(err, cap, "invalid modulate_at: past the end of the piece");
         return false;
     }
-    return true;
+    for (int v = 0; v < VOICE_MAX; v++) {
+        if (config->pan[v] != PAN_AUTO && config->pan[v] < -100) {
+            snprintf(err, cap, "invalid pan: use -100..100 or auto");
+            return false;
+        }
+    }
+    return parts_check(config, err, cap);
 }
 
 static void format_value(const KeyDef *def, int value, char *buf, size_t cap) {
@@ -1174,10 +1320,44 @@ void config_write(FILE *f, const PieceConfig *config) {
     }
 }
 
+/* Values are numbers, words and commas, but quote marks and backslashes
+ * are escaped all the same. */
+static void json_text(FILE *f, const char *s) {
+    fputc('"', f);
+    for (; *s != '\0'; s++) {
+        if (*s == '"' || *s == '\\') fputc('\\', f);
+        if ((unsigned char)*s >= 0x20) fputc(*s, f);
+    }
+    fputc('"', f);
+}
+
+void config_write_json(FILE *f, const PieceConfig *config) {
+    fputc('{', f);
+    for (int i = 0; i < KEY_DEF_COUNT; i++) {
+        char buf[CONFIG_VALUE_MAX];
+        config_key_value(config, i, buf, sizeof(buf));
+        fprintf(f, "%s", i ? "," : "");
+        json_text(f, keys[i].name);
+        fputc(':', f);
+        json_text(f, buf);
+    }
+    fputc('}', f);
+}
+
+bool config_keeps_notes(const char *key) {
+    static const char *const kept[] = {"tempo",  "instrument", "mood",         "written",
+                                       "volume", "pan",        "articulation", "intensity"};
+    for (size_t i = 0; i < sizeof(kept) / sizeof(kept[0]); i++) {
+        if (strcmp(key, kept[i]) == 0) return true;
+    }
+    return false;
+}
+
 static const char *const group_titles[][2] = {
     {"shape", "Shape"},   {"canon", "Canon transforms"}, {"key", "Keys"},
     {"rules", "Rules"},   {"rhythm", "Rhythm"},           {"lock", "Lock"},
     {"energy", "Energy"}, {"search", "Search"},           {"output", "Output"},
+    {"players", "Players"},
 };
 
 void config_print_reference(FILE *f, bool markdown) {
