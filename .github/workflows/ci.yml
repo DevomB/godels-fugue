@@ -33,6 +33,13 @@ jobs:
       - name: Test
         working-directory: build
         run: ctest -C Release --output-on-failure
+      - name: Keep the Windows program
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: godels-fugue-windows
+          path: build/godels-fugue.exe
+          retention-days: 7
 
   webassembly:
     name: WebAssembly
