@@ -129,6 +129,23 @@ pre {
   margin: 8px 0 0; padding: 10px 12px; background: var(--surface-2); border-radius: 6px;
   font: 12px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 22em; overflow: auto;
 }
+.shape-card summary, .sheet-card summary { cursor: pointer; }
+.shape-card h2 { display: inline; font-size: 15px; font-weight: 650; }
+.shape { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 12px 28px; margin-top: 10px; }
+@media (max-width: 760px) { .shape { grid-template-columns: minmax(0, 1fr); } }
+.shape-label { font-size: 13px; color: var(--text-secondary); }
+.curve { display: block; width: 100%; height: 150px; margin-top: 6px; touch-action: none; }
+.curve .grid { stroke: var(--border); }
+.curve .axis { fill: var(--text-muted); font-size: 11px; }
+.curve .line { fill: none; stroke: var(--accent); stroke-width: 2; }
+.curve .line.default { stroke-dasharray: 5 4; opacity: 0.6; }
+.curve .pt { fill: var(--accent); stroke: var(--surface-1); stroke-width: 2; cursor: ns-resize; }
+.curve .pt:focus-visible { outline: none; stroke: var(--text-primary); }
+.sliders { display: flex; flex-direction: column; gap: 10px; }
+.slider { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 13px; color: var(--text-secondary); }
+.slider input { grid-column: 1 / -1; width: 100%; padding: 0; accent-color: var(--accent); }
+.slider output { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.slider .ends { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); }
 .sheet-card { padding-bottom: 4px; }
 .sheet-card summary { list-style-position: outside; margin-left: 16px; }
 .sheet-card h2 { display: inline; font-size: 15px; font-weight: 650; color: var(--text-primary); }
@@ -189,6 +206,17 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
 </div>
 
 <div class="wrap" style="padding-top:0">
+  <details id="shape-card" class="card shape-card" open>
+    <summary><h2>Shape the piece</h2></summary>
+    <div class="shape">
+      <div>
+        <div class="shape-label">Tension over the piece <span class="hint">drag a point, then let go</span></div>
+        <svg id="curve" class="curve" viewBox="0 0 400 150" role="group" aria-label="Tension curve: one point per section of the melody"></svg>
+        <p class="hint" id="curve-note">Calm means tonic and third; tense means the leading tone and other unstable degrees. The cadence still ends on the tonic.</p>
+      </div>
+      <div class="sliders" id="sliders"></div>
+    </div>
+  </details>
   <div id="empty" class="card empty">The score appears here.</div>
   <details id="sheet-card" class="card sheet-card" open hidden>
     <summary><h2>Sheet music</h2></summary>
@@ -291,7 +319,8 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   function run() {
     if (!worker && !startWorker()) return;
     runId += 1;
-    composed = { config: config.value, seed: String(Math.max(0, Math.floor(Number(seed.value) || 0))) };
+    syncShape();
+    composed ={ config: config.value, seed: String(Math.max(0, Math.floor(Number(seed.value) || 0))) };
     busy(true);
     setBadge("busy", "Composing");
     summary.textContent = "";
@@ -544,6 +573,134 @@ footer { max-width: 1180px; margin: 0 auto; padding: 8px 16px 32px; font-size: 1
   seed.addEventListener("keydown", function (e) { if (e.key === "Enter") run(); });
   config.addEventListener("keydown", function (e) {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); run(); }
+  });
+
+  // ---- Shape the piece: soft weights and the tension curve, kept as config lines ----
+  const WEIGHTS = [
+    { key: "w_curve", label: "Follow the tension curve", low: "loosely", high: "closely", def: 1 },
+    { key: "w_leap", label: "Smooth lines", low: "leaps welcome", high: "stepwise", def: 1 },
+    { key: "w_dissonance", label: "Consonance", low: "spicy", high: "sweet", def: 1 },
+    { key: "w_contrary", label: "Contrary motion", low: "voices move freely", high: "voices move apart", def: 0 },
+  ];
+  const SLIDER_MAX = 8, CURVE_POINTS = 8, ARCH = [0, 1, 2, 3, 3, 2, 1, 0];
+  const curveSvg = $("curve"), sliderBox = $("sliders");
+  let curve = ARCH.slice(), curveSet = false;
+
+  function keyValue(text, key) {
+    const m = new RegExp("^\\s*" + key + "\\s+(.*?)\\s*$", "m").exec(text);
+    return m ? m[1] : null;
+  }
+  // Replaces the key's line, or adds one; a null value removes it.
+  function withKey(text, key, value) {
+    const lines = text.replace(/\s+$/, "").split("\n");
+    const re = new RegExp("^\\s*" + key + "(\\s|$)");
+    const at = lines.findIndex(function (l) { return re.test(l); });
+    if (value === null) { if (at >= 0) lines.splice(at, 1); }
+    else if (at >= 0) lines[at] = key + " " + value;
+    else lines.push(key + " " + value);
+    return lines.join("\n") + "\n";
+  }
+  function steer(key, value) {
+    if (config.value.trim().startsWith("{")) {
+      summary.textContent = "Shaping works with text configs, not JSON.";
+      return;
+    }
+    undoStack.push({ config: config.value, seed: seed.value, melody: lastMelody });
+    undo.hidden = false;
+    config.value = withKey(config.value, key, value);
+    run();
+  }
+
+  WEIGHTS.forEach(function (w) {
+    const box = document.createElement("label");
+    box.className = "slider";
+    box.innerHTML = '<span></span><output></output><input type="range" min="0" step="1"><span class="ends"><span></span><span></span></span>';
+    box.children[0].textContent = w.label;
+    const input = box.querySelector("input");
+    input.max = String(SLIDER_MAX);
+    input.setAttribute("aria-label", w.label);
+    box.querySelectorAll(".ends span")[0].textContent = w.low;
+    box.querySelectorAll(".ends span")[1].textContent = w.high;
+    input.addEventListener("input", function () { box.querySelector("output").textContent = input.value; });
+    input.addEventListener("change", function () { steer(w.key, input.value); });
+    w.input = input;
+    w.output = box.querySelector("output");
+    sliderBox.appendChild(box);
+  });
+
+  function drawCurve() {
+    const W = 400, H = 150, pad = 18, left = 44;
+    const x = function (i) { return left + (i * (W - left - pad)) / (curve.length - 1); };
+    const y = function (v) { return pad + ((4 - v) * (H - 2 * pad)) / 4; };
+    let svg = "";
+    for (let v = 0; v <= 4; v++) svg += '<line class="grid" x1="' + left + '" x2="' + (W - pad) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>';
+    svg += '<text class="axis" x="4" y="' + (y(0) + 4) + '">calm</text><text class="axis" x="4" y="' + (y(4) + 4) + '">tense</text>';
+    svg += '<polyline class="line' + (curveSet ? "" : " default") + '" points="' + curve.map(function (v, i) { return x(i) + "," + y(v); }).join(" ") + '"/>';
+    curve.forEach(function (v, i) {
+      svg += '<circle class="pt" tabindex="0" r="8" cx="' + x(i) + '" cy="' + y(v) + '" data-i="' + i + '" aria-label="Point ' + (i + 1) + ': ' + v + ' of 4"/>';
+    });
+    curveSvg.innerHTML = svg;
+    curveSvg.dataset.left = left;
+  }
+  function commitCurve() {
+    curveSet = true;
+    drawCurve();
+    steer("tension", curve.join(" "));
+  }
+  let dragging = -1;
+  function valueAt(evt) {
+    const r = curveSvg.getBoundingClientRect();
+    const yy = ((evt.clientY - r.top) / r.height) * 150;
+    return Math.max(0, Math.min(4, Math.round(4 - ((yy - 18) * 4) / (150 - 36))));
+  }
+  curveSvg.addEventListener("pointerdown", function (e) {
+    const t = e.target.closest(".pt");
+    if (!t) return;
+    dragging = Number(t.dataset.i);
+    curveSvg.setPointerCapture(e.pointerId);
+  });
+  curveSvg.addEventListener("pointermove", function (e) {
+    if (dragging < 0) return;
+    const v = valueAt(e);
+    if (v !== curve[dragging]) { curve[dragging] = v; curveSet = true; drawCurve(); }
+  });
+  curveSvg.addEventListener("pointerup", function () {
+    if (dragging < 0) return;
+    dragging = -1;
+    commitCurve();
+  });
+  curveSvg.addEventListener("keydown", function (e) {
+    const t = e.target.closest(".pt");
+    if (!t || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    const i = Number(t.dataset.i);
+    curve[i] = Math.max(0, Math.min(4, curve[i] + (e.key === "ArrowUp" ? 1 : -1)));
+    commitCurve();
+  });
+
+  // The controls show what the config says, whoever wrote it.
+  function syncShape() {
+    WEIGHTS.forEach(function (w) {
+      const v = Number(keyValue(config.value, w.key));
+      const n = Number.isFinite(v) && keyValue(config.value, w.key) !== null ? v : w.def;
+      w.input.value = String(Math.min(SLIDER_MAX, n));
+      w.output.textContent = String(n);
+    });
+    const t = keyValue(config.value, "tension");
+    const points = t ? t.split(/[\s,]+/).map(Number) : [];
+    if (points.length >= 2 && points.every(function (p) { return Number.isFinite(p); })) {
+      curve = points.map(function (p) { return Math.max(0, Math.min(4, Math.round(p))); });
+      curveSet = true;
+    } else {
+      curve = ARCH.slice();
+      curveSet = false;
+    }
+    drawCurve();
+  }
+  let syncTimer = 0;
+  config.addEventListener("input", function () {
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(syncShape, 300);
   });
 
   // A shared link carries the config and the variation; otherwise start with the first example.
