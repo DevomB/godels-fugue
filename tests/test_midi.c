@@ -144,6 +144,31 @@ int main(void) {
     CHECK(v2->nnotes == 2);
     CHECK(v2->notes[0].on == 4 * MIDI_PPQ && v2->notes[0].channel == 1);
 
+    /* on the eighth grid a step is half a quarter */
+    Score e;
+    memset(&e, 0, sizeof(e));
+    e.voices = 1;
+    e.span = 8;
+    e.tempo = 90;
+    e.beat_steps = 2;
+    e.nsections = 2;
+    e.key[0] = key_id(0, MODE_MAJOR);
+    e.key[1] = key_id(7, MODE_MAJOR);
+    e.modulate_at = 4;
+    /* eighth C, dotted quarter E, half G */
+    ScoreNote run[] = {{0, 1, 60, 0}, {1, 3, 64, 1}, {4, 4, 67, 4}};
+    e.voice[0].count = 3;
+    memcpy(e.voice[0].notes, run, sizeof(run));
+    CHECK(midi_write_score("output/tests/eighths.mid", &e));
+    CHECK(read_file("output/tests/eighths.mid", tracks, 4) == 2);
+    CHECK(tracks[0].nkeys == 2 && tracks[0].key_tick[1] == 2 * MIDI_PPQ);
+    CHECK(tracks[0].fifths[1] == 1);
+    const Track *eighths = &tracks[1];
+    CHECK(eighths->nnotes == 3);
+    CHECK(eighths->notes[0].on == 0 && eighths->notes[0].off == MIDI_PPQ / 2);
+    CHECK(eighths->notes[1].on == MIDI_PPQ / 2 && eighths->notes[1].off == 2 * MIDI_PPQ);
+    CHECK(eighths->notes[2].on == 2 * MIDI_PPQ && eighths->notes[2].off == 4 * MIDI_PPQ);
+
     s.voice[0].notes[0].pitch = 200;
     CHECK(!midi_write_score("output/tests/bad.mid", &s));
     printf("ok\n");

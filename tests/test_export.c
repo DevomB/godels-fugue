@@ -87,7 +87,7 @@ static void test_wav(const Score *s, int tempo) {
         "output/tests/pluck.wav", "output/tests/organ.wav", "output/tests/sine.wav"};
     char *wav[INSTRUMENT_COUNT];
     long size[INSTRUMENT_COUNT];
-    long per_step = 44100L * 60 / tempo;
+    long per_step = 44100L * 60 / tempo / score_beat_steps(s);
     long tail = 44100L * 3 / 2;
     for (int i = 0; i < INSTRUMENT_COUNT; i++) {
         CHECK(export_wav(paths[i], s, i));
@@ -190,6 +190,100 @@ static void test_musicxml(void) {
 
     test_wav(&s, c.tempo);
     test_close(r);
+}
+
+/* On the eighth grid a step is an eighth: MusicXML counts two divisions
+ * to a quarter, a bar holds eight steps, and a length no single value
+ * writes is tied (five eighths: a half and an eighth). */
+static void test_eighth_grid(void) {
+    test_output_dir();
+    PieceConfig c = test_config();
+    test_set(&c, "grid=eighth");
+    test_set(&c, "rhythm=1");
+    test_set(&c, "max_hold=5");
+    test_set(&c, "length=16");
+    test_set(&c, "delay=6");
+    TestRun *r = test_open(&c);
+    /* C eighth, D quarter off the beat, E dotted quarter, F five eighths
+     * over the barline, G five eighths to the end of bar 2 */
+    static const int pitches[16] = {60, 62, 62, 64, 64, 64, 65, 65,
+                                    65, 65, 65, 67, 67, 67, 67, 67};
+    static const int holds[16] = {0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1};
+    int values[VAR_MAX];
+    fill_values(&r->model, key_id(0, MODE_MAJOR), pitches, holds, values);
+    Score s;
+    score_build(&s, &r->model, values);
+    CHECK(s.beat_steps == 2 && score_bar_steps(&s) == 8);
+    CHECK(s.span == 22);
+    CHECK(s.voice[0].notes[4].start == 11 && s.voice[0].notes[4].length == 5);
+    CHECK(score_written_steps(&s, 5) == 4 && score_written_steps(&s, 7) == 6);
+    CHECK(score_written_steps(&s, 3) == 3 && score_eighths(&s, 3) == 3);
+
+    CHECK(export_musicxml("output/tests/eighths.musicxml", &s));
+    char *xml = test_slurp("output/tests/eighths.musicxml", NULL);
+    CHECK(strstr(xml, "<divisions>2</divisions>") != NULL);
+    CHECK(strstr(xml, "<time><beats>4</beats><beat-type>4</beat-type></time>") != NULL);
+    CHECK(strstr(xml, "<step>C</step><octave>4</octave></pitch><duration>1</duration>"
+                      "<type>eighth</type></note>") != NULL);
+    CHECK(strstr(xml, "<step>D</step><octave>4</octave></pitch><duration>2</duration>"
+                      "<type>quarter</type></note>") != NULL);
+    CHECK(strstr(xml, "<step>E</step><octave>4</octave></pitch><duration>3</duration>"
+                      "<type>quarter</type><dot/></note>") != NULL);
+    /* F: a quarter tied over the barline to a dotted quarter */
+    CHECK(strstr(xml, "<step>F</step><octave>4</octave></pitch><duration>2</duration>"
+                      "<tie type=\"start\"/><type>quarter</type>") != NULL);
+    const char *bar2 = strstr(xml, "<measure number=\"2\">");
+    CHECK(bar2 != NULL);
+    bar2 = strstr(bar2, "<note>");
+    static const char tied[] = "<note><pitch><step>F</step><octave>4</octave></pitch><duration>3"
+                               "</duration><tie type=\"stop\"/><type>quarter</type><dot/>";
+    CHECK(bar2 != NULL && strncmp(bar2, tied, sizeof(tied) - 1) == 0);
+    /* G: a half tied to an eighth inside bar 2 */
+    CHECK(strstr(xml, "<step>G</step><octave>4</octave></pitch><duration>4</duration>"
+                      "<tie type=\"start\"/><type>half</type>") != NULL);
+    CHECK(strstr(xml, "<step>G</step><octave>4</octave></pitch><duration>1</duration>"
+                      "<tie type=\"stop\"/><type>eighth</type>") != NULL);
+    CHECK(strstr(xml, "<measure number=\"3\">") != NULL);
+    CHECK(strstr(xml, "<measure number=\"4\">") == NULL);
+    /* voice 1 rests through bar 3; voice 2 waits a dotted half and pads
+     * its last bar with a quarter rest */
+    CHECK(strstr(xml, "<rest/><duration>8</duration><type>whole</type>") != NULL);
+    const char *p2 = strstr(xml, "<part id=\"P2\">");
+    CHECK(p2 != NULL);
+    CHECK(strstr(p2, "<rest/><duration>6</duration><type>half</type><dot/>") != NULL);
+    const char *pad = strstr(p2, "<rest/><duration>2</duration><type>quarter</type></note>");
+    CHECK(pad != NULL && strstr(pad, "<note>") == NULL);
+    free(xml);
+
+    /* a step lasts half as long in the WAV */
+    test_wav(&s, c.tempo);
+    test_close(r);
+
+    /* the proof and the page data carry the grid */
+    Run *run = malloc(sizeof(Run));
+    CHECK(run != NULL);
+    char err[200];
+    c = test_config();
+    test_set(&c, "grid=eighth");
+    test_set(&c, "length=16");
+    test_set(&c, "delay=8");
+    CHECK(run_piece(run, &c, err, sizeof(err)));
+    CHECK(run->status == SOLVE_SAT);
+    CHECK(trace_save_json("output/tests/eighths.json", run));
+    char *text = test_slurp("output/tests/eighths.json", NULL);
+    JsonValue doc;
+    char why[128];
+    CHECK(json_parse(text, &doc, why, sizeof(why)));
+    free(text);
+    CHECK(json_get(&doc, "stepsPerBeat")->number == 2);
+    CHECK(json_get(&doc, "stepsPerBar")->number == 8);
+    const JsonValue *strong = json_get(&doc, "strong");
+    CHECK(strong != NULL && strong->count == 3); /* steps 0, 8 and 16 of 24 */
+    for (int k = 0; k < strong->count; k++) CHECK((int)strong->items[k].number == 8 * k);
+    CHECK(strcmp(json_get(json_get(&doc, "config"), "grid")->string, "eighth") == 0);
+    json_free(&doc);
+    run_free(run);
+    free(run);
 }
 
 /* Is the text well-formed UTF-8: no stray, truncated, overlong or surrogate sequences? */
@@ -402,6 +496,7 @@ static void test_shared_explanations(void) {
 int main(void) {
     test_score();
     test_musicxml();
+    test_eighth_grid();
     test_documents();
     test_shared_explanations();
     printf("ok\n");

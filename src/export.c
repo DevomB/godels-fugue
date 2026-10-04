@@ -19,13 +19,17 @@ static int key_at(const Score *score, int step) {
 }
 
 
-static const char *note_type(int steps, bool *dotted) {
-    *dotted = steps == 3;
-    switch (steps) {
+/* A written value (score_written_steps) in eighths. */
+static const char *note_type(int eighths, bool *dotted) {
+    *dotted = eighths == 3 || eighths == 6;
+    switch (eighths) {
     case 1:
-        return "quarter";
+        return "eighth";
     case 2:
     case 3:
+        return "quarter";
+    case 4:
+    case 6:
         return "half";
     default:
         return "whole";
@@ -37,10 +41,10 @@ static void write_key(FILE *f, int key) {
             mode_name(key_mode(key)));
 }
 
-static void write_segment(FILE *f, int pitch, int steps, int key, bool tie_stop,
-                          bool tie_start) {
+static void write_segment(FILE *f, const Score *score, int pitch, int steps, int key,
+                          bool tie_stop, bool tie_start) {
     bool dotted;
-    const char *type = note_type(steps, &dotted);
+    const char *type = note_type(score_eighths(score, steps), &dotted);
     fprintf(f, "      <note>");
     if (pitch == SOUND_REST) {
         fprintf(f, "<rest/>");
@@ -81,7 +85,8 @@ bool export_musicxml(const char *path, const Score *score) {
     if (path == NULL || score == NULL || score->voices < 1) return false;
     FILE *f = fopen(path, "w");
     if (f == NULL) return false;
-    int bars = (score->span + 3) / 4;
+    int bar = score_bar_steps(score);
+    int bars = (score->span + bar - 1) / bar;
     fprintf(f, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                "<!DOCTYPE score-partwise PUBLIC \"-//Recordare//DTD MusicXML 3.1 "
                "Partwise//EN\" \"http://www.musicxml.org/dtds/partwise.dtd\">\n"
@@ -101,8 +106,8 @@ bool export_musicxml(const char *path, const Score *score) {
         ScoreNote notes[SPAN_MAX + 1];
         int count = score->voice[v].count;
         memcpy(notes, score->voice[v].notes, (size_t)count * sizeof(ScoreNote));
-        if (bars * 4 > score->span) {
-            ScoreNote pad = {score->span, bars * 4 - score->span, SOUND_REST, -1};
+        if (bars * bar > score->span) {
+            ScoreNote pad = {score->span, bars * bar - score->span, SOUND_REST, -1};
             if (count > 0 && notes[count - 1].pitch == SOUND_REST) {
                 notes[count - 1].length += pad.length;
             } else {
@@ -115,12 +120,14 @@ bool export_musicxml(const char *path, const Score *score) {
             int t = n->start;
             int end = n->start + n->length;
             while (t < end) {
-                if (t % 4 == 0 && t / 4 + 1 != measure) {
+                if (t % bar == 0 && t / bar + 1 != measure) {
                     if (measure > 0) fprintf(f, "    </measure>\n");
-                    measure = t / 4 + 1;
+                    measure = t / bar + 1;
                     fprintf(f, "    <measure number=\"%d\">\n", measure);
                     if (measure == 1) {
-                        fprintf(f, "      <attributes><divisions>1</divisions>");
+                        /* a division is one step */
+                        fprintf(f, "      <attributes><divisions>%d</divisions>",
+                                score_beat_steps(score));
                         write_key(f, score->key[0]);
                         fprintf(f, "<time><beats>4</beats><beat-type>4</beat-type></time>"
                                    "<clef><sign>%s</sign><line>%d</line></clef>"
@@ -133,14 +140,16 @@ bool export_musicxml(const char *path, const Score *score) {
                     write_key(f, score->key[1]);
                     fprintf(f, "</attributes>\n");
                 }
-                int stop = (t / 4 + 1) * 4;
+                int stop = (t / bar + 1) * bar;
                 if (score->nsections > 1 && t < score->modulate_at && score->modulate_at < stop)
                     stop = score->modulate_at;
                 if (stop > end) stop = end;
+                /* a length no single value writes, such as five eighths, is tied */
+                stop = t + score_written_steps(score, stop - t);
                 /* a tied note keeps the spelling of its attack */
                 int spelling_key = key_at(score, n->start);
                 bool tied = n->pitch != SOUND_REST;
-                write_segment(f, n->pitch, stop - t, spelling_key, tied && t > n->start,
+                write_segment(f, score, n->pitch, stop - t, spelling_key, tied && t > n->start,
                               tied && stop < end);
                 t = stop;
             }
@@ -386,7 +395,7 @@ static double reverb_run(ReverbSide *side, double in) {
 bool export_wav(const char *path, const Score *score, int instrument) {
     if (path == NULL || score == NULL) return false;
     int tempo = score->tempo > 0 ? score->tempo : 120;
-    double per_step = (double)WAV_RATE * 60.0 / tempo;
+    double per_step = (double)WAV_RATE * 60.0 / tempo / score_beat_steps(score);
     long total = lround(per_step * (score->span > 0 ? score->span : 1)) + WAV_TAIL;
     float *frames = calloc((size_t)total * 2, sizeof(float));
     double *line = malloc(PLUCK_LINE_MAX * sizeof(double));

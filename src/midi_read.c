@@ -2,13 +2,14 @@
 
 #include "types.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 enum { PERCUSSION = 9 }; /* channel 10, counting from 1 */
 
-/* Later ticks are refused, so tick + ppq / 2 fits in a long. */
+/* Later ticks are refused, so a tick fits in a long. */
 #define TICK_LIMIT 0x3FFFFFFFUL
 
 static unsigned long read_be(const unsigned char *p, int n) {
@@ -299,25 +300,29 @@ int midi_first_track(const MidiFile *file) {
     return -1;
 }
 
-static long nearest_step(long tick, int ppq) {
-    return (tick + ppq / 2) / ppq;
+static long long nearest_step(long tick, int ppq, int beat_steps) {
+    return ((long long)tick * beat_steps + ppq / 2) / ppq;
 }
 
-int midi_track_steps(const MidiFile *file, int track, int *steps, int cap) {
+int midi_track_grid(const MidiFile *file, int track, int beat_steps, int *steps, int cap) {
     for (int s = 0; s < cap; s++) steps[s] = PITCH_REST;
-    if (track < 0 || track >= file->ntracks || file->ppq <= 0) return 0;
+    if (track < 0 || track >= file->ntracks || file->ppq <= 0 || beat_steps < 1) return 0;
     const MidiTrack *t = &file->tracks[track];
-    long span = 0;
+    long long span = 0;
     for (int k = 0; k < t->count; k++) {
         const MidiNote *note = &t->notes[k];
         if (note->pitch == PITCH_REST) continue;
-        long start = nearest_step(note->on, file->ppq);
-        long end = nearest_step(note->off, file->ppq);
+        long long start = nearest_step(note->on, file->ppq, beat_steps);
+        long long end = nearest_step(note->off, file->ppq, beat_steps);
         if (end <= start) end = start + 1;
         if (end > span) span = end;
-        for (long s = start; s < end && s < cap; s++) {
+        for (long long s = start; s < end && s < cap; s++) {
             if (note->pitch > steps[s]) steps[s] = note->pitch;
         }
     }
-    return (int)span;
+    return span > INT_MAX ? INT_MAX : (int)span;
+}
+
+int midi_track_steps(const MidiFile *file, int track, int *steps, int cap) {
+    return midi_track_grid(file, track, 1, steps, cap);
 }

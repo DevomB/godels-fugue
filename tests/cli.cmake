@@ -250,6 +250,26 @@ if(NOT json MATCHES "\"stepsPerBeat\":2,\"stepsPerBar\":8,\"strong\":\\[0,8,16,2
   fail("grid_eighth: proof.json lacks the grid's steps and strong steps")
 endif()
 run(bad_grid 1 ERROR "config value for grid is not valid: sixteenth" ARGS --set grid=sixteenth)
+# An eighth-grid piece writes its score files in eighths, and its MIDI file
+# gives back its melody on the same grid.
+run(midi_eighths 0 MATCH "melody:" ARGS --set grid=eighth --set rhythm=1 --set length=20
+    --set delay=6)
+foreach(name IN ITEMS canon.mid score.musicxml score.ly score.abc voices.wav)
+  expect_file("${last_dir}/${name}" "")
+endforeach()
+file(READ "${last_dir}/score.abc" abc)
+if(NOT abc MATCHES "\nL:1/8\nQ:1/4=120\n")
+  fail("midi_eighths: score.abc does not count in eighths")
+endif()
+file(READ "${last_dir}/score.musicxml" xml)
+if(NOT xml MATCHES "<divisions>2</divisions>" OR NOT xml MATCHES "<measure number=\"4\">"
+   OR xml MATCHES "<measure number=\"5\">")
+  fail("midi_eighths: score.musicxml lacks four bars of eighths")
+endif()
+string(REGEX MATCH "melody:( [0-9]+| rest)+" melody_line "${last_out}")
+run(melody_midi_eighths 0 MATCH "${melody_line}[^ 0-9a-z]"
+    ARGS --set grid=eighth --set rhythm=1 --set delay=6
+         --melody-midi "${OUT}/midi_eighths/canon.mid")
 run(help 0 MATCH "usage: canon-collapse" ARGS --help)
 run(version 0 MATCH "canon-collapse [0-9]" ARGS --version)
 run(presets 0 MATCH "baroque" ARGS --list-presets)
