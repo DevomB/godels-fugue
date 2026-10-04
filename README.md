@@ -9,10 +9,12 @@ copies of itself, by solving them as a constraint problem, and it can tell you w
 every note is there.
 
 **[Try it in your browser](https://devomb.github.io/godels-fugue/)**: the same C
-program compiled to WebAssembly. Pick a piece, press Compose, and listen. Click any note
-to see the rules that put it there, or give it another pitch and hear the piece
-re-compose around your choice (or learn which rule forbids it). The demo also shows the
-canon as sheet music, replays the collapse, and gives every piece a link you can share.
+program compiled to WebAssembly. Pick a piece or press Surprise me, listen, and follow
+along in the sheet music. Click any note to see the rules that put it there, or give it
+another pitch and hear the piece re-compose around your choice (or learn which rule
+forbids it). Draw the tension curve, steer smoothness and consonance, replay the
+solver's proof with sound, count how many pieces the rules allow, and share any piece
+by its link.
 
 ![The score page: three voices of a canon over a chord progression, with energy, search statistics and timing above](docs/images/score.png)
 
